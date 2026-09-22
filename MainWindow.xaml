@@ -9,6 +9,7 @@
         Title="VideoAuto .NET - Tạo Video Tự Động Hóa (Google Cloud TTS &amp; Imagen 3)" 
         Height="860" Width="1320" 
         MinHeight="720" MinWidth="1100"
+        WindowState="Maximized"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BgDark}"
         Foreground="{StaticResource TextPrimary}"
