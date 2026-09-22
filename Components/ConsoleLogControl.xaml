@@ -1,0 +1,66 @@
+<UserControl x:Class="VideoAutoWpf.Components.ConsoleLogControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignWidth="1200" d:DesignHeight="190">
+    <Border Background="{StaticResource BgCard}" CornerRadius="10" BorderBrush="{StaticResource BorderDark}" BorderThickness="1" Padding="12">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Dòng 1: Trạng thái & Các nút thao tác nhanh -->
+            <Grid Grid.Row="0" Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Trạng thái: " FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondary}"/>
+                    <TextBlock Text="{Binding StatusMessage}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AccentBlue}"/>
+                </StackPanel>
+
+                <!-- Các nút: Xem video, Mở thư mục, Xóa log -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="🎬 Xem Video" Command="{Binding OpenVideoCommand}" IsEnabled="{Binding HasGeneratedVideo}"
+                            Style="{StaticResource BtnSuccess}"
+                            FontSize="11" Padding="10,4" Margin="0,0,6,0" />
+
+                    <Button Content="📁 Mở Thư Mục" Command="{Binding OpenOutputDirCommand}"
+                            FontSize="11" Padding="10,4" Margin="0,0,6,0" />
+
+                    <Button Content="Xóa Log" Command="{Binding ClearLogCommand}"
+                            FontSize="11" Padding="8,4" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Dòng 2: Thanh tiến trình -->
+            <ProgressBar Grid.Row="1" Value="{Binding ProgressPercentage}" Minimum="0" Maximum="100" Height="6" Margin="0,0,0,6"
+                         Foreground="{StaticResource AccentBlue}" Background="#181825" BorderThickness="0">
+                <ProgressBar.Resources>
+                    <Style TargetType="Border">
+                        <Setter Property="CornerRadius" Value="3"/>
+                    </Style>
+                </ProgressBar.Resources>
+            </ProgressBar>
+
+            <!-- Dòng 3: Khung hiển thị Log Console -->
+            <TextBox Grid.Row="2" Text="{Binding LogText, Mode=OneWay}" TextChanged="LogTextBox_TextChanged"
+                     IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                     Background="#11111b" Foreground="#a6adc8" FontFamily="Consolas, Cascadia Code, Courier New" FontSize="11"
+                     BorderBrush="{StaticResource BorderDark}" BorderThickness="1" Padding="6">
+                <TextBox.Resources>
+                    <Style TargetType="Border">
+                        <Setter Property="CornerRadius" Value="6"/>
+                    </Style>
+                </TextBox.Resources>
+            </TextBox>
+        </Grid>
+    </Border>
+</UserControl>

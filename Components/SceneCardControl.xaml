@@ -1,0 +1,132 @@
+<UserControl x:Class="VideoAutoWpf.Components.SceneCardControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:models="clr-namespace:VideoAutoWpf.Models"
+             mc:Ignorable="d" 
+             d:DesignWidth="700" d:DesignHeight="130"
+             d:DataContext="{d:DesignInstance Type=models:SceneItem}">
+    <Border Background="#25263a" BorderBrush="{StaticResource BorderDark}" BorderThickness="1" CornerRadius="8" Padding="10">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Dòng 1: Badge Cảnh, Trạng thái & Nút Xóa -->
+            <Grid Grid.Row="0" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#313244" CornerRadius="6" Width="28" Height="24" Margin="0,0,8,0">
+                        <TextBlock Text="{Binding Index, StringFormat='#{0}'}" FontWeight="Bold" FontSize="11" Foreground="{StaticResource AccentBlue}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Phân Cảnh" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Trạng thái phân cảnh -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,0">
+                    <Border Background="#313244" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Status}" FontSize="10" Foreground="{StaticResource AccentYellow}"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- Nút xóa phân cảnh -->
+                <Button Grid.Column="2" Content="✕" ToolTip="Xóa phân cảnh này" 
+                        Command="{Binding DataContext.RemoveSceneCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                        CommandParameter="{Binding}"
+                        Style="{StaticResource BtnDanger}"
+                        Width="24" Height="24" Padding="0" />
+            </Grid>
+
+            <!-- Dòng 2: 2 Cột (Lời thoại & Mô tả ảnh) -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="10" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- CỘT 1: LỜI THOẠI & ÂM THANH -->
+                <Border Grid.Column="0" Background="#1e1e2e" CornerRadius="6" Padding="8" BorderBrush="#313244" BorderThickness="1">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="🎙️ Lời Thoại Thuyết Minh" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="Sinh Giọng" FontSize="10" Padding="8,2"
+                                    Style="{StaticResource BtnPrimary}"
+                                    Command="{Binding DataContext.GenerateAudioForSceneCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+
+                        <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" Height="46" TextWrapping="Wrap" AcceptsReturn="True"
+                                 Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderDark}"
+                                 FontSize="11" Padding="4" VerticalScrollBarVisibility="Auto" Margin="0,0,0,6">
+                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                        </TextBox>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Background="#313244" CornerRadius="4" Padding="4,1" Margin="0,0,4,0">
+                                    <TextBlock Text="{Binding DurationFormatted}" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentYellow}"/>
+                                </Border>
+                                <TextBlock Text="{Binding AudioFileName}" FontSize="10" TextTrimming="CharacterEllipsis" 
+                                           Foreground="{StaticResource TextSecondary}" ToolTip="{Binding AudioPath}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Đổi file..." FontSize="9" Padding="6,2"
+                                    Command="{Binding DataContext.BrowseAudioForSceneCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- CỘT 2: MÔ TẢ ẢNH & HÌNH ẢNH -->
+                <Border Grid.Column="2" Background="#1e1e2e" CornerRadius="6" Padding="8" BorderBrush="#313244" BorderThickness="1">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="🎨 Mô Tả Hình Ảnh (Prompt)" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="Sinh Ảnh" FontSize="10" Padding="8,2"
+                                    Style="{StaticResource BtnSuccess}"
+                                    Command="{Binding DataContext.GenerateImageForSceneCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+
+                        <TextBox Text="{Binding ImagePrompt, UpdateSourceTrigger=PropertyChanged}" Height="46" TextWrapping="Wrap" AcceptsReturn="True"
+                                 Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderDark}"
+                                 FontSize="11" Padding="4" VerticalScrollBarVisibility="Auto" Margin="0,0,0,6">
+                            <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                        </TextBox>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding ImageFileName}" FontSize="10" TextTrimming="CharacterEllipsis" 
+                                       Foreground="{StaticResource TextSecondary}" ToolTip="{Binding ImagePath}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Content="Đổi ảnh..." FontSize="9" Padding="6,2"
+                                    Command="{Binding DataContext.BrowseImageForSceneCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

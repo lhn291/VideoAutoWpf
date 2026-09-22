@@ -1,0 +1,113 @@
+<UserControl x:Class="VideoAutoWpf.Components.SceneListControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:components="clr-namespace:VideoAutoWpf.Components"
+             xmlns:models="clr-namespace:VideoAutoWpf.Models"
+             mc:Ignorable="d" 
+             d:DesignWidth="800" d:DesignHeight="600">
+    <Border Background="{StaticResource BgCard}" CornerRadius="10" BorderBrush="{StaticResource BorderDark}" BorderThickness="1" Padding="14">
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- 0: Header & Script Buttons -->
+                <RowDefinition Height="Auto" />
+                <!-- 1: Voice bar & Tips -->
+                <RowDefinition Height="Auto" />
+                <!-- 2: Scenes List -->
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Row 0: Header Actions -->
+            <Grid Grid.Row="0" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Kịch Bản Phân Cảnh" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                    <Border Background="#313244" CornerRadius="10" Padding="8,2" Margin="8,0,0,0">
+                        <TextBlock Text="{Binding Scenes.Count, StringFormat='{}{0} cảnh'}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentBlue}"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- Action buttons -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <!-- Nút mở Popup Soạn & Nạp Kịch Bản AI -->
+                    <Button Content="✨ Soạn &amp; Nạp Kịch Bản" Command="{Binding OpenScriptGeneratorCommand}" 
+                            Style="{StaticResource BtnPrimary}"
+                            Padding="12,6" Margin="0,0,6,0"
+                            ToolTip="Mở cửa sổ soạn kịch bản tự động bằng Gemini AI hoặc nạp file/dán JSON" />
+
+                    <!-- Nút Lưu JSON -->
+                    <Button Content="💾 Lưu JSON" Command="{Binding SaveScriptJsonCommand}" 
+                            Padding="10,6" Margin="0,0,8,0" 
+                            ToolTip="Lưu kịch bản hiện tại ra file JSON" />
+
+                    <!-- Nút Thêm Cảnh -->
+                    <Button Content="+ Thêm Cảnh" Command="{Binding AddSceneCommand}" 
+                            Style="{StaticResource BtnPrimary}"
+                            Padding="10,6" Margin="0,0,4,0" />
+
+                    <!-- Nút Lên / Xuống -->
+                    <Button Content="▲" ToolTip="Di chuyển lên" Command="{Binding MoveUpCommand}"
+                            Width="28" Margin="0,0,3,0" Padding="0" />
+                    <Button Content="▼" ToolTip="Di chuyển xuống" Command="{Binding MoveDownCommand}"
+                            Width="28" Margin="0,0,6,0" Padding="0" />
+
+                    <!-- Nút Xóa Hết -->
+                    <Button Content="Xóa Hết" ToolTip="Xóa tất cả phân cảnh" Command="{Binding ClearScenesCommand}"
+                            Style="{StaticResource BtnDanger}"
+                            Padding="10,6" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Row 1: Voice Selector & Hint -->
+            <Border Grid.Row="1" Margin="0,0,0,10" Background="#181825" BorderBrush="#313244" BorderThickness="1" CornerRadius="8" Padding="10,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="🎙️ Giọng đọc TTS:" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox ItemsSource="{Binding AvailableVoices}" SelectedItem="{Binding SelectedVoice}" Width="160"
+                                  Padding="8,5" VerticalContentAlignment="Center"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="1" Text="💡 Bấm '✨ Soạn &amp; Nạp Kịch Bản' để mở màn hình viết kịch bản tự động bằng Gemini AI!" 
+                               FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,0,0"/>
+                </Grid>
+            </Border>
+
+            <!-- Row 2: Scenes List -->
+            <ListBox Grid.Row="2" ItemsSource="{Binding Scenes}" SelectedItem="{Binding SelectedScene}"
+                     Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     VirtualizingStackPanel.IsVirtualizing="True"
+                     VirtualizingStackPanel.VirtualizationMode="Recycling">
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Padding" Value="0,0,0,10"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <ContentPresenter />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type models:SceneItem}">
+                        <components:SceneCardControl />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+    </Border>
+</UserControl>
