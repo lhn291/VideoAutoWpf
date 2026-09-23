@@ -273,7 +273,7 @@ public partial class FFmpegService : IFFmpegService
                 var safePath = seg.Replace('\\', '/');
                 sb.AppendLine($"file '{safePath}'");
             }
-            await File.WriteAllTextAsync(concatListFile, sb.ToString(), Encoding.UTF8, ct);
+            await File.WriteAllTextAsync(concatListFile, sb.ToString(), new UTF8Encoding(false), ct);
 
             var mergedVideoPath = Path.Combine(tempDir, "merged_video.mp4");
             await RunFfmpegAsync(ffmpeg, $"-y -f concat -safe 0 -i \"{concatListFile}\" -c copy \"{mergedVideoPath}\"", progress, ct);

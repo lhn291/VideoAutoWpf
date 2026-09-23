@@ -382,7 +382,7 @@ public partial class MainViewModel : ObservableObject
 
         target.IsGeneratingImage = true;
         target.Status = "Đang vẽ ảnh...";
-        AppendLog($"[Phân cảnh #{target.Index}] Đang gửi yêu cầu tới Vertex AI Imagen 3...");
+        AppendLog($"[Phân cảnh #{target.Index}] Đang gửi yêu cầu tới Gemini Image...");
 
         try
         {
@@ -390,17 +390,17 @@ public partial class MainViewModel : ObservableObject
             Directory.CreateDirectory(tempDir);
             var imagePath = Path.Combine(tempDir, $"image_scene_{target.Index:D3}_{DateTime.Now:HHmmss}.png");
 
-            await _imagenService.GenerateImageAsync(target.ImagePrompt, imagePath, AspectRatio);
+            await _imagenService.GenerateImageAsync(target.ImagePrompt, imagePath, AspectRatio, onLog: msg => AppendLog(msg));
             target.ImagePath = imagePath;
 
             target.Status = target.HasAudio ? "Sẵn sàng" : "Thiếu audio";
-            AppendLog($"[Phân cảnh #{target.Index}] Vẽ ảnh Imagen 3 thành công!");
+            AppendLog($"[Phân cảnh #{target.Index}] Vẽ ảnh Gemini Image thành công!");
         }
         catch (Exception ex)
         {
             target.Status = "Lỗi sinh ảnh";
-            AppendLog($"[Lỗi Imagen 3 Cảnh #{target.Index}] {ex.Message}");
-            MessageBox.Show($"Lỗi khi tạo hình ảnh:\n{ex.Message}", "Lỗi Imagen 3", MessageBoxButton.OK, MessageBoxImage.Error);
+            AppendLog($"[Lỗi Gemini Image Cảnh #{target.Index}] {ex.Message}");
+            MessageBox.Show($"Lỗi khi tạo hình ảnh:\n{ex.Message}", "Lỗi Gemini Image", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -540,13 +540,37 @@ public partial class MainViewModel : ObservableObject
                 {
                     if (!string.IsNullOrWhiteSpace(s.ImagePrompt))
                     {
-                        StatusMessage = $"Đang gọi Imagen 3 vẽ ảnh cảnh {sNum}/{Scenes.Count}...";
-                        AppendLog($"[Tự động] Cảnh #{sNum}: Đang gửi prompt tới Vertex AI Imagen 3...");
+                        StatusMessage = $"Đang gọi Gemini Image vẽ ảnh cảnh {sNum}/{Scenes.Count}...";
+                        AppendLog($"[Tự động] Cảnh #{sNum}: Đang gửi prompt tới Gemini Image...");
                         s.IsGeneratingImage = true;
                         var imgOut = Path.Combine(tempAssetsDir, $"image_scene_{sNum:D3}_{DateTime.Now:HHmmss}.png");
-                        await _imagenService.GenerateImageAsync(s.ImagePrompt, imgOut, AspectRatio, ct: ct);
-                        s.ImagePath = imgOut;
-                        s.IsGeneratingImage = false;
+                        try
+                        {
+                            await _imagenService.GenerateImageAsync(s.ImagePrompt, imgOut, AspectRatio, onLog: msg => AppendLog(msg), ct: ct);
+                            s.ImagePath = imgOut;
+                        }
+                        catch (Exception ex)
+                        {
+                            // Cơ chế dự phòng (Fallback): Nếu bị hạn mức Quota và phân cảnh trước đã có ảnh, tái sử dụng để video không bị đứt đoạn
+                            var prevSceneWithImage = Scenes.Take(i).LastOrDefault(x => !string.IsNullOrEmpty(x.ImagePath) && File.Exists(x.ImagePath));
+                            if (prevSceneWithImage != null)
+                            {
+                                AppendLog($"[Dự phòng Quota] Cảnh #{sNum} không thể tạo ảnh mới ({ex.Message}). Sử dụng lại ảnh từ cảnh #{prevSceneWithImage.Index} để tiếp tục tạo video!");
+                                File.Copy(prevSceneWithImage.ImagePath!, imgOut, true);
+                                s.ImagePath = imgOut;
+                            }
+                            else
+                            {
+                                throw;
+                            }
+                        }
+                        finally
+                        {
+                            s.IsGeneratingImage = false;
+                        }
+
+                        // Nghỉ một chút giữa các phân cảnh để tránh vượt hạn mức Quota (RPM) của Vertex AI
+                        await Task.Delay(2500, ct);
                     }
                     else
                     {
