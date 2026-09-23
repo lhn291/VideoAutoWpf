@@ -103,6 +103,18 @@ public partial class ScriptGeneratorViewModel : ObservableObject
         }
     }
 
+    public string EstimatedPlanCostDisplayText
+    {
+        get
+        {
+            if (CurrentPlan == null) return string.Empty;
+            int scenes = CurrentPlan.SuggestedScenes > 0 ? CurrentPlan.SuggestedScenes : 5;
+            double usd = (scenes * 0.030) + (scenes * 120 * 0.000016) + 0.0005;
+            double vnd = usd * 25400.0;
+            return $"~${usd:F2} USD (~{vnd:N0} đ)";
+        }
+    }
+
     [ObservableProperty]
     private bool _isPlanBgmPopupOpen;
 
@@ -220,6 +232,7 @@ public partial class ScriptGeneratorViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(CurrentPlanMotionDisplayText));
         OnPropertyChanged(nameof(CurrentPlanBgmMoodDisplayText));
+        OnPropertyChanged(nameof(EstimatedPlanCostDisplayText));
 
         if (value != null && !string.IsNullOrEmpty(value.SuggestedBgm))
         {
@@ -345,6 +358,7 @@ public partial class ScriptGeneratorViewModel : ObservableObject
         if (CurrentPlan == null) return;
         CurrentPlan.SuggestedScenes = count;
         IsPlanScenesPopupOpen = false;
+        OnPropertyChanged(nameof(EstimatedPlanCostDisplayText));
     }
 
     [ObservableProperty]

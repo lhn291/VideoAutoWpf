@@ -70,6 +70,71 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ƯỚC TÍNH CHI PHÍ API (GOOGLE CLOUD) -->
+                <Border Background="#1b1c2e" CornerRadius="8" Padding="10" BorderBrush="#363854" BorderThickness="1" Margin="0,0,0,12"
+                        ToolTip="{Binding EstimatedCostTooltip}">
+                    <StackPanel>
+                        <!-- Header & Tổng chi phí -->
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="💰 Ước Tính Chi Phí:" FontSize="11.5" FontWeight="Bold" Foreground="{StaticResource TextPrimary}"/>
+                                <Border Background="#2a2542" CornerRadius="4" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="Google Cloud" FontSize="9" FontWeight="Bold" Foreground="#a78bfa"/>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- Tổng tiền nổi bật -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding EstimatedTotalCostDisplay}" FontSize="13" FontWeight="Bold" 
+                                           Foreground="{StaticResource AccentYellow}"/>
+                                <TextBlock Text="{Binding EstimatedTotalCostVndDisplay}" FontSize="10.5" FontWeight="SemiBold" 
+                                           Foreground="{StaticResource AccentCyan}" Margin="4,0,0,0" VerticalAlignment="Bottom"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Thẻ phân bổ chi tiết 2 cột -->
+                        <Grid Margin="0,2,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Imagen 3 -->
+                            <Border Background="#23243a" CornerRadius="5" Padding="6,4" Margin="0,0,3,0">
+                                <StackPanel>
+                                    <TextBlock Text="🎨 Imagen 3 (Vẽ ảnh)" FontSize="9.5" Foreground="{StaticResource TextMuted}"/>
+                                    <TextBlock Text="{Binding EstimatedImagenCostText}" FontSize="10.5" FontWeight="SemiBold" 
+                                               Foreground="{StaticResource TextPrimary}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Google TTS -->
+                            <Border Grid.Column="1" Background="#23243a" CornerRadius="5" Padding="6,4" Margin="3,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="🎙️ Cloud TTS (Giọng nói)" FontSize="9.5" Foreground="{StaticResource TextMuted}"/>
+                                    <TextBlock Text="{Binding EstimatedTtsCostText}" FontSize="10.5" FontWeight="SemiBold" 
+                                               Foreground="{StaticResource TextPrimary}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Ghi chú giải thích -->
+                        <Grid Margin="0,1,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="💡 ~$0.03/ảnh • Free 1M ký tự TTS/tháng" FontSize="9" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="FFmpeg &amp; BGM: 0đ" FontSize="9" FontWeight="SemiBold" Foreground="#a6e3a1" VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!-- ACTION BUTTONS -->
                 <StackPanel Orientation="Vertical">
                     <!-- Nút Render lớn 1-Click -->

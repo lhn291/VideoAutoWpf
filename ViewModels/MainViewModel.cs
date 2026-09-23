@@ -106,6 +106,30 @@ public partial class MainViewModel : ObservableObject
 
     public bool HasGeneratedVideo => !string.IsNullOrEmpty(LastGeneratedVideoPath) && File.Exists(LastGeneratedVideoPath);
 
+    // ── Ước Tính Chi Phí Google Cloud API ──
+    public const double ImagenCostPerImageUsd = 0.030; // $0.03 / ảnh Imagen 3
+    public const double TtsCostPerCharUsd = 0.000016;  // $16 / 1M ký tự WaveNet/Neural2
+    public const double GeminiCostPerScriptUsd = 0.0005; // ~$0.0005 Gemini Flash
+    public const double UsdToVndRate = 25400.0; // 1 USD ≈ 25,400 VND
+
+    [ObservableProperty]
+    private string _estimatedTotalCostDisplay = "$0.00";
+
+    [ObservableProperty]
+    private string _estimatedTotalCostVndDisplay = "(0đ)";
+
+    [ObservableProperty]
+    private string _estimatedImagenCostText = "0 ảnh • $0.00";
+
+    [ObservableProperty]
+    private string _estimatedTtsCostText = "0 ký tự • $0.00";
+
+    [ObservableProperty]
+    private string _estimatedCostTooltip = "Chưa có phân cảnh nào để ước tính chi phí.";
+
+    [ObservableProperty]
+    private bool _hasEstimatedCost;
+
     public MainViewModel() : this(new FFmpegService())
     {
     }
@@ -123,8 +147,116 @@ public partial class MainViewModel : ObservableObject
         _selectedMotionEffect = _availableMotionEffects.FirstOrDefault();
         _bgmService = new BgmService(_ffmpegService);
 
+        Scenes.CollectionChanged += (s, e) =>
+        {
+            if (e.NewItems != null)
+            {
+                foreach (SceneItem item in e.NewItems)
+                {
+                    item.PropertyChanged += OnSceneItemPropertyChanged;
+                }
+            }
+            if (e.OldItems != null)
+            {
+                foreach (SceneItem item in e.OldItems)
+                {
+                    item.PropertyChanged -= OnSceneItemPropertyChanged;
+                }
+            }
+            UpdateCostEstimation();
+        };
+
         CheckServicesAvailability();
         InitializeBgmTracksAsync();
+        UpdateCostEstimation();
+    }
+
+    private void OnSceneItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(SceneItem.ImagePath) or nameof(SceneItem.AudioPath) or nameof(SceneItem.Text))
+        {
+            UpdateCostEstimation();
+        }
+    }
+
+    public void UpdateCostEstimation()
+    {
+        if (Scenes.Count == 0)
+        {
+            EstimatedTotalCostDisplay = "$0.00";
+            EstimatedTotalCostVndDisplay = "(0đ)";
+            EstimatedImagenCostText = "0 ảnh • $0.00";
+            EstimatedTtsCostText = "0 ký tự • $0.00";
+            HasEstimatedCost = false;
+            EstimatedCostTooltip = "Chưa có phân cảnh nào. Hãy bấm '✨ Soạn & Nạp Kịch Bản' để lên kịch bản và ước tính chi phí.";
+            return;
+        }
+
+        HasEstimatedCost = true;
+        int totalScenes = Scenes.Count;
+        int imagesNeeded = Scenes.Count(s => !s.HasImage);
+        int totalChars = Scenes.Sum(s => s.Text?.Trim().Length ?? 0);
+        int charsNeeded = Scenes.Where(s => !s.HasAudio).Sum(s => s.Text?.Trim().Length ?? 0);
+
+        // Chi phí cho các tài nguyên chưa có và cần sinh khi bấm nút
+        double imagenCostUsd = imagesNeeded * ImagenCostPerImageUsd;
+        double ttsCostUsd = charsNeeded * TtsCostPerCharUsd;
+        double totalNeededUsd = imagenCostUsd + ttsCostUsd;
+        double totalNeededVnd = totalNeededUsd * UsdToVndRate;
+
+        // Chi phí chuẩn của toàn bộ kịch bản từ A-Z
+        double fullVideoUsd = (totalScenes * ImagenCostPerImageUsd) + (totalChars * TtsCostPerCharUsd) + GeminiCostPerScriptUsd;
+        double fullVideoVnd = fullVideoUsd * UsdToVndRate;
+
+        if (imagesNeeded == 0 && charsNeeded == 0)
+        {
+            EstimatedTotalCostDisplay = "$0.00";
+            EstimatedTotalCostVndDisplay = "(Đã có đủ ảnh & audio)";
+            EstimatedImagenCostText = $"{totalScenes} ảnh • Đã tạo sẵn";
+            EstimatedTtsCostText = $"{totalChars:N0} ký tự • Đã tạo sẵn";
+        }
+        else
+        {
+            EstimatedTotalCostDisplay = $"~${totalNeededUsd:F2} USD";
+            EstimatedTotalCostVndDisplay = $"(~{totalNeededVnd:N0} đ)";
+
+            if (imagesNeeded == totalScenes)
+            {
+                EstimatedImagenCostText = $"{imagesNeeded} ảnh • ~${imagenCostUsd:F2}";
+            }
+            else
+            {
+                EstimatedImagenCostText = $"{imagesNeeded}/{totalScenes} ảnh cần vẽ • ~${imagenCostUsd:F2}";
+            }
+
+            if (charsNeeded == totalChars)
+            {
+                EstimatedTtsCostText = $"{charsNeeded:N0} ký tự • ~${ttsCostUsd:F3}";
+            }
+            else
+            {
+                EstimatedTtsCostText = $"{charsNeeded:N0}/{totalChars:N0} ký tự • ~${ttsCostUsd:F3}";
+            }
+        }
+
+        EstimatedCostTooltip = 
+            $"📊 BẢNG TÍNH CHI PHÍ GOOGLE CLOUD CHO VIDEO NÀY:\n\n" +
+            $"1. 🎨 Vertex AI Imagen 3 (Vẽ ảnh minh họa):\n" +
+            $"   • Cần vẽ mới: {imagesNeeded}/{totalScenes} ảnh\n" +
+            $"   • Đơn giá: $0.030 USD / ảnh (~{0.030 * UsdToVndRate:N0} đ)\n" +
+            $"   • Tạm tính: ~${imagenCostUsd:F3} USD (~{imagenCostUsd * UsdToVndRate:N0} đ)\n\n" +
+            $"2. 🎙️ Google Cloud Text-to-Speech (Thuyết minh):\n" +
+            $"   • Cần đọc: {charsNeeded:N0}/{totalChars:N0} ký tự\n" +
+            $"   • Đơn giá WaveNet/Neural2: $0.000016 USD / ký tự ($16/1M ký tự)\n" +
+            $"   • Tạm tính: ~${ttsCostUsd:F4} USD (~{ttsCostUsd * UsdToVndRate:N0} đ)\n" +
+            $"   *(Lưu ý: Google Cloud miễn phí 1.000.000 ký tự TTS đầu tiên mỗi tháng!)\n\n" +
+            $"3. 🤖 Gemini 2.5 Flash (Kịch bản & Lập kế hoạch):\n" +
+            $"   • Tạm tính: ~$0.0005 USD (~13 đ)\n\n" +
+            $"4. 🎞️ FFmpeg dựng video & Nhạc nền BGM:\n" +
+            $"   • Hoàn toàn miễn phí 0đ (Xử lý offline trực tiếp trên máy tính)\n\n" +
+            $"═══════════════════════════════════════════════════\n" +
+            $"👉 CHI PHÍ CẦN TẠO NGAY: ~${totalNeededUsd:F3} USD (~{totalNeededVnd:N0} VNĐ)\n" +
+            $"(Chi phí trọn gói cả video từ đầu: ~${fullVideoUsd:F3} USD ≈ {fullVideoVnd:N0} VNĐ)";
     }
 
     private async void InitializeBgmTracksAsync()
