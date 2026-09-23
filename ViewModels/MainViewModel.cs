@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -15,11 +16,13 @@ namespace VideoAutoWpf.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly IFFmpegService _ffmpegService;
+    private readonly BgmService _bgmService;
     private readonly GoogleAuthService _authService;
     private readonly GoogleTtsService _ttsService;
     private readonly VertexImagenService _imagenService;
     private readonly GeminiScriptService _geminiService;
     private CancellationTokenSource? _cts;
+    private MediaPlayer? _bgmPlayer;
 
     public ObservableCollection<SceneItem> Scenes { get; } = new();
 
@@ -38,6 +41,18 @@ public partial class MainViewModel : ObservableObject
     private bool _enableKenBurns = true;
 
     [ObservableProperty]
+    private List<MotionEffectOption> _availableMotionEffects = MotionEffectOption.GetAllOptions();
+
+    [ObservableProperty]
+    private MotionEffectOption? _selectedMotionEffect;
+
+    [ObservableProperty]
+    private bool _enableFadeTransition = true;
+
+    [ObservableProperty]
+    private bool _enableVignette = false;
+
+    [ObservableProperty]
     private bool _enableBgm = false;
 
     [ObservableProperty]
@@ -47,6 +62,20 @@ public partial class MainViewModel : ObservableObject
     private double _bgmVolume = 0.15; // 15%
 
     public string BgmVolumePercentageText => $"{(int)(BgmVolume * 100)}%";
+
+    public ObservableCollection<BgmTrack> AvailableBgmTracks { get; } = new();
+
+    [ObservableProperty]
+    private BgmTrack? _selectedBgmTrack;
+
+    [ObservableProperty]
+    private bool _isPlayingBgm;
+
+    [ObservableProperty]
+    private string _playingBgmTitle = string.Empty;
+
+    public string BgmPlayButtonIcon => IsPlayingBgm ? "⏹" : "🎧";
+    public string BgmPlayButtonText => IsPlayingBgm ? "Dừng" : "Nghe thử";
 
     [ObservableProperty]
     private string _outputDirectory;
@@ -91,13 +120,78 @@ public partial class MainViewModel : ObservableObject
 
         var defaultOut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput");
         _outputDirectory = defaultOut;
+        _selectedMotionEffect = _availableMotionEffects.FirstOrDefault();
+        _bgmService = new BgmService(_ffmpegService);
 
         CheckServicesAvailability();
+        InitializeBgmTracksAsync();
+    }
+
+    private async void InitializeBgmTracksAsync()
+    {
+        try
+        {
+            await _bgmService.EnsureBuiltInTracksAsync();
+            ReloadBgmTracks();
+            SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id == "none") 
+                               ?? AvailableBgmTracks.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[BGM] Lỗi khởi tạo thư viện nhạc: {ex.Message}");
+        }
+    }
+
+    partial void OnIsPlayingBgmChanged(bool value)
+    {
+        OnPropertyChanged(nameof(BgmPlayButtonIcon));
+        OnPropertyChanged(nameof(BgmPlayButtonText));
+    }
+
+    partial void OnSelectedMotionEffectChanged(MotionEffectOption? value)
+    {
+        EnableKenBurns = value != null && value.Id != "none";
+    }
+
+    partial void OnSelectedBgmTrackChanged(BgmTrack? value)
+    {
+        if (IsPlayingBgm)
+        {
+            StopBgmPreview();
+        }
+
+        if (value == null || value.Id == "none")
+        {
+            EnableBgm = false;
+            BgmPath = null;
+        }
+        else
+        {
+            EnableBgm = true;
+            BgmPath = value.FilePath;
+        }
+    }
+
+    partial void OnEnableBgmChanged(bool value)
+    {
+        if (!value && IsPlayingBgm)
+        {
+            StopBgmPreview();
+        }
+        else if (value && (SelectedBgmTrack == null || SelectedBgmTrack.Id == "none"))
+        {
+            SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id != "none") 
+                               ?? AvailableBgmTracks.FirstOrDefault();
+        }
     }
 
     partial void OnBgmVolumeChanged(double value)
     {
         OnPropertyChanged(nameof(BgmVolumePercentageText));
+        if (_bgmPlayer != null)
+        {
+            _bgmPlayer.Volume = value;
+        }
     }
 
     partial void OnLastGeneratedVideoPathChanged(string? value)
@@ -156,7 +250,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenScriptGenerator()
     {
-        var win = new ScriptGeneratorWindow(_geminiService)
+        var win = new ScriptGeneratorWindow(_geminiService, _ttsService, _bgmService)
         {
             Owner = Application.Current.MainWindow
         };
@@ -177,13 +271,48 @@ public partial class MainViewModel : ObservableObject
         if (!string.IsNullOrEmpty(workspace.Metadata?.Voice) && AvailableVoices.Contains(workspace.Metadata.Voice))
             SelectedVoice = workspace.Metadata.Voice;
 
-        if (workspace.Metadata != null && workspace.Metadata.EnableMusic)
+        if (workspace.Metadata != null)
         {
-            EnableBgm = true;
-            BgmVolume = workspace.Metadata.MusicVolume > 0 ? workspace.Metadata.MusicVolume : 0.15;
-            if (!string.IsNullOrEmpty(workspace.Metadata.Music) && File.Exists(workspace.Metadata.Music))
+            if (!string.IsNullOrEmpty(workspace.Metadata.MotionEffect))
             {
-                BgmPath = workspace.Metadata.Music;
+                var opt = AvailableMotionEffects.FirstOrDefault(m => m.Id == workspace.Metadata.MotionEffect)
+                          ?? AvailableMotionEffects.FirstOrDefault(m => m.Id == "random");
+                if (opt != null) SelectedMotionEffect = opt;
+            }
+            EnableFadeTransition = workspace.Metadata.EnableFade;
+            EnableVignette = workspace.Metadata.EnableVignette;
+
+            if (workspace.Metadata.EnableMusic)
+            {
+                EnableBgm = true;
+                BgmVolume = workspace.Metadata.MusicVolume > 0 ? workspace.Metadata.MusicVolume : 0.15;
+                if (!string.IsNullOrEmpty(workspace.Metadata.Music))
+                {
+                    var match = AvailableBgmTracks.FirstOrDefault(t =>
+                        t.Id.Equals(workspace.Metadata.Music, StringComparison.OrdinalIgnoreCase) ||
+                        t.Mood.Equals(workspace.Metadata.Music, StringComparison.OrdinalIgnoreCase) ||
+                        (File.Exists(workspace.Metadata.Music) && t.FilePath.Equals(workspace.Metadata.Music, StringComparison.OrdinalIgnoreCase)));
+
+                    if (match != null)
+                    {
+                        SelectedBgmTrack = match;
+                    }
+                    else if (File.Exists(workspace.Metadata.Music))
+                    {
+                        BgmPath = workspace.Metadata.Music;
+                    }
+                }
+                else
+                {
+                    SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id != "none") 
+                                       ?? AvailableBgmTracks.FirstOrDefault();
+                }
+            }
+            else
+            {
+                EnableBgm = false;
+                SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id == "none");
+                BgmPath = null;
             }
         }
 
@@ -196,6 +325,7 @@ public partial class MainViewModel : ObservableObject
                 Index = idx++,
                 Text = sc.Text,
                 ImagePrompt = sc.ImagePrompt,
+                MotionEffect = string.IsNullOrEmpty(sc.MotionEffect) ? "zoom_in" : sc.MotionEffect,
                 Status = "Kịch bản mới"
             });
         }
@@ -471,7 +601,146 @@ public partial class MainViewModel : ObservableObject
         {
             BgmPath = ofd.FileName;
             EnableBgm = true;
+
+            var existing = AvailableBgmTracks.FirstOrDefault(t => t.FilePath == ofd.FileName);
+            if (existing != null)
+            {
+                SelectedBgmTrack = existing;
+            }
+            else
+            {
+                var customTrack = new BgmTrack
+                {
+                    Id = Path.GetFileNameWithoutExtension(ofd.FileName).ToLowerInvariant(),
+                    Title = $"📁 {Path.GetFileNameWithoutExtension(ofd.FileName)}",
+                    Mood = "custom",
+                    FilePath = ofd.FileName,
+                    SourceTag = "Tệp ngoài",
+                    IsCustom = true
+                };
+                AvailableBgmTracks.Add(customTrack);
+                SelectedBgmTrack = customTrack;
+            }
+
             AppendLog($"Đã chọn nhạc nền: {Path.GetFileName(ofd.FileName)}");
+        }
+    }
+
+    [RelayCommand]
+    private void TogglePreviewBgm()
+    {
+        if (IsPlayingBgm)
+        {
+            StopBgmPreview();
+            return;
+        }
+
+        if (string.IsNullOrEmpty(BgmPath) || !File.Exists(BgmPath))
+        {
+            MessageBox.Show("Vui lòng chọn một bản nhạc nền có sẵn hoặc chọn tệp từ máy tính để nghe thử.", "Chưa có nhạc nền", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            StopBgmPreview();
+            var fullPath = Path.GetFullPath(BgmPath);
+            _bgmPlayer = new MediaPlayer();
+            _bgmPlayer.MediaEnded += (s, e) => Application.Current.Dispatcher.Invoke(StopBgmPreview);
+            _bgmPlayer.MediaFailed += (s, e) => Application.Current.Dispatcher.Invoke(() =>
+            {
+                AppendLog($"[Lỗi phát BGM] Không thể phát '{Path.GetFileName(fullPath)}': {e.ErrorException?.Message}");
+                StopBgmPreview();
+            });
+            _bgmPlayer.Open(new Uri(fullPath));
+            _bgmPlayer.Volume = Math.Clamp(BgmVolume, 0.05, 1.0);
+            _bgmPlayer.Play();
+            IsPlayingBgm = true;
+            PlayingBgmTitle = SelectedBgmTrack?.Title ?? Path.GetFileName(fullPath);
+            AppendLog($"[BGM] Đang phát thử: {PlayingBgmTitle} (Âm lượng: {BgmVolumePercentageText})");
+        }
+        catch (Exception ex)
+        {
+            StopBgmPreview();
+            AppendLog($"[Lỗi phát BGM] {ex.Message}");
+            MessageBox.Show($"Không thể phát thử nhạc nền:\n{ex.Message}", "Lỗi phát nhạc", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void StopBgmPreview()
+    {
+        try
+        {
+            _bgmPlayer?.Stop();
+            _bgmPlayer?.Close();
+        }
+        catch { }
+        finally
+        {
+            _bgmPlayer = null;
+            IsPlayingBgm = false;
+            PlayingBgmTitle = string.Empty;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenBgmFolder()
+    {
+        _bgmService.OpenBgmDirectoryInExplorer();
+        ReloadBgmTracks();
+    }
+
+    [RelayCommand]
+    private void ReloadBgmTracks()
+    {
+        var currentPath = BgmPath;
+        AvailableBgmTracks.Clear();
+        foreach (var track in _bgmService.GetAvailableTracks())
+        {
+            AvailableBgmTracks.Add(track);
+        }
+
+        if (!string.IsNullOrEmpty(currentPath))
+        {
+            SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.FilePath == currentPath) 
+                ?? AvailableBgmTracks.FirstOrDefault(t => t.Id == "none");
+        }
+    }
+
+    [RelayCommand]
+    private void OpenFreeMusicSources()
+    {
+        var message = "Các nguồn tải nhạc nền MIỄN PHÍ 100% & KHÔNG BẢN QUYỀN (Content ID Safe):\n\n" +
+                      "1. YouTube Audio Library:\n" +
+                      "   https://studio.youtube.com/channel/UC/music\n" +
+                      "   (Kho chính thức của YouTube, an toàn tuyệt đối khi đăng video)\n\n" +
+                      "2. Pixabay Music:\n" +
+                      "   https://pixabay.com/music/\n" +
+                      "   (Hàng ngàn track cực hay cho video, tự do thương mại)\n\n" +
+                      "3. Chosic Free Music:\n" +
+                      "   https://www.chosic.com/free-music/\n" +
+                      "   (Lọc theo Mood/Thể loại, hỗ trợ lọc chuẩn CC0 & YouTube safe)\n\n" +
+                      "4. Tạo nhạc độc quyền bằng AI (Suno AI):\n" +
+                      "   https://suno.com/\n\n" +
+                      "Mẹo: Sau khi tải file MP3 về, bấm nút [📂 Thư mục] trong app và dán (paste) file vào đó để app tự nhận diện!";
+
+        var result = MessageBox.Show(
+            message + "\n\nBạn có muốn mở trang web Pixabay Music ngay bây giờ không?", 
+            "Kho Nhạc Nền Miễn Phí Không Bản Quyền", 
+            MessageBoxButton.YesNo, 
+            MessageBoxImage.Information);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "https://pixabay.com/music/",
+                    UseShellExecute = true
+                });
+            }
+            catch { }
         }
     }
 
@@ -582,7 +851,9 @@ public partial class MainViewModel : ObservableObject
             var config = new VideoConfig
             {
                 AspectRatio = AspectRatio,
-                EnableKenBurns = EnableKenBurns,
+                MotionEffect = SelectedMotionEffect?.Id ?? "random",
+                EnableFadeTransition = EnableFadeTransition,
+                EnableVignette = EnableVignette,
                 EnableBackgroundMusic = EnableBgm,
                 BackgroundMusicPath = BgmPath,
                 BackgroundMusicVolume = BgmVolume,

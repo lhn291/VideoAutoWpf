@@ -29,8 +29,25 @@
                     <TextBlock Text="Phân Cảnh" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <!-- Trạng thái phân cảnh -->
+                <!-- Trạng thái phân cảnh & Hiệu ứng camera -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,0">
+                    <ComboBox ItemsSource="{x:Static models:MotionEffectOption.AllSceneMotionOptions}"
+                              SelectedValue="{Binding MotionEffect}"
+                              SelectedValuePath="Id"
+                              Padding="4,2,20,2" FontSize="10" MinHeight="24" Margin="0,0,8,0"
+                              Background="#1e1e2e" Foreground="{StaticResource AccentYellow}"
+                              BorderBrush="#313244" Cursor="Hand"
+                              ToolTip="Hiệu ứng chuyển động máy quay cho cảnh này">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Icon}" Margin="0,0,4,0" FontSize="11" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Name}" FontSize="10" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
                     <Border Background="#313244" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Status}" FontSize="10" Foreground="{StaticResource AccentYellow}"/>
                     </Border>

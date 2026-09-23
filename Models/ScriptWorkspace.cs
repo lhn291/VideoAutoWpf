@@ -30,6 +30,15 @@ public class ScriptMetadata
 
     [JsonPropertyName("character_rules")]
     public string? CharacterRules { get; set; }
+
+    [JsonPropertyName("motion_effect")]
+    public string MotionEffect { get; set; } = "random";
+
+    [JsonPropertyName("enable_fade")]
+    public bool EnableFade { get; set; } = true;
+
+    [JsonPropertyName("enable_vignette")]
+    public bool EnableVignette { get; set; } = false;
 }
 
 public class ScriptScene
@@ -39,6 +48,9 @@ public class ScriptScene
 
     [JsonPropertyName("image_prompt")]
     public string ImagePrompt { get; set; } = string.Empty;
+
+    [JsonPropertyName("motion_effect")]
+    public string? MotionEffect { get; set; }
 
     [JsonPropertyName("engine")]
     public string? Engine { get; set; } = "imagen";

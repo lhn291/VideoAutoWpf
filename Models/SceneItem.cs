@@ -26,6 +26,23 @@ public partial class SceneItem : ObservableObject
     private string _status = "Chờ xử lý";
 
     [ObservableProperty]
+    private string _motionEffect = "zoom_in";
+
+    public string MotionEffectDisplayText
+    {
+        get
+        {
+            var opt = MotionEffectOption.GetAllSceneMotionOptions().FirstOrDefault(o => o.Id == MotionEffect);
+            return opt != null ? $"{opt.Icon} {opt.Name}" : "🔍 Zoom In";
+        }
+    }
+
+    partial void OnMotionEffectChanged(string value)
+    {
+        OnPropertyChanged(nameof(MotionEffectDisplayText));
+    }
+
+    [ObservableProperty]
     private bool _isGeneratingAudio;
 
     [ObservableProperty]

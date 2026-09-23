@@ -3,7 +3,10 @@ namespace VideoAutoWpf.Models;
 public class VideoConfig
 {
     public string AspectRatio { get; set; } = "9:16"; // 9:16, 16:9, 1:1
-    public bool EnableKenBurns { get; set; } = true;
+    public string MotionEffect { get; set; } = "random"; // random, zoom_in, zoom_out, pan_left_right, pan_right_left, pan_up, pan_down, zoom_pan_right, zoom_pan_left, none
+    public bool EnableKenBurns { get => MotionEffect != "none"; set { if (!value) MotionEffect = "none"; } }
+    public bool EnableFadeTransition { get; set; } = true;
+    public bool EnableVignette { get; set; } = false;
     public string? BackgroundMusicPath { get; set; }
     public double BackgroundMusicVolume { get; set; } = 0.15;
     public bool EnableBackgroundMusic { get; set; } = false;

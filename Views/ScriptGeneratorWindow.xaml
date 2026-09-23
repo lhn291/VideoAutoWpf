@@ -7,8 +7,8 @@
         xmlns:models="clr-namespace:VideoAutoWpf.Models"
         mc:Ignorable="d"
         Title="Soạn &amp; Nạp Kịch Bản Video (Gemini AI)" 
-        Height="720" Width="980"
-        MinHeight="600" MinWidth="850"
+        Height="780" Width="1060"
+        MinHeight="650" MinWidth="900"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource BgDark}"
         Foreground="{StaticResource TextPrimary}"
@@ -37,7 +37,7 @@
                         <TextBlock Text="✨" FontSize="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
                         <TextBlock Text="SOẠN &amp; TẠO KỊCH BẢN VIDEO" FontSize="16" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" VerticalAlignment="Center"/>
                     </StackPanel>
-                    <TextBlock Text="Nhập chủ đề/câu chuyện để Gemini AI tự động phân cảnh (Lời thoại + Mô tả ảnh) hoặc nạp file JSON có sẵn" 
+                    <TextBlock Text="Chọn chủ đề → AI lên kế hoạch → Xem xét → Tạo kịch bản chi tiết tự động" 
                                FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="28,2,0,0"/>
                 </StackPanel>
             </Grid>
@@ -73,69 +73,715 @@
                 <Border Background="{StaticResource BgCard}" CornerRadius="0,8,8,8" Padding="14" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <!-- Cột trái: Cấu hình đầu vào -->
-                            <ColumnDefinition Width="380" />
+                            <!-- Cột trái: Topic + Plan -->
+                            <ColumnDefinition Width="420" />
                             <!-- Cột phải: Xem trước các phân cảnh -->
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- CỘT TRÁI: ĐẦU VÀO GEMINI -->
+                        <!-- CỘT TRÁI: TOPIC CARDS + PLAN FLOW -->
                         <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,14,0">
                             <StackPanel Orientation="Vertical">
-                                <!-- Chủ đề -->
-                                <TextBlock Text="1. Chủ đề / Nội dung cốt truyện:" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+
+                                <!-- ═══════ PHASE 1: THIẾT LẬP SÁNG TẠO ═══════ -->
+
+                                <!-- ── 1. THỂ LOẠI / GENRE ── -->
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Text="🎭 Thể loại:" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                                    <ToggleButton x:Name="TopicPopupToggle" Grid.Column="1" Cursor="Hand" IsChecked="{Binding IsTopicPopupOpen, Mode=TwoWay}">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border x:Name="GenreBorder" Background="#26273b" CornerRadius="6" Padding="10,5" 
+                                                        BorderBrush="#313244" BorderThickness="1">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding SelectedGenreDisplayText}" FontSize="11" FontWeight="SemiBold" 
+                                                                   Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center"/>
+                                                        <TextBlock x:Name="GenreArrow" Grid.Column="1" Text=" ▾" FontSize="9" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="GenreBorder" Property="Background" Value="#363750"/>
+                                                        <Setter TargetName="GenreBorder" Property="BorderBrush" Value="{StaticResource AccentYellow}"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsChecked" Value="True">
+                                                        <Setter TargetName="GenreBorder" Property="Background" Value="#363750"/>
+                                                        <Setter TargetName="GenreBorder" Property="BorderBrush" Value="{StaticResource AccentYellow}"/>
+                                                        <Setter TargetName="GenreArrow" Property="Text" Value=" ▴"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+
+                                    <!-- Popup chọn thể loại -->
+                                    <Popup IsOpen="{Binding IsTopicPopupOpen, Mode=TwoWay}" 
+                                           PlacementTarget="{Binding ElementName=TopicPopupToggle}"
+                                           Placement="Bottom" StaysOpen="False"
+                                           AllowsTransparency="True" PopupAnimation="Fade"
+                                           HorizontalOffset="-50">
+                                        <Border Background="#1a1b2e" CornerRadius="10" Padding="12" Margin="0,6,0,8"
+                                                BorderBrush="{StaticResource BorderMedium}" BorderThickness="1" MaxWidth="500">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.6" Color="#000000"/>
+                                            </Border.Effect>
+                                            <StackPanel>
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="🎭 Chọn thể loại video" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center"/>
+                                                    <Button Grid.Column="1" Command="{Binding ClearGenreSelectionCommand}" Cursor="Hand" ToolTip="Bỏ chọn thể loại">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="ClearGenreBorder" Background="Transparent" CornerRadius="4" Padding="6,2">
+                                                                    <TextBlock Text="✕ Bỏ chọn" FontSize="10" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="ClearGenreBorder" Property="Background" Value="#313244"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
+                                                </Grid>
+                                                <TextBlock Text="Chọn thể loại sẽ tự động gợi ý phong cách vẽ, tone giọng đọc phù hợp" 
+                                                           FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                                <ItemsControl ItemsSource="{Binding TopicCards}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate DataType="{x:Type models:TopicCard}">
+                                                            <Button Command="{Binding DataContext.SelectTopicCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    Cursor="Hand" Margin="0,0,6,6"
+                                                                    ToolTip="{Binding Description}">
+                                                                <Button.Template>
+                                                                    <ControlTemplate TargetType="Button">
+                                                                        <Border Name="CardBorder" Background="#26273b" CornerRadius="8" Padding="8,5" 
+                                                                                BorderBrush="#313244" BorderThickness="1"
+                                                                                MinWidth="85">
+                                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                                                <TextBlock Text="{Binding Icon}" FontSize="14" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                                                <TextBlock Text="{Binding Title}" FontSize="10" FontWeight="SemiBold" 
+                                                                                           Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                                            </StackPanel>
+                                                                        </Border>
+                                                                        <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter TargetName="CardBorder" Property="Background" Value="#363750"/>
+                                                                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{StaticResource AccentYellow}"/>
+                                                                            </Trigger>
+                                                                            <Trigger Property="IsPressed" Value="True">
+                                                                                <Setter TargetName="CardBorder" Property="Background" Value="#404160"/>
+                                                                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{StaticResource AccentYellow}"/>
+                                                                            </Trigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Button.Template>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </Popup>
+                                </Grid>
+
+                                <!-- ── 2. PHONG CÁCH VẼ (có thể override từ genre) ── -->
+
+                                <!-- ── 3. NỘI DUNG / Ý TƯỞNG ── -->
+                                <TextBlock Text="📝 Nội dung / Ý tưởng video:" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,4,0,4"/>
                                 <TextBox Text="{Binding Topic, UpdateSourceTrigger=PropertyChanged}" Height="100" TextWrapping="Wrap" AcceptsReturn="True"
                                          Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderDark}"
                                          FontSize="12" Padding="8" VerticalScrollBarVisibility="Auto" Margin="0,0,0,10">
                                     <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></TextBox.Resources>
                                 </TextBox>
 
-                                <!-- Phong cách nghệ thuật -->
-                                <TextBlock Text="2. Phong cách vẽ hình ảnh (Style):" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <ComboBox SelectedValuePath="Tag" SelectedValue="{Binding SelectedStyle}" 
-                                          Padding="8,5" Margin="0,0,0,10">
-                                    <ComboBoxItem Content="2D Dark Anime (Mặc định)" Tag="dark-anime"/>
-                                    <ComboBoxItem Content="Cinematic Horror (Kinh dị 3D)" Tag="cinematic-horror"/>
-                                    <ComboBoxItem Content="3D Cartoon / Pixar" Tag="cartoon-3d"/>
-                                    <ComboBoxItem Content="Cyberpunk Neon" Tag="cyberpunk"/>
-                                    <ComboBoxItem Content="Horror Cartoon (Tim Burton)" Tag="horror-cartoon"/>
-                                    <ComboBoxItem Content="Watercolor (Màu nước nghệ thuật)" Tag="watercolor"/>
-                                    <ComboBoxItem Content="Oil Painting (Tranh sơn dầu)" Tag="oil-painting"/>
-                                    <ComboBoxItem Content="Classic 2D Cartoon" Tag="cartoon-2d"/>
-                                </ComboBox>
-
-                                <!-- Số lượng phân cảnh -->
-                                <Grid Margin="0,0,0,10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="3. Số phân cảnh (Scenes):" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
-                                    <ComboBox SelectedValuePath="Tag" SelectedValue="{Binding SelectedNumScenes}" 
-                                              Grid.Column="1" Width="90" Padding="6,3">
-                                        <ComboBoxItem Content="3 cảnh" Tag="3"/>
-                                        <ComboBoxItem Content="5 cảnh" Tag="5"/>
-                                        <ComboBoxItem Content="7 cảnh" Tag="7"/>
-                                        <ComboBoxItem Content="10 cảnh" Tag="10"/>
-                                    </ComboBox>
-                                </Grid>
-
-                                <!-- Quy tắc nhân vật / màu sắc (Tùy chọn) -->
-                                <TextBlock Text="4. Quy tắc nhân vật &amp; màu sắc (Tùy chọn):" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBox Text="{Binding CharacterRules, UpdateSourceTrigger=PropertyChanged}" Height="70" TextWrapping="Wrap" AcceptsReturn="True"
-                                         Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderDark}"
-                                         FontSize="11" Padding="6" VerticalScrollBarVisibility="Auto" Margin="0,0,0,14">
-                                    <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></TextBox.Resources>
-                                </TextBox>
-
-                                <!-- Nút gọi Gemini sinh kịch bản -->
-                                <Button Command="{Binding GenerateScriptCommand}"
-                                        IsEnabled="{Binding IsGenerating, Converter={StaticResource InverseBoolConverter}}"
+                                <!-- Nút Lên Kế Hoạch (Phase 1) -->
+                                <Button Command="{Binding GeneratePlanCommand}"
+                                        IsEnabled="{Binding IsGeneratingPlan, Converter={StaticResource InverseBoolConverter}}"
                                         Style="{StaticResource BtnPrimary}"
-                                        Content="✨ TẠO PHÂN CẢNH BẰNG AI"
-                                        FontSize="13" Height="42" Margin="0,0,0,8" />
+                                        Content="🎯 LÊN KẾ HOẠCH AI"
+                                        FontSize="13" Height="42" Margin="0,0,0,8">
+                                    <Button.Visibility>
+                                        <Binding Path="HasPlan" Converter="{StaticResource InverseBoolToVisConverter}"/>
+                                    </Button.Visibility>
+                                </Button>
 
-                                <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{StaticResource AccentYellow}" HorizontalAlignment="Center"/>
+                                <!-- ═══════ PHASE 2: XEM VÀ DUYỆT KẾ HOẠCH ═══════ -->
+                                <StackPanel Visibility="{Binding HasPlan, Converter={StaticResource BoolToVisConverter}}">
+
+                                    <TextBlock Text="📋 KẾ HOẠCH AI GỢI Ý:" FontSize="13" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" Margin="0,4,0,8"/>
+
+                                    <!-- Plan Card -->
+                                    <Border Background="#1e1e2e" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <!-- Tóm tắt -->
+                                            <TextBlock Text="Tóm tắt kế hoạch:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}" Margin="0,0,0,4"/>
+                                            <TextBox Text="{Binding CurrentPlan.Summary, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True"
+                                                     Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="#313244"
+                                                     FontSize="11" Padding="6" Height="60" VerticalScrollBarVisibility="Auto" Margin="0,0,0,8">
+                                                <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                                            </TextBox>
+
+                                            <!-- Số cảnh - Popup chọn nhanh -->
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="100" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="📹 Số phân cảnh:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                <ToggleButton x:Name="ScenesPopupToggle" Grid.Column="1" Cursor="Hand" IsChecked="{Binding IsPlanScenesPopupOpen, Mode=TwoWay}">
+                                                    <ToggleButton.Template>
+                                                        <ControlTemplate TargetType="ToggleButton">
+                                                            <Border x:Name="ScenesBd" Background="#26273b" CornerRadius="4" Padding="6,3" BorderBrush="#313244" BorderThickness="1">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Text="{Binding CurrentPlan.SuggestedScenes}" FontSize="12" FontWeight="Bold" 
+                                                                               Foreground="{StaticResource AccentBlue}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Column="1" Text=" ▾" FontSize="8" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                                                                </Grid>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="ScenesBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </ToggleButton.Template>
+                                                </ToggleButton>
+                                                <Popup IsOpen="{Binding IsPlanScenesPopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=ScenesPopupToggle}"
+                                                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                                                    <Border Background="#1a1b2e" CornerRadius="8" Padding="8" Margin="0,4,0,0" BorderBrush="{StaticResource BorderMedium}" BorderThickness="1">
+                                                        <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.5" Color="#000000"/></Border.Effect>
+                                                        <ItemsControl ItemsSource="{Binding SceneCountOptions}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Button Command="{Binding DataContext.SelectPlanScenesCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                            CommandParameter="{Binding}" Cursor="Hand" Margin="0,0,4,4">
+                                                                        <Button.Template>
+                                                                            <ControlTemplate TargetType="Button">
+                                                                                <Border x:Name="SBd" Background="#26273b" CornerRadius="4" Padding="10,4" MinWidth="36"
+                                                                                        BorderBrush="#313244" BorderThickness="1">
+                                                                                    <TextBlock Text="{Binding}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" 
+                                                                                               HorizontalAlignment="Center"/>
+                                                                                </Border>
+                                                                                <ControlTemplate.Triggers>
+                                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                                        <Setter TargetName="SBd" Property="Background" Value="#363750"/>
+                                                                                        <Setter TargetName="SBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                                    </Trigger>
+                                                                                </ControlTemplate.Triggers>
+                                                                            </ControlTemplate>
+                                                                        </Button.Template>
+                                                                    </Button>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </Border>
+                                                </Popup>
+                                            </Grid>
+
+                                            <!-- Phong cách - Popup chọn style -->
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="🎨 Phong cách:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <ToggleButton x:Name="PlanStylePopupToggle" Grid.Column="1" Cursor="Hand" IsChecked="{Binding IsPlanStylePopupOpen, Mode=TwoWay}">
+                                                    <ToggleButton.Template>
+                                                        <ControlTemplate TargetType="ToggleButton">
+                                                            <Border x:Name="PStyleBd" Background="#26273b" CornerRadius="4" Padding="6,3" BorderBrush="#313244" BorderThickness="1">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Text="{Binding CurrentPlan.StyleDescription}" FontSize="11" Foreground="{StaticResource TextSecondary}" 
+                                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                                    <TextBlock Grid.Column="1" Text=" ▾" FontSize="8" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                                                                </Grid>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="PStyleBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </ToggleButton.Template>
+                                                </ToggleButton>
+                                                <Popup IsOpen="{Binding IsPlanStylePopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=PlanStylePopupToggle}"
+                                                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" HorizontalOffset="-80">
+                                                    <Border Background="#1a1b2e" CornerRadius="8" Padding="10" Margin="0,4,0,0" BorderBrush="{StaticResource BorderMedium}" BorderThickness="1" MaxWidth="460">
+                                                        <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.5" Color="#000000"/></Border.Effect>
+                                                        <StackPanel>
+                                                            <TextBlock Text="🎨 Chọn phong cách vẽ" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" Margin="0,0,0,6"/>
+                                                            <ItemsControl ItemsSource="{Binding StyleCards}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate DataType="{x:Type models:StyleCard}">
+                                                                        <Button Command="{Binding DataContext.SelectPlanStyleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                CommandParameter="{Binding}" Cursor="Hand" Margin="0,0,5,5" ToolTip="{Binding Description}">
+                                                                            <Button.Template>
+                                                                                <ControlTemplate TargetType="Button">
+                                                                                    <Border x:Name="PSCBd" Background="#26273b" CornerRadius="6" Padding="8,4" BorderBrush="#313244" BorderThickness="1" MinWidth="85">
+                                                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                                                            <TextBlock Text="{Binding Icon}" FontSize="13" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                                                            <TextBlock Text="{Binding Title}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                                                        </StackPanel>
+                                                                                    </Border>
+                                                                                    <ControlTemplate.Triggers>
+                                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                                            <Setter TargetName="PSCBd" Property="Background" Value="#363750"/>
+                                                                                            <Setter TargetName="PSCBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                                        </Trigger>
+                                                                                    </ControlTemplate.Triggers>
+                                                                                </ControlTemplate>
+                                                                            </Button.Template>
+                                                                        </Button>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Popup>
+                                            </Grid>
+
+                                            <!-- Tone giọng - Popup chọn tone -->
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="🎙️ Tone giọng:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <ToggleButton x:Name="PlanTonePopupToggle" Grid.Column="1" Cursor="Hand" IsChecked="{Binding IsPlanTonePopupOpen, Mode=TwoWay}">
+                                                    <ToggleButton.Template>
+                                                        <ControlTemplate TargetType="ToggleButton">
+                                                            <Border x:Name="PToneBd" Background="#26273b" CornerRadius="4" Padding="6,3" BorderBrush="#313244" BorderThickness="1">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Text="{Binding CurrentPlan.Tone}" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Column="1" Text=" ▾" FontSize="8" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                                                                </Grid>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="PToneBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </ToggleButton.Template>
+                                                </ToggleButton>
+                                                <Popup IsOpen="{Binding IsPlanTonePopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=PlanTonePopupToggle}"
+                                                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" HorizontalOffset="-60">
+                                                    <Border Background="#1a1b2e" CornerRadius="8" Padding="10" Margin="0,4,0,0" BorderBrush="{StaticResource BorderMedium}" BorderThickness="1" MaxWidth="420">
+                                                        <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.5" Color="#000000"/></Border.Effect>
+                                                        <StackPanel>
+                                                            <TextBlock Text="🎙️ Chọn tone giọng đọc" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" Margin="0,0,0,6"/>
+                                                            <ItemsControl ItemsSource="{Binding ToneCards}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate DataType="{x:Type models:ToneCard}">
+                                                                        <Button Command="{Binding DataContext.SelectPlanToneCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                CommandParameter="{Binding}" Cursor="Hand" Margin="0,0,5,5" ToolTip="{Binding Description}">
+                                                                            <Button.Template>
+                                                                                <ControlTemplate TargetType="Button">
+                                                                                    <Border x:Name="PTCBd" Background="#26273b" CornerRadius="6" Padding="8,4" BorderBrush="#313244" BorderThickness="1">
+                                                                                        <StackPanel Orientation="Horizontal">
+                                                                                            <TextBlock Text="{Binding Icon}" FontSize="13" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                                                                            <TextBlock Text="{Binding Title}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                                                        </StackPanel>
+                                                                                    </Border>
+                                                                                    <ControlTemplate.Triggers>
+                                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                                            <Setter TargetName="PTCBd" Property="Background" Value="#363750"/>
+                                                                                            <Setter TargetName="PTCBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                                        </Trigger>
+                                                                                    </ControlTemplate.Triggers>
+                                                                                </ControlTemplate>
+                                                                            </Button.Template>
+                                                                        </Button>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Popup>
+                                            </Grid>
+
+                                            <!-- Giọng đọc - Popup chọn voice + nghe thử -->
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="🔊 Giọng đọc:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <ToggleButton x:Name="PlanVoicePopupToggle" Grid.Column="1" Cursor="Hand" IsChecked="{Binding IsPlanVoicePopupOpen, Mode=TwoWay}">
+                                                    <ToggleButton.Template>
+                                                        <ControlTemplate TargetType="ToggleButton">
+                                                            <Border x:Name="PVoiceBd" Background="#26273b" CornerRadius="4" Padding="6,3" BorderBrush="#313244" BorderThickness="1">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Text="{Binding CurrentPlan.Voice}" FontSize="11" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                                                                    <TextBlock Grid.Column="1" Text=" ▾" FontSize="8" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                                                                </Grid>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="PVoiceBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </ToggleButton.Template>
+                                                </ToggleButton>
+                                                <Popup IsOpen="{Binding IsPlanVoicePopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=PlanVoicePopupToggle}"
+                                                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" HorizontalOffset="-60">
+                                                    <Border Background="#1a1b2e" CornerRadius="10" Padding="12" Margin="0,4,0,0" BorderBrush="{StaticResource BorderMedium}" BorderThickness="1" MaxWidth="380">
+                                                        <Border.Effect><DropShadowEffect BlurRadius="14" ShadowDepth="4" Direction="270" Opacity="0.6" Color="#000000"/></Border.Effect>
+                                                        <StackPanel>
+                                                            <TextBlock Text="🔊 Chọn giọng đọc" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" Margin="0,0,0,8"/>
+                                                            <ItemsControl ItemsSource="{Binding VoiceCards}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate DataType="{x:Type models:VoiceCard}">
+                                                                        <Border Background="#26273b" CornerRadius="8" Padding="10,8" Margin="0,0,0,6" BorderBrush="#313244" BorderThickness="1">
+                                                                            <Grid>
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="*"/>
+                                                                                    <ColumnDefinition Width="Auto"/>
+                                                                                    <ColumnDefinition Width="Auto"/>
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <!-- Thông tin giọng -->
+                                                                                <StackPanel>
+                                                                                    <StackPanel Orientation="Horizontal">
+                                                                                        <TextBlock Text="{Binding Icon}" FontSize="14" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                                                                        <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                                                        <Border Background="#363750" CornerRadius="3" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                                                                            <TextBlock Text="{Binding Quality}" FontSize="9" Foreground="{StaticResource AccentYellow}"/>
+                                                                                        </Border>
+                                                                                    </StackPanel>
+                                                                                    <TextBlock Text="{Binding Description}" FontSize="9" Foreground="{StaticResource TextMuted}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                                                                </StackPanel>
+                                                                                <!-- Nút nghe thử -->
+                                                                                <Button Grid.Column="1" Cursor="Hand" Margin="8,0,4,0" ToolTip="Nghe thử giọng"
+                                                                                        Command="{Binding DataContext.PreviewVoiceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                        CommandParameter="{Binding}"
+                                                                                        IsEnabled="{Binding DataContext.IsPreviewingVoice, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource InverseBoolConverter}}">
+                                                                                    <Button.Template>
+                                                                                        <ControlTemplate TargetType="Button">
+                                                                                            <Border x:Name="PlayBd" Background="#363750" CornerRadius="6" Padding="8,4" BorderBrush="#454670" BorderThickness="1">
+                                                                                                <TextBlock x:Name="PlayTxt" Text="▶ Nghe" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBlue}" VerticalAlignment="Center"/>
+                                                                                            </Border>
+                                                                                            <ControlTemplate.Triggers>
+                                                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                                                    <Setter TargetName="PlayBd" Property="Background" Value="#454670"/>
+                                                                                                    <Setter TargetName="PlayBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                                                </Trigger>
+                                                                                                <Trigger Property="IsEnabled" Value="False">
+                                                                                                    <Setter TargetName="PlayBd" Property="Background" Value="#1e1e2e"/>
+                                                                                                    <Setter TargetName="PlayBd" Property="BorderBrush" Value="#26273b"/>
+                                                                                                    <Setter TargetName="PlayTxt" Property="Text" Value="⏳ ..."/>
+                                                                                                    <Setter TargetName="PlayTxt" Property="Foreground" Value="{StaticResource TextMuted}"/>
+                                                                                                </Trigger>
+                                                                                            </ControlTemplate.Triggers>
+                                                                                        </ControlTemplate>
+                                                                                    </Button.Template>
+                                                                                </Button>
+                                                                                <!-- Nút chọn -->
+                                                                                <Button Grid.Column="2" Cursor="Hand" ToolTip="Chọn giọng này"
+                                                                                        Command="{Binding DataContext.SelectPlanVoiceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                        CommandParameter="{Binding}">
+                                                                                    <Button.Template>
+                                                                                        <ControlTemplate TargetType="Button">
+                                                                                            <Border x:Name="SelectBd" Background="#26273b" CornerRadius="6" Padding="8,4" BorderBrush="#454670" BorderThickness="1">
+                                                                                                <TextBlock Text="✓ Chọn" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center"/>
+                                                                                            </Border>
+                                                                                            <ControlTemplate.Triggers>
+                                                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                                                    <Setter TargetName="SelectBd" Property="Background" Value="#363750"/>
+                                                                                                    <Setter TargetName="SelectBd" Property="BorderBrush" Value="{StaticResource AccentYellow}"/>
+                                                                                                </Trigger>
+                                                                                            </ControlTemplate.Triggers>
+                                                                                        </ControlTemplate>
+                                                                                    </Button.Template>
+                                                                                </Button>
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Popup>
+                                            </Grid>
+
+                                            <!-- Hiệu ứng Camera - Popup chọn -->
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="🎬 Hiệu ứng Camera:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <ToggleButton x:Name="PlanMotionPopupToggle" Grid.Column="1" Cursor="Hand" IsChecked="{Binding IsPlanMotionPopupOpen, Mode=TwoWay}">
+                                                    <ToggleButton.Template>
+                                                        <ControlTemplate TargetType="ToggleButton">
+                                                            <Border x:Name="PMotionBd" Background="#26273b" CornerRadius="4" Padding="6,3" BorderBrush="#313244" BorderThickness="1">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Text="{Binding CurrentPlanMotionDisplayText}" FontSize="11" Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                                    <TextBlock Grid.Column="1" Text=" ▾" FontSize="8" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                                                                </Grid>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="PMotionBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </ToggleButton.Template>
+                                                </ToggleButton>
+                                                <Popup IsOpen="{Binding IsPlanMotionPopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=PlanMotionPopupToggle}"
+                                                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" HorizontalOffset="-80">
+                                                    <Border Background="#1a1b2e" CornerRadius="8" Padding="10" Margin="0,4,0,0" BorderBrush="{StaticResource BorderMedium}" BorderThickness="1" MaxWidth="440">
+                                                        <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.5" Color="#000000"/></Border.Effect>
+                                                        <StackPanel>
+                                                            <TextBlock Text="🎬 Chọn phong cách hiệu ứng chuyển động" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" Margin="0,0,0,6"/>
+                                                            <ItemsControl ItemsSource="{Binding PlanMotionOptions}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate DataType="{x:Type models:MotionEffectOption}">
+                                                                        <Button Command="{Binding DataContext.SelectPlanMotionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                CommandParameter="{Binding}" Cursor="Hand" Margin="0,0,0,4">
+                                                                            <Button.Template>
+                                                                                <ControlTemplate TargetType="Button">
+                                                                                    <Border x:Name="PMOBd" Background="#26273b" CornerRadius="6" Padding="8,5" BorderBrush="#313244" BorderThickness="1">
+                                                                                        <Grid>
+                                                                                            <Grid.ColumnDefinitions>
+                                                                                                <ColumnDefinition Width="Auto"/>
+                                                                                                <ColumnDefinition Width="*"/>
+                                                                                            </Grid.ColumnDefinitions>
+                                                                                            <TextBlock Text="{Binding Icon}" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                                                            <StackPanel Grid.Column="1">
+                                                                                                <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                                                                                                <TextBlock Text="{Binding Description}" FontSize="9.5" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                                                                                            </StackPanel>
+                                                                                        </Grid>
+                                                                                    </Border>
+                                                                                    <ControlTemplate.Triggers>
+                                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                                            <Setter TargetName="PMOBd" Property="Background" Value="#363750"/>
+                                                                                            <Setter TargetName="PMOBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                                        </Trigger>
+                                                                                    </ControlTemplate.Triggers>
+                                                                                </ControlTemplate>
+                                                                            </Button.Template>
+                                                                        </Button>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </Popup>
+                                            </Grid>
+
+                                            <!-- NHẠC NỀN (BGM) - AI GỢI Ý & NGHE THỬ TRỰC TIẾP -->
+                                            <Border Background="#161622" CornerRadius="8" Padding="10" BorderBrush="#313244" BorderThickness="1" Margin="0,2,0,8">
+                                                <StackPanel>
+                                                    <!-- Header with CheckBox & Quick Action Buttons -->
+                                                    <Grid Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        
+                                                        <CheckBox IsChecked="{Binding EnableBgm}" Foreground="{StaticResource TextPrimary}" FontSize="11" Cursor="Hand" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="🎵 Nhạc Nền (BGM):" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                                                                <Border Background="#2a2348" CornerRadius="4" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                                                    <TextBlock Text="AI Auto / Free CC0" FontSize="9" FontWeight="Bold" Foreground="#a78bfa"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                        </CheckBox>
+
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                            <Button Content="📂 Thư mục" Command="{Binding OpenBgmFolderCommand}"
+                                                                    ToolTip="Mở thư mục BGM để dán thêm nhạc MP3 của bạn"
+                                                                    FontSize="10" Padding="5,2" Background="#26273b" Foreground="{StaticResource TextSecondary}"
+                                                                    BorderBrush="{StaticResource BorderDark}" Margin="0,0,4,0"/>
+                                                            <Button Content="🌐 Kho nhạc" Command="{Binding OpenFreeMusicSourcesCommand}"
+                                                                    ToolTip="Xem hướng dẫn và mở trang tải nhạc miễn phí không bản quyền"
+                                                                    FontSize="10" Padding="5,2" Background="#26273b" Foreground="{StaticResource AccentYellow}"
+                                                                    BorderBrush="{StaticResource BorderDark}"/>
+                                                        </StackPanel>
+                                                    </Grid>
+
+                                                    <!-- Track Dropdown Selector & Preview/Browse Buttons -->
+                                                    <Grid Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <ComboBox ItemsSource="{Binding AvailableBgmTracks}" 
+                                                                  SelectedItem="{Binding SelectedBgmTrack}"
+                                                                  FontSize="11" Background="#26273b" Foreground="{StaticResource TextPrimary}"
+                                                                  BorderBrush="{StaticResource BorderDark}" VerticalContentAlignment="Center">
+                                                            <ComboBox.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Grid Margin="2,1">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="*" />
+                                                                            <ColumnDefinition Width="Auto" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock Text="{Binding Title}" FontSize="11" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                                        <TextBlock Grid.Column="1" Text="{Binding SourceTag}" FontSize="9" Foreground="{StaticResource TextMuted}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                                                    </Grid>
+                                                                </DataTemplate>
+                                                            </ComboBox.ItemTemplate>
+                                                        </ComboBox>
+
+                                                        <!-- Nút Nghe thử / Dừng -->
+                                                        <Button Grid.Column="1" Command="{Binding TogglePreviewBgmCommand}"
+                                                                Padding="7,3" Margin="4,0,0,0"
+                                                                ToolTip="Phát / Dừng nghe thử nhạc nền">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button">
+                                                                    <Setter Property="Background" Value="#26273b" />
+                                                                    <Setter Property="Foreground" Value="{StaticResource AccentCyan}" />
+                                                                    <Setter Property="BorderBrush" Value="{StaticResource BorderDark}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsPlayingBgm}" Value="True">
+                                                                            <Setter Property="Background" Value="#451a1a" />
+                                                                            <Setter Property="Foreground" Value="#f87171" />
+                                                                            <Setter Property="BorderBrush" Value="#f87171" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding BgmPlayButtonIcon}" FontSize="10" Margin="0,0,3,0"/>
+                                                                <TextBlock Text="{Binding BgmPlayButtonText}" FontSize="10" FontWeight="SemiBold"/>
+                                                            </StackPanel>
+                                                        </Button>
+
+                                                        <!-- Nút Chọn tệp ngoài -->
+                                                        <Button Grid.Column="2" Content="📁 Tệp..." Command="{Binding BrowseCustomBgmCommand}"
+                                                                ToolTip="Chọn file nhạc từ bất kỳ đâu trên máy tính"
+                                                                Padding="6,3" Margin="4,0,0,0" FontSize="10"/>
+                                                    </Grid>
+
+                                                    <!-- Đang phát preview badge (nếu có) -->
+                                                    <Border Background="#1f2d3d" CornerRadius="4" Padding="6,2" Margin="0,0,0,6"
+                                                            Visibility="{Binding IsPlayingBgm, Converter={StaticResource BoolToVisConverter}}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="🔊 Đang phát: " FontSize="10" Foreground="#38bdf8"/>
+                                                            <TextBlock Text="{Binding PlayingBgmTitle}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- Slider âm lượng nhạc nền -->
+                                                    <Grid Margin="0,2,0,2">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="38" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Âm lượng: " FontSize="10.5" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+                                                        <Slider Grid.Column="1" Minimum="0" Maximum="1" Value="{Binding BgmVolume}" SmallChange="0.05" LargeChange="0.1" 
+                                                                VerticalAlignment="Center" Margin="6,0"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding BgmVolumePercentageText}" FontSize="10.5" FontWeight="Bold" 
+                                                                   Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                                    </Grid>
+
+                                                    <!-- Gợi ý âm lượng chống bản quyền Content ID -->
+                                                    <TextBlock Text="💡 AI tự gợi ý theo cảm xúc bài viết. Âm lượng 10-20% giúp giọng đọc rõ &amp; tránh quét bản quyền" 
+                                                               FontSize="9" Foreground="{StaticResource TextMuted}" Margin="2,2,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- Tùy chọn Cinematic bổ sung -->
+                                            <Grid Margin="0,0,0,6">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <CheckBox IsChecked="{Binding CurrentPlan.EnableFadeTransition}" Foreground="{StaticResource TextSecondary}" FontSize="10.5" Cursor="Hand">
+                                                    <TextBlock Text="✨ Fade In/Out" ToolTip="Chuyển cảnh mờ dần mềm mại giữa các phân cảnh"/>
+                                                </CheckBox>
+                                                <CheckBox Grid.Column="1" IsChecked="{Binding CurrentPlan.EnableVignette}" Foreground="{StaticResource TextSecondary}" FontSize="10.5" Cursor="Hand">
+                                                    <TextBlock Text="🎞️ Viền Cinematic" ToolTip="Viền mờ tối 4 góc tạo chiều sâu điện ảnh"/>
+                                                </CheckBox>
+                                            </Grid>
+
+                                            <!-- Gợi ý nhân vật -->
+                                            <TextBlock Text="👤 Gợi ý nhân vật:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,2,0,4"/>
+                                            <TextBox Text="{Binding CurrentPlan.CharacterHint, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True"
+                                                     Background="#26273b" Foreground="{StaticResource TextSecondary}" BorderBrush="#313244"
+                                                     FontSize="11" Padding="6" Height="50" VerticalScrollBarVisibility="Auto">
+                                                <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                                            </TextBox>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Quy tắc bổ sung (tùy chọn) -->
+                                    <TextBlock Text="✏️ Quy tắc bổ sung (Tùy chọn):" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                    <TextBox Text="{Binding CharacterRules, UpdateSourceTrigger=PropertyChanged}" Height="45" TextWrapping="Wrap" AcceptsReturn="True"
+                                             Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderDark}"
+                                             FontSize="11" Padding="6" VerticalScrollBarVisibility="Auto" Margin="0,0,0,10">
+                                        <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></TextBox.Resources>
+                                    </TextBox>
+
+                                    <!-- Nút Xác nhận & Tạo -->
+                                    <Button Command="{Binding ConfirmPlanAndGenerateCommand}"
+                                            IsEnabled="{Binding IsGenerating, Converter={StaticResource InverseBoolConverter}}"
+                                            Style="{StaticResource BtnSuccess}"
+                                            Content="✅ XÁC NHẬN &amp; TẠO KỊCH BẢN"
+                                            FontSize="13" Height="42" Margin="0,0,0,6" />
+
+                                    <!-- Nút Chọn lại -->
+                                    <Button Command="{Binding BackToTopicSelectionCommand}"
+                                            Content="↩ CHỌN LẠI CHỦ ĐỀ"
+                                            FontSize="11" Height="30" Padding="10,4" Margin="0,0,0,4" />
+                                </StackPanel>
+
+                                <!-- Status Text -->
+                                <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{StaticResource AccentYellow}" 
+                                           HorizontalAlignment="Center" TextWrapping="Wrap" Margin="0,6,0,0"/>
                             </StackPanel>
                         </ScrollViewer>
 
@@ -156,7 +802,8 @@
 
                                 <!-- Listview phân cảnh đã sinh -->
                                 <ListBox ItemsSource="{Binding GeneratedScenes}" Background="Transparent" BorderThickness="0"
-                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         Grid.Row="1">
                                     <ListBox.ItemContainerStyle>
                                         <Style TargetType="ListBoxItem">
                                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -181,7 +828,34 @@
                                                         <RowDefinition Height="Auto" />
                                                     </Grid.RowDefinitions>
 
-                                                    <TextBlock Grid.Row="0" Text="{Binding Index, StringFormat='Cảnh #{0}'}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource AccentBlue}" Margin="0,0,0,4"/>
+                                                    <Grid Grid.Row="0" Margin="0,0,0,4">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding Index, StringFormat='Cảnh #{0}'}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource AccentBlue}" VerticalAlignment="Center"/>
+                                                        
+                                                        <!-- Dropdown hiệu ứng camera AI gán cho cảnh này -->
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="🎬 " FontSize="11" VerticalAlignment="Center"/>
+                                                            <ComboBox ItemsSource="{x:Static models:MotionEffectOption.AllSceneMotionOptions}"
+                                                                      SelectedValue="{Binding MotionEffect}"
+                                                                      SelectedValuePath="Id"
+                                                                      Padding="4,2,20,2" FontSize="10" MinHeight="24"
+                                                                      Background="#1e1e2e" Foreground="{StaticResource AccentYellow}"
+                                                                      BorderBrush="#313244" Cursor="Hand"
+                                                                      ToolTip="Hiệu ứng máy quay (AI tự phân tích và ghép vào, bấm để đổi nếu muốn)">
+                                                                <ComboBox.ItemTemplate>
+                                                                    <DataTemplate>
+                                                                        <StackPanel Orientation="Horizontal">
+                                                                            <TextBlock Text="{Binding Icon}" Margin="0,0,4,0" FontSize="11" VerticalAlignment="Center"/>
+                                                                            <TextBlock Text="{Binding Name}" FontSize="10.5" VerticalAlignment="Center"/>
+                                                                        </StackPanel>
+                                                                    </DataTemplate>
+                                                                </ComboBox.ItemTemplate>
+                                                            </ComboBox>
+                                                        </StackPanel>
+                                                    </Grid>
 
                                                     <TextBlock Grid.Row="1" Text="Lời thoại (Text):" FontSize="10" Foreground="{StaticResource TextMuted}"/>
                                                     <TextBox Grid.Row="2" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True"

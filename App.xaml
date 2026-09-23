@@ -6,6 +6,7 @@
     <Application.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisConverter" />
         <converters:InverseBooleanConverter x:Key="InverseBoolConverter" />
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisConverter" />
         <converters:RatioMatchConverter x:Key="RatioMatchConverter" />
 
         <!-- Base Colors -->
@@ -19,6 +20,7 @@
         <SolidColorBrush x:Key="TextMuted" Color="#6c7086" />
         <SolidColorBrush x:Key="AccentBlue" Color="#89b4fa" />
         <SolidColorBrush x:Key="AccentBlueHover" Color="#b4befe" />
+        <SolidColorBrush x:Key="AccentCyan" Color="#89dceb" />
         <SolidColorBrush x:Key="AccentGreen" Color="#a6e3a1" />
         <SolidColorBrush x:Key="AccentGreenHover" Color="#94e2d5" />
         <SolidColorBrush x:Key="AccentRed" Color="#f38ba8" />

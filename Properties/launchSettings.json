@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "VideoAutoWpf": {
+      "commandName": "Project"
+    },
+    "VideoAutoWpf (Bypass SAC)": {
+      "commandName": "Executable",
+      "executablePath": "dotnet",
+      "commandLineArgs": "run --no-build",
+      "workingDirectory": "$(ProjectDir)"
+    }
+  }
+}

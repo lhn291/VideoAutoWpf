@@ -20,18 +20,78 @@ public class GeminiScriptService
         ["horror-cartoon"] = "In an eerie dark 2D cartoon style, Tim Burton aesthetic, creepy hand-drawn illustration style, sketchy lines, whimsical but macabre atmosphere, high contrast, dramatic shadows, no photorealism, no 3D elements, no realistic textures. Colors strictly unified: charcoal black, venom green, deep violet, and dark red. Clean line art, portrait aspect ratio 9:16. ",
         ["oil-painting"] = "In a classical textured oil painting style, expressive thick paint brushstrokes, texture of paint on canvas, chiaroscuro lighting, dramatic shadow and light contrast, historical and moody atmosphere, no digital animation style, no photorealism. Colors unified: deep brown, burnt orange, and pale warm yellow. Portrait aspect ratio 9:16. ",
         ["watercolor"] = "In a beautiful fluid watercolor painting style, wet-on-wet technique, soft pastel washes, bleeding paint edges, subtle ink sketch outline details, artistic and dreamy atmosphere, light and airy lighting, no photorealism, no digital animation style. Portrait aspect ratio 9:16. ",
-        ["cartoon-2d"] = "In a classic 2D cartoon style, retro flat illustration, solid colors, clean black line art, vintage cartoon vibes, nostalgic simple shading, no gradients, no photorealism, no 3D elements. Portrait aspect ratio 9:16. "
+        ["cartoon-2d"] = "In a classic 2D cartoon style, retro flat illustration, solid colors, clean black line art, vintage cartoon vibes, nostalgic simple shading, no gradients, no photorealism, no 3D elements. Portrait aspect ratio 9:16. ",
+        ["realistic-photo"] = "In a hyper-realistic photographic style, DSLR quality, shallow depth of field, natural lighting, professional cinematic photography, highly detailed, lifelike textures, 8K resolution quality. Portrait aspect ratio 9:16. ",
+        ["pixel-art"] = "In a retro pixel art style, 16-bit game aesthetic, limited color palette, clean pixel placement, nostalgic retro gaming vibes, no anti-aliasing, sharp pixel edges. Portrait aspect ratio 9:16. "
     };
+
+    /// <summary>
+    /// Danh sách style keys có sẵn, dùng cho AI chọn
+    /// </summary>
+    public static readonly string AvailableStyleKeys = string.Join(", ", StylePrompts.Keys);
 
     public GeminiScriptService(GoogleAuthService authService)
     {
         _authService = authService;
     }
 
+    /// <summary>
+    /// Bước 1: AI lên kế hoạch (plan) cho video dựa trên chủ đề
+    /// </summary>
+    public async Task<ScriptPlan> GeneratePlanAsync(
+        string topic,
+        string location = "us-central1",
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(topic))
+            throw new ArgumentException("Chủ đề không được để trống.", nameof(topic));
+
+        var token = await _authService.GetAccessTokenAsync();
+        var projectId = _authService.ProjectId;
+
+        var systemInstruction =
+            "You are an expert creative video planning consultant. " +
+            "Given a video topic or content description, analyze the topic and suggest the BEST creative plan for making a short video. " +
+            "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
+            "The JSON structure must exactly match this schema:\n" +
+            "{\n" +
+            "  \"suggested_scenes\": 5,\n" +
+            "  \"suggested_style\": \"dark-anime\",\n" +
+            "  \"style_description\": \"Mô tả ngắn gọn bằng tiếng Việt về phong cách được chọn\",\n" +
+            "  \"tone\": \"Tone giọng đọc phù hợp (Rùng rợn / Vui nhộn / Trang nghiêm / Nhẹ nhàng / Hào hùng / Bí ẩn / Cảm xúc...)\",\n" +
+            "  \"ratio\": \"9:16\",\n" +
+            "  \"voice\": \"vi-VN-Wavenet-B\",\n" +
+            "  \"motion_effect\": \"auto\",\n" +
+            "  \"enable_fade\": true,\n" +
+            "  \"enable_vignette\": false,\n" +
+            "  \"suggested_bgm\": \"dramatic\",\n" +
+            "  \"summary\": \"Tóm tắt kế hoạch video bằng tiếng Việt (3-5 câu): nội dung chính, cách kể chuyện, điểm nhấn\",\n" +
+            "  \"character_hint\": \"Mô tả gợi ý nhân vật chính (ngoại hình, trang phục, đặc điểm) bằng tiếng Việt\"\n" +
+            "}\n\n" +
+            "Rules:\n" +
+            "1. 'suggested_scenes' should be between 3 and 12, based on complexity and depth needed for the topic.\n" +
+            $"2. 'suggested_style' MUST be one of these exact keys: [{AvailableStyleKeys}]. Choose the BEST style that matches the topic's mood and theme.\n" +
+            "3. 'voice' must be one of: 'vi-VN-Wavenet-B' (nam trầm), 'vi-VN-Wavenet-A' (nữ), 'vi-VN-Wavenet-D' (nam), 'vi-VN-Neural2-A' (nữ cao cấp), 'vi-VN-Neural2-D' (nam cao cấp). Choose based on tone.\n" +
+            "4. 'ratio' is always '9:16' for short video.\n" +
+            "5. 'motion_effect' default is 'auto' (AI analyzes and assigns the best camera movement to each individual scene).\n" +
+            "6. 'enable_vignette': set to true for dark fantasy, horror, noir, historical drama; false for bright anime, cartoon, commercial.\n" +
+            "7. 'enable_fade': always true for smooth transitions.\n" +
+            "8. 'suggested_bgm': must be one of ['dramatic', 'chill', 'epic', 'horror', 'upbeat']. Choose according to the emotional tone of the video.\n" +
+            "9. All Vietnamese text must be natural and compelling.\n" +
+            "10. 'character_hint': Mô tả chi tiết nhân vật chính (nếu có) bao gồm: giới tính, tuổi, kiểu tóc, trang phục, đặc điểm nổi bật. Nếu không có nhân vật cụ thể, để trống.\n";
+
+        var userPrompt = $"Hãy lên kế hoạch chi tiết cho video về chủ đề sau:\n'{topic}'\n\n" +
+                         "Phân tích chủ đề và đề xuất số cảnh, phong cách hình ảnh, tone giọng đọc, hiệu ứng camera phù hợp nhất.";
+
+        return await CallGeminiForJson<ScriptPlan>(systemInstruction, userPrompt, projectId, location, token, ct);
+    }
+
+    /// <summary>
+    /// Bước 2: Sinh kịch bản chi tiết dựa trên plan đã duyệt
+    /// </summary>
     public async Task<ScriptWorkspace> GenerateScriptAsync(
         string topic,
-        string styleKey = "dark-anime",
-        int numScenes = 5,
+        ScriptPlan plan,
         string characterRules = "",
         string location = "us-central1",
         CancellationToken ct = default)
@@ -42,39 +102,97 @@ public class GeminiScriptService
         var token = await _authService.GetAccessTokenAsync();
         var projectId = _authService.ProjectId;
 
-        var chosenStyle = StylePrompts.TryGetValue(styleKey, out var styleVal) ? styleVal : StylePrompts["dark-anime"];
+        var chosenStyle = StylePrompts.TryGetValue(plan.SuggestedStyle, out var styleVal) ? styleVal : StylePrompts["dark-anime"];
+        var numScenes = plan.SuggestedScenes > 0 ? plan.SuggestedScenes : 5;
 
-        var systemInstruction = 
+        var systemInstruction =
             "You are an expert creative writer and short video director. " +
             "Your task is to take a video topic or raw content description and generate a complete structured video script in JSON format. " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
             "The JSON structure must exactly match this schema:\n" +
             "{\n" +
             "  \"metadata\": {\n" +
-            "    \"ratio\": \"9:16\",\n" +
-            "    \"voice\": \"vi-VN-Wavenet-B\",\n" +
-            "    \"music\": \"\",\n" +
+            $"    \"ratio\": \"{plan.Ratio}\",\n" +
+            $"    \"voice\": \"{plan.Voice}\",\n" +
+            $"    \"motion_effect\": \"{plan.MotionEffect}\",\n" +
+            $"    \"enable_fade\": {plan.EnableFadeTransition.ToString().ToLower()},\n" +
+            $"    \"enable_vignette\": {plan.EnableVignette.ToString().ToLower()},\n" +
+            $"    \"music\": \"{plan.SuggestedBgm}\",\n" +
+            "    \"enable_music\": true,\n" +
             "    \"music_volume\": 0.15\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
-            "    { \"text\": \"Vietnamese voiceover text...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\" }\n" +
+            "    { \"text\": \"Vietnamese voiceover text...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" }\n" +
             "  ]\n" +
             "}\n\n" +
             "Guidelines:\n" +
-            "1. The video ratio is 9:16 (vertical). Voice is 'vi-VN-Wavenet-B'.\n" +
+            $"1. The video ratio is {plan.Ratio} (vertical). Voice is '{plan.Voice}'.\n" +
             $"2. Generate exactly {numScenes} scenes.\n" +
-            "3. The 'text' must be natural, engaging, and compelling Vietnamese voiceover. Start with a strong hook in Scene 1.\n" +
-            $"4. The 'image_prompt' must be a detailed, highly descriptive prompt in English. You MUST prepend this exact style prefix to the beginning of EVERY single 'image_prompt': '{chosenStyle}'\n" +
-            "5. To maintain character consistency across scenes, repeat the exact detailed description of the character(s) verbatim in every scene's image prompt where they appear.\n";
+            $"3. The tone of voice should be: {plan.Tone}.\n" +
+            "4. The 'text' must be natural, engaging, and compelling Vietnamese voiceover. Start with a strong hook in Scene 1.\n" +
+            $"5. The 'image_prompt' must be a detailed, highly descriptive prompt in English. You MUST prepend this exact style prefix to the beginning of EVERY single 'image_prompt': '{chosenStyle}'\n" +
+            "6. To maintain character consistency across scenes, repeat the exact detailed description of the character(s) verbatim in every scene's image prompt where they appear.\n" +
+            "7. 'motion_effect': For each scene, analyze its dramatic action, emotional beat, and visual composition. Assign the most fitting camera movement:\n" +
+            "   - 'zoom_in': intense moments, emotional climax, dialogue, dramatic realization, focusing on face or clue\n" +
+            "   - 'zoom_out': establishing shots, revealing expansive world/landscape, pulling back to show full scene\n" +
+            "   - 'pan_left_right': character walking/moving across, tracking action, sweeping landscape\n" +
+            "   - 'pan_right_left': alternating horizontal sweep\n" +
+            "   - 'pan_up': revealing character outfit to face, tall structures, trees, sky (ideal for vertical 9:16 format)\n" +
+            "   - 'pan_down': looking down from above, descending, gravity, shock\n" +
+            "   - 'zoom_pan_right': dynamic corner focus, building tension\n" +
+            "   - 'zoom_pan_left': dynamic left focus\n";
 
         var userPrompt = $"Topic/Raw content to transform into a {numScenes}-scene video script:\n'{topic}'\n\n";
+
+        // Thêm character rules từ plan hint + user rules
+        var allCharacterRules = "";
+        if (!string.IsNullOrWhiteSpace(plan.CharacterHint))
+            allCharacterRules += plan.CharacterHint + "\n";
         if (!string.IsNullOrWhiteSpace(characterRules))
+            allCharacterRules += characterRules;
+
+        if (!string.IsNullOrWhiteSpace(allCharacterRules))
         {
-            userPrompt += $"CRITICAL CHARACTER & COLOR SYNC RULES:\n{characterRules}\nEnsure every scene featuring the characters strictly includes these identical features and colors in English.\n\n";
+            userPrompt += $"CRITICAL CHARACTER & COLOR SYNC RULES:\n{allCharacterRules.Trim()}\nEnsure every scene featuring the characters strictly includes these identical features and colors in English.\n\n";
         }
         userPrompt += $"Please generate the complete JSON script with exactly {numScenes} scenes.";
 
-        // Thử model gemini-2.5-flash trước, nếu lỗi thử gemini-1.5-flash
+        return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);
+    }
+
+    /// <summary>
+    /// Overload cũ để backward-compatible với code gọi trực tiếp (nếu cần)
+    /// </summary>
+    public async Task<ScriptWorkspace> GenerateScriptAsync(
+        string topic,
+        string styleKey = "dark-anime",
+        int numScenes = 5,
+        string characterRules = "",
+        string location = "us-central1",
+        CancellationToken ct = default)
+    {
+        var plan = new ScriptPlan
+        {
+            SuggestedScenes = numScenes,
+            SuggestedStyle = styleKey,
+            Tone = "Phù hợp với nội dung",
+            Ratio = "9:16",
+            Voice = "vi-VN-Wavenet-B"
+        };
+        return await GenerateScriptAsync(topic, plan, characterRules, location, ct);
+    }
+
+    /// <summary>
+    /// Generic helper gọi Gemini API và parse JSON response
+    /// </summary>
+    private async Task<T> CallGeminiForJson<T>(
+        string systemInstruction,
+        string userPrompt,
+        string projectId,
+        string location,
+        string token,
+        CancellationToken ct) where T : class
+    {
         var modelsToTry = new[] { "gemini-2.5-flash", "gemini-1.5-flash" };
         string? lastError = null;
 
@@ -132,14 +250,14 @@ public class GeminiScriptService
                             if (cleanJson.EndsWith("```")) cleanJson = cleanJson[..^3];
                             cleanJson = cleanJson.Trim();
 
-                            var workspace = JsonSerializer.Deserialize<ScriptWorkspace>(cleanJson, new JsonSerializerOptions
+                            var result = JsonSerializer.Deserialize<T>(cleanJson, new JsonSerializerOptions
                             {
                                 PropertyNameCaseInsensitive = true
                             });
 
-                            if (workspace != null && workspace.Scenes != null && workspace.Scenes.Count > 0)
+                            if (result != null)
                             {
-                                return workspace;
+                                return result;
                             }
                         }
                     }
@@ -155,6 +273,6 @@ public class GeminiScriptService
             }
         }
 
-        throw new Exception($"Không thể sinh kịch bản bằng Gemini AI: {lastError}");
+        throw new Exception($"Không thể gọi Gemini AI: {lastError}");
     }
 }

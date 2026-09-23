@@ -250,7 +250,10 @@ public partial class FFmpegService : IFFmpegService
                 });
 
                 var segmentPath = Path.Combine(tempDir, $"segment_{sceneNum:D3}.mp4");
-                await RenderSegmentAsync(ffmpeg, scene.ImagePath, scene.AudioPath, duration, width, height, config.EnableKenBurns, config.Fps, segmentPath, progress, ct);
+                var effectToUse = !string.IsNullOrEmpty(scene.MotionEffect) && scene.MotionEffect != "auto"
+                    ? scene.MotionEffect
+                    : config.MotionEffect;
+                await RenderSegmentAsync(ffmpeg, scene.ImagePath, scene.AudioPath, duration, width, height, effectToUse, config.Fps, segmentPath, progress, ct, i, config.EnableFadeTransition, config.EnableVignette);
 
                 tempSegmentFiles.Add(segmentPath);
                 scene.Status = "Hoàn thành";
@@ -291,7 +294,7 @@ public partial class FFmpegService : IFFmpegService
 
                 var volStr = config.BackgroundMusicVolume.ToString("0.00", CultureInfo.InvariantCulture);
                 var filterComplex = $"\"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[a1];[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume={volStr}[a2];[a1][a2]amix=inputs=2:duration=first:dropout_transition=3[a]\"";
-                var mixArgs = $"-y -i \"{mergedVideoPath}\" -i \"{config.BackgroundMusicPath}\" -filter_complex {filterComplex} -map 0:v -map \"[a]\" -c:v copy -c:a aac -b:a 192k \"{finalOutputPath}\"";
+                var mixArgs = $"-y -i \"{mergedVideoPath}\" -stream_loop -1 -i \"{config.BackgroundMusicPath}\" -filter_complex {filterComplex} -map 0:v -map \"[a]\" -c:v copy -c:a aac -b:a 192k \"{finalOutputPath}\"";
                 await RunFfmpegAsync(ffmpeg, mixArgs, progress, ct);
             }
             else
@@ -337,29 +340,91 @@ public partial class FFmpegService : IFFmpegService
         double duration,
         int width,
         int height,
-        bool enableKenBurns,
+        string motionEffect,
         int fps,
         string outputPath,
         IProgress<GenerationProgress>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        int sceneIndex = 0,
+        bool enableFade = false,
+        bool enableVignette = false)
     {
         string filterString;
         var durStr = duration.ToString("0.000", CultureInfo.InvariantCulture);
 
-        if (enableKenBurns)
+        var effect = motionEffect?.ToLowerInvariant() ?? "random";
+        if (effect == "random")
         {
-            var numFrames = Math.Max((int)(duration * fps), 1);
-            var zoomSpeed = 0.10 / numFrames;
-            var zoomSpeedStr = zoomSpeed.ToString("0.000000", CultureInfo.InvariantCulture);
-
-            filterString = $"\"scale={width * 2}:{height * 2},zoompan=z='min(zoom+{zoomSpeedStr},1.10)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height},setsar=1\"";
-        }
-        else
-        {
-            filterString = $"\"scale={width}:{height},setsar=1\"";
+            var dynamicEffects = new[] { "zoom_in", "pan_left_right", "zoom_out", "pan_up", "pan_right_left", "pan_down", "zoom_pan_right", "zoom_pan_left" };
+            effect = dynamicEffects[sceneIndex % dynamicEffects.Length];
         }
 
-        var args = $"-y -loop 1 -i \"{imagePath}\" -i \"{audioPath}\" -c:v libx264 -tune stillimage -vf {filterString} -c:a aac -b:a 192k -pix_fmt yuv420p -t {durStr} \"{outputPath}\"";
+        var numFrames = Math.Max((int)(duration * fps), 1);
+        var zoomSpeed = 0.15 / numFrames;
+        var zoomSpeedStr = zoomSpeed.ToString("0.000000", CultureInfo.InvariantCulture);
+
+        string motionFilter;
+        switch (effect)
+        {
+            case "zoom_in":
+                motionFilter = $"scale={width * 2}:{height * 2},zoompan=z='min(zoom+{zoomSpeedStr},1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={fps}";
+                break;
+
+            case "zoom_out":
+                motionFilter = $"scale={width * 2}:{height * 2},zoompan=z='if(eq(on,0),1.15,max(1.0,zoom-{zoomSpeedStr}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={fps}";
+                break;
+
+            case "pan_left_right":
+                motionFilter = $"scale={width * 2}:{height * 2},zoompan=z=1.15:x='(iw-iw/zoom)*(on/{numFrames})':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={fps}";
+                break;
+
+            case "pan_right_left":
+                motionFilter = $"scale={width * 2}:{height * 2},zoompan=z=1.15:x='(iw-iw/zoom)*(1-on/{numFrames})':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={fps}";
+                break;
+
+            case "pan_up":
+                motionFilter = $"scale={width * 2}:{height * 2},zoompan=z=1.15:x='iw/2-(iw/zoom/2)':y='(ih-ih/zoom)*(1-on/{numFrames})':d={numFrames}:s={width}x{height}:fps={fps}";
+                break;
+
+            case "pan_down":
+                motionFilter = $"scale={width * 2}:{height * 2},zoompan=z=1.15:x='iw/2-(iw/zoom/2)':y='(ih-ih/zoom)*(on/{numFrames})':d={numFrames}:s={width}x{height}:fps={fps}";
+                break;
+
+            case "zoom_pan_right":
+                motionFilter = $"scale={width * 2}:{height * 2},zoompan=z='min(zoom+{zoomSpeedStr},1.20)':x='(iw-iw/zoom)*(on/{numFrames})':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={fps}";
+                break;
+
+            case "zoom_pan_left":
+                motionFilter = $"scale={width * 2}:{height * 2},zoompan=z='min(zoom+{zoomSpeedStr},1.20)':x='(iw-iw/zoom)*(1-on/{numFrames})':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={fps}";
+                break;
+
+            case "none":
+            default:
+                motionFilter = $"scale={width}:{height}";
+                break;
+        }
+
+        var filterParts = new List<string> { motionFilter };
+
+        if (enableVignette)
+        {
+            filterParts.Add("vignette=PI/4");
+        }
+
+        if (enableFade && duration >= 1.0)
+        {
+            var fadeDur = Math.Min(0.35, duration / 4);
+            var fadeDurStr = fadeDur.ToString("0.00", CultureInfo.InvariantCulture);
+            var fadeOutStart = (duration - fadeDur).ToString("0.000", CultureInfo.InvariantCulture);
+            filterParts.Add($"fade=t=in:st=0:d={fadeDurStr}");
+            filterParts.Add($"fade=t=out:st={fadeOutStart}:d={fadeDurStr}");
+        }
+
+        filterParts.Add("setsar=1");
+
+        filterString = $"\"{string.Join(",", filterParts)}\"";
+
+        var args = $"-y -loop 1 -i \"{imagePath}\" -i \"{audioPath}\" -c:v libx264 -tune stillimage -r {fps} -vf {filterString} -c:a aac -b:a 192k -pix_fmt yuv420p -t {durStr} \"{outputPath}\"";
         await RunFfmpegAsync(ffmpeg, args, progress, ct);
     }
 
