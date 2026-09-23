@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Google Cloud Service Account credentials (DO NOT COMMIT)
+Config/google_credentials.json
+**/google_credentials.json
