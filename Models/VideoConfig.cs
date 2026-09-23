@@ -15,6 +15,12 @@ public class VideoConfig
     public string? CustomFfmpegPath { get; set; }
     public int Fps { get; set; } = 25;
 
+    // Cấu hình chữ / phụ đề trên video
+    public bool EnableSubtitles { get; set; } = true;
+    public string SubtitleStyle { get; set; } = "cinematic"; // cinematic, boxed, viral_yellow, neon, gold, ticker
+    public string SubtitleFont { get; set; } = "Segoe UI Bold";
+    public int SubtitleFontSize { get; set; } = 0; // 0 = Auto theo độ phân giải video
+
     public (int width, int height) GetDimensions()
     {
         return AspectRatio switch

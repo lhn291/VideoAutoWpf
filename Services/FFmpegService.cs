@@ -253,7 +253,27 @@ public partial class FFmpegService : IFFmpegService
                 var effectToUse = !string.IsNullOrEmpty(scene.MotionEffect) && scene.MotionEffect != "auto"
                     ? scene.MotionEffect
                     : config.MotionEffect;
-                await RenderSegmentAsync(ffmpeg, scene.ImagePath, scene.AudioPath, duration, width, height, effectToUse, config.Fps, segmentPath, progress, ct, i, config.EnableFadeTransition, config.EnableVignette);
+                await RenderSegmentAsync(
+                    ffmpeg, 
+                    scene.ImagePath, 
+                    scene.AudioPath, 
+                    duration, 
+                    width, 
+                    height, 
+                    effectToUse, 
+                    config.Fps, 
+                    segmentPath, 
+                    progress, 
+                    ct, 
+                    i, 
+                    config.EnableFadeTransition, 
+                    config.EnableVignette,
+                    config.EnableSubtitles,
+                    scene.Text,
+                    config.SubtitleStyle,
+                    config.SubtitleFont,
+                    tempDir,
+                    sceneNum);
 
                 tempSegmentFiles.Add(segmentPath);
                 scene.Status = "Hoàn thành";
@@ -347,7 +367,13 @@ public partial class FFmpegService : IFFmpegService
         CancellationToken ct,
         int sceneIndex = 0,
         bool enableFade = false,
-        bool enableVignette = false)
+        bool enableVignette = false,
+        bool enableSubtitles = false,
+        string? subtitleText = null,
+        string subtitleStyle = "cinematic",
+        string subtitleFont = "Segoe UI Bold",
+        string? tempDir = null,
+        int sceneNumber = 1)
     {
         string filterString;
         var durStr = duration.ToString("0.000", CultureInfo.InvariantCulture);
@@ -422,10 +448,113 @@ public partial class FFmpegService : IFFmpegService
 
         filterParts.Add("setsar=1");
 
+        // ── Xử lý Chữ Chạy / Phụ Đề (Subtitles Overlay) ──
+        if (enableSubtitles && !string.IsNullOrWhiteSpace(subtitleText) && !string.IsNullOrEmpty(tempDir))
+        {
+            try
+            {
+                var isTicker = subtitleStyle.Equals("ticker", StringComparison.OrdinalIgnoreCase);
+                var maxChars = width > height ? 48 : 34; // 16:9 vs 9:16
+                var formattedText = isTicker 
+                    ? subtitleText.Trim().Replace("\r", " ").Replace("\n", " ") 
+                    : WrapText(subtitleText.Trim(), maxChars);
+
+                var subTxtFile = Path.Combine(tempDir, $"subtitle_{sceneNumber:D3}.txt");
+                await File.WriteAllTextAsync(subTxtFile, formattedText, new UTF8Encoding(false), ct);
+
+                var safeTxt = subTxtFile.Replace('\\', '/').Replace(":", "\\:");
+                var fontFile = ResolveFontFile(subtitleFont);
+                var safeFont = fontFile.Replace('\\', '/').Replace(":", "\\:");
+
+                int fontSize = width > height ? Math.Max(28, height / 26) : Math.Max(32, height / 36);
+                int yOffset = width > height ? (int)(height * 0.10) : (int)(height * 0.12);
+
+                string drawTextFilter = subtitleStyle.ToLowerInvariant() switch
+                {
+                    "boxed" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=14:borderw=1:bordercolor=black@0.5:x=(w-text_w)/2:y=h-text_h-{yOffset}",
+                    "viral_yellow" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize + 2}:fontcolor=#ffd43b:borderw=4:bordercolor=black:shadowcolor=black@0.85:shadowx=3:shadowy=3:x=(w-text_w)/2:y=h-text_h-{yOffset}",
+                    "neon" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=#89dceb:borderw=2:bordercolor=black:shadowcolor=#1e66f5@0.85:shadowx=3:shadowy=3:box=1:boxcolor=#11111b@0.5:boxborderw=10:x=(w-text_w)/2:y=h-text_h-{yOffset}",
+                    "gold" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=#f9e2af:borderw=2:bordercolor=#181825:shadowcolor=black@0.65:shadowx=2:shadowy=2:x=(w-text_w)/2:y=h-text_h-{yOffset}",
+                    "ticker" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={Math.Max(26, fontSize - 6)}:fontcolor=white:box=1:boxcolor=#11111b@0.85:boxborderw=12:borderw=2:bordercolor=black:x='w-t*200':y=h-text_h-36",
+                    "cinematic" or _ => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=white:borderw=3:bordercolor=black@0.9:shadowcolor=black@0.7:shadowx=2:shadowy=2:x=(w-text_w)/2:y=h-text_h-{yOffset}"
+                };
+
+                filterParts.Add(drawTextFilter);
+            }
+            catch (Exception ex)
+            {
+                progress?.Report(new GenerationProgress
+                {
+                    LogMessage = $"[Cảnh {sceneNumber}] Lưu ý: Không thể tạo lớp phủ chữ ({ex.Message}), tiếp tục tạo video không phụ đề."
+                });
+            }
+        }
+
         filterString = $"\"{string.Join(",", filterParts)}\"";
 
         var args = $"-y -loop 1 -i \"{imagePath}\" -i \"{audioPath}\" -c:v libx264 -tune stillimage -r {fps} -vf {filterString} -c:a aac -b:a 192k -pix_fmt yuv420p -t {durStr} \"{outputPath}\"";
         await RunFfmpegAsync(ffmpeg, args, progress, ct);
+    }
+
+    private static string WrapText(string text, int maxCharsPerLine = 34)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var words = text.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var sb = new StringBuilder();
+        var currentLine = new StringBuilder();
+
+        foreach (var word in words)
+        {
+            if (currentLine.Length + word.Length + 1 > maxCharsPerLine)
+            {
+                if (currentLine.Length > 0)
+                {
+                    if (sb.Length > 0) sb.AppendLine();
+                    sb.Append(currentLine.ToString());
+                    currentLine.Clear();
+                }
+            }
+
+            if (currentLine.Length > 0) currentLine.Append(' ');
+            currentLine.Append(word);
+        }
+
+        if (currentLine.Length > 0)
+        {
+            if (sb.Length > 0) sb.AppendLine();
+            sb.Append(currentLine.ToString());
+        }
+
+        return sb.ToString();
+    }
+
+    private static string ResolveFontFile(string fontName)
+    {
+        var fontsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Fonts");
+        string fileName = fontName.ToLowerInvariant() switch
+        {
+            var f when f.Contains("impact") => "impact.ttf",
+            var f when f.Contains("arial") && f.Contains("bold") => "arialbd.ttf",
+            var f when f.Contains("arial") => "arial.ttf",
+            var f when f.Contains("tahoma") && f.Contains("bold") => "tahomabd.ttf",
+            var f when f.Contains("tahoma") => "tahoma.ttf",
+            var f when f.Contains("consolas") || f.Contains("consola") => "consola.ttf",
+            var f when f.Contains("times") => "times.ttf",
+            var f when f.Contains("segoe") && f.Contains("bold") => "segoeuib.ttf",
+            var f when f.Contains("segoe") => "segoeui.ttf",
+            _ => "segoeuib.ttf"
+        };
+
+        var fullPath = Path.Combine(fontsDir, fileName);
+        if (File.Exists(fullPath)) return fullPath;
+
+        var segoe = Path.Combine(fontsDir, "segoeui.ttf");
+        if (File.Exists(segoe)) return segoe;
+
+        var arial = Path.Combine(fontsDir, "arial.ttf");
+        if (File.Exists(arial)) return arial;
+
+        return fileName;
     }
 
     private static async Task RunFfmpegAsync(string ffmpeg, string arguments, IProgress<GenerationProgress>? progress, CancellationToken ct)

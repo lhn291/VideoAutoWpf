@@ -744,6 +744,179 @@
                                                 </StackPanel>
                                             </Border>
 
+                                            <!-- CHỮ CHẠY & PHỤ ĐỀ (SUBTITLES) - AI GỢI Ý & TÙY CHỈNH -->
+                                            <Border Background="#161622" CornerRadius="8" Padding="10" BorderBrush="#313244" BorderThickness="1" Margin="0,2,0,8">
+                                                <StackPanel>
+                                                    <!-- Header with CheckBox -->
+                                                    <Grid Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <CheckBox IsChecked="{Binding EnableSubtitles}" Foreground="{StaticResource TextPrimary}" FontSize="11" Cursor="Hand" VerticalAlignment="Center">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="💬 Chữ Chạy / Phụ Đề:" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                                                                <Border Background="#1e3a5f" CornerRadius="4" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                                                    <TextBlock Text="AI Auto Style" FontSize="9" FontWeight="Bold" Foreground="{StaticResource AccentBlue}"/>
+                                                                </Border>
+                                                            </StackPanel>
+                                                        </CheckBox>
+
+                                                        <Border Grid.Column="1" Background="#26273b" CornerRadius="4" Padding="5,2" ToolTip="Trạng thái hiển thị phụ đề">
+                                                            <TextBlock Text="Có thể ẩn/hiện" FontSize="9" Foreground="{StaticResource TextMuted}"/>
+                                                        </Border>
+                                                    </Grid>
+
+                                                    <!-- 1. Kiểu hiển thị chữ (Subtitle Style Dropdown) -->
+                                                    <Grid Margin="0,0,0,6" IsEnabled="{Binding EnableSubtitles}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="65"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Kiểu chữ:" FontSize="10.5" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+
+                                                        <ToggleButton x:Name="PlanSubtitlePopupToggle" Grid.Column="1" Cursor="Hand"
+                                                                      IsChecked="{Binding IsPlanSubtitleStylePopupOpen, Mode=TwoWay}">
+                                                            <ToggleButton.Template>
+                                                                <ControlTemplate TargetType="ToggleButton">
+                                                                    <Border x:Name="PSubBd" Background="#26273b" CornerRadius="6" Padding="8,5" BorderBrush="#313244" BorderThickness="1">
+                                                                        <Grid>
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <TextBlock Text="{Binding DataContext.CurrentPlanSubtitleStyleDisplayText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                       FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                                            <Path Grid.Column="1" Data="M 0 0 L 3.5 3.5 L 7 0 Z" Fill="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="6,0,2,0"/>
+                                                                        </Grid>
+                                                                    </Border>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter TargetName="PSubBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                        </Trigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </ToggleButton.Template>
+                                                        </ToggleButton>
+
+                                                        <Popup IsOpen="{Binding IsPlanSubtitleStylePopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=PlanSubtitlePopupToggle}"
+                                                               Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" HorizontalOffset="-80">
+                                                            <Border Background="#1a1b2e" CornerRadius="8" Padding="10" Margin="0,4,0,0" BorderBrush="{StaticResource BorderMedium}" BorderThickness="1" MaxWidth="440">
+                                                                <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.5" Color="#000000"/></Border.Effect>
+                                                                <StackPanel>
+                                                                    <TextBlock Text="🎨 Chọn phong cách chữ chạy / phụ đề" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" Margin="0,0,0,6"/>
+                                                                    <ItemsControl ItemsSource="{Binding PlanSubtitleStyleOptions}">
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate DataType="{x:Type models:SubtitleStyleOption}">
+                                                                                <Button Command="{Binding DataContext.SelectPlanSubtitleStyleCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                        CommandParameter="{Binding}" Cursor="Hand" Margin="0,0,0,4">
+                                                                                    <Button.Template>
+                                                                                        <ControlTemplate TargetType="Button">
+                                                                                            <Border x:Name="PSubItemBd" Background="#26273b" CornerRadius="6" Padding="8,5" BorderBrush="#313244" BorderThickness="1">
+                                                                                                <Grid>
+                                                                                                    <Grid.ColumnDefinitions>
+                                                                                                        <ColumnDefinition Width="Auto"/>
+                                                                                                        <ColumnDefinition Width="*"/>
+                                                                                                    </Grid.ColumnDefinitions>
+                                                                                                    <TextBlock Text="{Binding Icon}" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                                                                    <StackPanel Grid.Column="1">
+                                                                                                        <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                                                                                                        <TextBlock Text="{Binding Description}" FontSize="9.5" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap"/>
+                                                                                                    </StackPanel>
+                                                                                                </Grid>
+                                                                                            </Border>
+                                                                                            <ControlTemplate.Triggers>
+                                                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                                                    <Setter TargetName="PSubItemBd" Property="Background" Value="#363750"/>
+                                                                                                    <Setter TargetName="PSubItemBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                                                </Trigger>
+                                                                                            </ControlTemplate.Triggers>
+                                                                                        </ControlTemplate>
+                                                                                    </Button.Template>
+                                                                                </Button>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
+                                                                </StackPanel>
+                                                             </Border>
+                                                        </Popup>
+                                                    </Grid>
+
+                                                    <!-- 2. Font chữ (Subtitle Font Dropdown) -->
+                                                    <Grid Margin="0,0,0,6" IsEnabled="{Binding EnableSubtitles}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="65"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Phông chữ:" FontSize="10.5" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center"/>
+
+                                                        <ToggleButton x:Name="PlanSubtitleFontPopupToggle" Grid.Column="1" Cursor="Hand"
+                                                                      IsChecked="{Binding IsPlanSubtitleFontPopupOpen, Mode=TwoWay}">
+                                                            <ToggleButton.Template>
+                                                                <ControlTemplate TargetType="ToggleButton">
+                                                                    <Border x:Name="PFontBd" Background="#26273b" CornerRadius="6" Padding="8,5" BorderBrush="#313244" BorderThickness="1">
+                                                                        <Grid>
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <TextBlock Text="{Binding DataContext.CurrentPlanSubtitleFontDisplayText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                       FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                                            <Path Grid.Column="1" Data="M 0 0 L 3.5 3.5 L 7 0 Z" Fill="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="6,0,2,0"/>
+                                                                        </Grid>
+                                                                    </Border>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter TargetName="PFontBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                        </Trigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </ToggleButton.Template>
+                                                        </ToggleButton>
+
+                                                        <Popup IsOpen="{Binding IsPlanSubtitleFontPopupOpen, Mode=TwoWay}" PlacementTarget="{Binding ElementName=PlanSubtitleFontPopupToggle}"
+                                                               Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" HorizontalOffset="-50">
+                                                            <Border Background="#1a1b2e" CornerRadius="8" Padding="10" Margin="0,4,0,0" BorderBrush="{StaticResource BorderMedium}" BorderThickness="1" MinWidth="260">
+                                                                <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.5" Color="#000000"/></Border.Effect>
+                                                                <StackPanel>
+                                                                    <TextBlock Text="🔤 Chọn phông chữ phụ đề" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" Margin="0,0,0,6"/>
+                                                                    <ItemsControl ItemsSource="{Binding PlanSubtitleFontOptions}">
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate DataType="{x:Type models:SubtitleFontOption}">
+                                                                                <Button Command="{Binding DataContext.SelectPlanSubtitleFontCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                        CommandParameter="{Binding}" Cursor="Hand" Margin="0,0,0,4">
+                                                                                    <Button.Template>
+                                                                                        <ControlTemplate TargetType="Button">
+                                                                                            <Border x:Name="PFontItemBd" Background="#26273b" CornerRadius="6" Padding="8,5" BorderBrush="#313244" BorderThickness="1">
+                                                                                                <StackPanel>
+                                                                                                    <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}"/>
+                                                                                                    <TextBlock Text="{Binding Description}" FontSize="9.5" Foreground="{StaticResource TextMuted}"/>
+                                                                                                </StackPanel>
+                                                                                            </Border>
+                                                                                            <ControlTemplate.Triggers>
+                                                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                                                    <Setter TargetName="PFontItemBd" Property="Background" Value="#363750"/>
+                                                                                                    <Setter TargetName="PFontItemBd" Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                                                                                                </Trigger>
+                                                                                            </ControlTemplate.Triggers>
+                                                                                        </ControlTemplate>
+                                                                                    </Button.Template>
+                                                                                </Button>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
+                                                                </StackPanel>
+                                                             </Border>
+                                                        </Popup>
+                                                    </Grid>
+
+                                                    <!-- 3. AI Gợi Ý Lý Do (Reason note) -->
+                                                    <TextBlock Text="{Binding CurrentPlanSubtitleReasonText, TargetNullValue='💡 AI tự động chọn kiểu chữ và font phù hợp theo thể loại bài viết.'}" 
+                                                               FontSize="9" Foreground="{StaticResource TextMuted}" Margin="2,0,0,0" TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                            </Border>
+
                                             <!-- Tùy chọn Cinematic bổ sung -->
                                             <Grid Margin="0,0,0,6">
                                                 <Grid.ColumnDefinitions>

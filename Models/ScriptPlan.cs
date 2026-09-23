@@ -52,4 +52,20 @@ public partial class ScriptPlan : ObservableObject
     [ObservableProperty]
     [JsonPropertyName("suggested_bgm")]
     private string _suggestedBgm = "dramatic";
+
+    [ObservableProperty]
+    [JsonPropertyName("enable_subtitles")]
+    private bool _enableSubtitles = true;
+
+    [ObservableProperty]
+    [JsonPropertyName("subtitle_style")]
+    private string _subtitleStyle = "cinematic";
+
+    [ObservableProperty]
+    [JsonPropertyName("subtitle_font")]
+    private string _subtitleFont = "Segoe UI Bold";
+
+    [ObservableProperty]
+    [JsonPropertyName("subtitle_reason")]
+    private string _subtitleReason = string.Empty;
 }

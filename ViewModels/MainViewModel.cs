@@ -52,6 +52,20 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _enableVignette = false;
 
+    // ── Cấu Hình Chữ Chạy / Phụ Đề Video ──
+    [ObservableProperty]
+    private bool _enableSubtitles = true;
+
+    public ObservableCollection<SubtitleStyleOption> AvailableSubtitleStyles { get; } = new(SubtitleStyleOption.GetAllOptions());
+
+    [ObservableProperty]
+    private SubtitleStyleOption? _selectedSubtitleStyle;
+
+    public ObservableCollection<SubtitleFontOption> AvailableSubtitleFonts { get; } = new(SubtitleFontOption.GetAllFonts());
+
+    [ObservableProperty]
+    private SubtitleFontOption? _selectedSubtitleFont;
+
     [ObservableProperty]
     private bool _enableBgm = false;
 
@@ -145,6 +159,8 @@ public partial class MainViewModel : ObservableObject
         var defaultOut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput");
         _outputDirectory = defaultOut;
         _selectedMotionEffect = _availableMotionEffects.FirstOrDefault();
+        _selectedSubtitleStyle = AvailableSubtitleStyles.FirstOrDefault();
+        _selectedSubtitleFont = AvailableSubtitleFonts.FirstOrDefault();
         _bgmService = new BgmService(_ffmpegService);
 
         Scenes.CollectionChanged += (s, e) =>
@@ -413,6 +429,21 @@ public partial class MainViewModel : ObservableObject
             }
             EnableFadeTransition = workspace.Metadata.EnableFade;
             EnableVignette = workspace.Metadata.EnableVignette;
+            EnableSubtitles = workspace.Metadata.EnableSubtitles;
+
+            if (!string.IsNullOrEmpty(workspace.Metadata.SubtitleStyle))
+            {
+                var subStyle = AvailableSubtitleStyles.FirstOrDefault(s => s.Id.Equals(workspace.Metadata.SubtitleStyle, StringComparison.OrdinalIgnoreCase));
+                if (subStyle != null) SelectedSubtitleStyle = subStyle;
+            }
+
+            if (!string.IsNullOrEmpty(workspace.Metadata.SubtitleFont))
+            {
+                var subFont = AvailableSubtitleFonts.FirstOrDefault(f => 
+                    f.Id.Equals(workspace.Metadata.SubtitleFont, StringComparison.OrdinalIgnoreCase) || 
+                    f.Name.Equals(workspace.Metadata.SubtitleFont, StringComparison.OrdinalIgnoreCase));
+                if (subFont != null) SelectedSubtitleFont = subFont;
+            }
 
             if (workspace.Metadata.EnableMusic)
             {
@@ -567,7 +598,10 @@ public partial class MainViewModel : ObservableObject
                     Voice = SelectedVoice,
                     EnableMusic = EnableBgm,
                     Music = BgmPath,
-                    MusicVolume = BgmVolume
+                    MusicVolume = BgmVolume,
+                    EnableSubtitles = EnableSubtitles,
+                    SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
+                    SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold"
                 },
                 Scenes = Scenes.Select(s => new ScriptScene
                 {
@@ -989,6 +1023,9 @@ public partial class MainViewModel : ObservableObject
                 EnableBackgroundMusic = EnableBgm,
                 BackgroundMusicPath = BgmPath,
                 BackgroundMusicVolume = BgmVolume,
+                EnableSubtitles = EnableSubtitles,
+                SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
+                SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
                 OutputDirectory = OutputDirectory,
                 OutputFileName = string.IsNullOrWhiteSpace(OutputFileName) ? $"video_{DateTime.Now:yyyyMMdd_HHmmss}.mp4" : OutputFileName
             };

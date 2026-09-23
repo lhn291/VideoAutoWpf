@@ -35,6 +35,19 @@
 - Tự động đồng bộ hóa thời lượng hiển thị hình ảnh khớp 100% với file âm thanh thuyết minh của từng cảnh.
 - Hòa trộn đa tầng âm thanh (Voice + BGM).
 
+### 6. 💬 Chữ Chạy & Phụ Đề Video Thông Minh (AI Subtitle Engine)
+- **Tùy chọn Bật/Tắt linh hoạt:** Có thể bật hoặc ẩn phụ đề bất kỳ lúc nào ngay trên giao diện hoặc qua kịch bản.
+- **6 phong cách chữ chạy độc đáo:**
+  1. 🎬 **Điện Ảnh Cổ Điển (Cinematic):** Chữ trắng viền đen đổ bóng mềm mại, chuẩn phim tài liệu & điện ảnh.
+  2. 📱 **Hộp Nổi Bật (Viral Shorts/TikTok):** Chữ nằm trên thẻ nền đen mờ bo góc, độ tương phản cao, dễ đọc trên mọi nền ảnh.
+  3. ⚡ **Vàng Viền Đậm (Viral Hook):** Chữ vàng viền đen dày dặn, bắt mắt, kích thích giữ chân người xem video ngắn.
+  4. 🔮 **Neon Phát Sáng (Cyberpunk):** Chữ xanh Cyan phát sáng viền tối huyền bí, phong cách tương lai & công nghệ.
+  5. 📜 **Hoàng Gia Sang Trọng (Elegant Gold):** Chữ vàng champagne quý phái, phù hợp kể chuyện lịch sử, suy ngẫm, podcast.
+  6. 📰 **Chữ Chạy Ngang (News Ticker Crawl):** Dòng chữ chạy ngang màn hình từ phải sang trái như bản tin thời sự truyền hình.
+- **Đa dạng font chữ tiếng Việt:** Hỗ trợ *Segoe UI Bold, Arial Bold, Impact, Tahoma Bold, Consolas, Times New Roman*.
+- **Tự động ngắt dòng thông minh (Smart Word Wrap):** Tự động căn chỉnh độ dài theo tỷ lệ khung hình (dọc 9:16 hoặc ngang 16:9), đảm bảo chữ không bị tràn ra ngoài màn hình.
+- **AI Tự Động Đề Xuất (Gemini AI):** Tự động phân tích nội dung kịch bản để gợi ý phong cách chữ và font phù hợp nhất với thể loại.
+
 ---
 
 ## 📋 Yêu Cầu Hệ Thống

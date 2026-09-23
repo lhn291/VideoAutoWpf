@@ -65,6 +65,10 @@ public class GeminiScriptService
             "  \"enable_fade\": true,\n" +
             "  \"enable_vignette\": false,\n" +
             "  \"suggested_bgm\": \"dramatic\",\n" +
+            "  \"enable_subtitles\": true,\n" +
+            "  \"subtitle_style\": \"cinematic\",\n" +
+            "  \"subtitle_font\": \"Segoe UI Bold\",\n" +
+            "  \"subtitle_reason\": \"Lý do ngắn gọn bằng tiếng Việt chọn kiểu chữ chạy/phụ đề này\",\n" +
             "  \"summary\": \"Tóm tắt kế hoạch video bằng tiếng Việt (3-5 câu): nội dung chính, cách kể chuyện, điểm nhấn\",\n" +
             "  \"character_hint\": \"Mô tả gợi ý nhân vật chính (ngoại hình, trang phục, đặc điểm) bằng tiếng Việt\"\n" +
             "}\n\n" +
@@ -77,8 +81,11 @@ public class GeminiScriptService
             "6. 'enable_vignette': set to true for dark fantasy, horror, noir, historical drama; false for bright anime, cartoon, commercial.\n" +
             "7. 'enable_fade': always true for smooth transitions.\n" +
             "8. 'suggested_bgm': must be one of ['dramatic', 'chill', 'epic', 'horror', 'upbeat']. Choose according to the emotional tone of the video.\n" +
-            "9. All Vietnamese text must be natural and compelling.\n" +
-            "10. 'character_hint': Mô tả chi tiết nhân vật chính (nếu có) bao gồm: giới tính, tuổi, kiểu tóc, trang phục, đặc điểm nổi bật. Nếu không có nhân vật cụ thể, để trống.\n";
+            "9. 'subtitle_style': MUST be one of ['cinematic', 'boxed', 'viral_yellow', 'neon', 'gold', 'ticker']. Select the style that best enhances the video's mood, pacing, and platform appeal (e.g. 'viral_yellow' or 'boxed' for TikTok/Shorts hooks, 'cinematic' for documentaries/drama, 'neon' for cyberpunk/tech, 'gold' for luxury/history, 'ticker' for news crawl).\n" +
+            "10. 'subtitle_font': choose from ['Segoe UI Bold', 'Arial Bold', 'Impact', 'Tahoma Bold', 'Consolas', 'Times New Roman'].\n" +
+            "11. 'subtitle_reason': Giải thích ngắn gọn bằng tiếng Việt lý do đề xuất kiểu phụ đề này.\n" +
+            "12. All Vietnamese text must be natural and compelling.\n" +
+            "13. 'character_hint': Mô tả chi tiết nhân vật chính (nếu có) bao gồm: giới tính, tuổi, kiểu tóc, trang phục, đặc điểm nổi bật. Nếu không có nhân vật cụ thể, để trống.\n";
 
         var userPrompt = $"Hãy lên kế hoạch chi tiết cho video về chủ đề sau:\n'{topic}'\n\n" +
                          "Phân tích chủ đề và đề xuất số cảnh, phong cách hình ảnh, tone giọng đọc, hiệu ứng camera phù hợp nhất.";
@@ -119,7 +126,10 @@ public class GeminiScriptService
             $"    \"enable_vignette\": {plan.EnableVignette.ToString().ToLower()},\n" +
             $"    \"music\": \"{plan.SuggestedBgm}\",\n" +
             "    \"enable_music\": true,\n" +
-            "    \"music_volume\": 0.15\n" +
+            "    \"music_volume\": 0.15,\n" +
+            $"    \"enable_subtitles\": {plan.EnableSubtitles.ToString().ToLower()},\n" +
+            $"    \"subtitle_style\": \"{plan.SubtitleStyle}\",\n" +
+            $"    \"subtitle_font\": \"{plan.SubtitleFont}\"\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
             "    { \"text\": \"Vietnamese voiceover text...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" }\n" +

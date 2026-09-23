@@ -137,6 +137,65 @@ public partial class ScriptGeneratorViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentPlanBgmMoodDisplayText));
     }
 
+    // ── Subtitle Plan Options ──
+    [ObservableProperty]
+    private bool _enableSubtitles = true;
+
+    [ObservableProperty]
+    private bool _isPlanSubtitleStylePopupOpen;
+
+    [ObservableProperty]
+    private bool _isPlanSubtitleFontPopupOpen;
+
+    public ObservableCollection<SubtitleStyleOption> PlanSubtitleStyleOptions { get; } = new(SubtitleStyleOption.GetAllOptions());
+
+    public ObservableCollection<SubtitleFontOption> PlanSubtitleFontOptions { get; } = new(SubtitleFontOption.GetAllFonts());
+
+    public string CurrentPlanSubtitleStyleDisplayText
+    {
+        get
+        {
+            if (CurrentPlan == null) return "🎬 Điện Ảnh Cổ Điển (Cinematic)";
+            var opt = PlanSubtitleStyleOptions.FirstOrDefault(o => o.Id.Equals(CurrentPlan.SubtitleStyle, StringComparison.OrdinalIgnoreCase));
+            return opt != null ? $"{opt.Icon} {opt.Name}" : "🎬 Điện Ảnh Cổ Điển (Cinematic)";
+        }
+    }
+
+    public string CurrentPlanSubtitleFontDisplayText
+    {
+        get
+        {
+            if (CurrentPlan == null) return "Segoe UI Bold";
+            var opt = PlanSubtitleFontOptions.FirstOrDefault(f => f.Id.Equals(CurrentPlan.SubtitleFont, StringComparison.OrdinalIgnoreCase) || f.Name.Equals(CurrentPlan.SubtitleFont, StringComparison.OrdinalIgnoreCase));
+            return opt != null ? opt.Name : CurrentPlan.SubtitleFont;
+        }
+    }
+
+    public string CurrentPlanSubtitleReasonText => CurrentPlan?.SubtitleReason ?? string.Empty;
+
+    [RelayCommand]
+    private void SelectPlanSubtitleStyle(SubtitleStyleOption? option)
+    {
+        if (option == null || CurrentPlan == null) return;
+        CurrentPlan.SubtitleStyle = option.Id;
+        if (!string.IsNullOrEmpty(option.DefaultFont))
+        {
+            CurrentPlan.SubtitleFont = option.DefaultFont;
+        }
+        IsPlanSubtitleStylePopupOpen = false;
+        OnPropertyChanged(nameof(CurrentPlanSubtitleStyleDisplayText));
+        OnPropertyChanged(nameof(CurrentPlanSubtitleFontDisplayText));
+    }
+
+    [RelayCommand]
+    private void SelectPlanSubtitleFont(SubtitleFontOption? option)
+    {
+        if (option == null || CurrentPlan == null) return;
+        CurrentPlan.SubtitleFont = option.Name;
+        IsPlanSubtitleFontPopupOpen = false;
+        OnPropertyChanged(nameof(CurrentPlanSubtitleFontDisplayText));
+    }
+
     // ── Background Music (BGM) ──
     public ObservableCollection<BgmTrack> AvailableBgmTracks { get; } = new();
 
@@ -233,17 +292,25 @@ public partial class ScriptGeneratorViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentPlanMotionDisplayText));
         OnPropertyChanged(nameof(CurrentPlanBgmMoodDisplayText));
         OnPropertyChanged(nameof(EstimatedPlanCostDisplayText));
+        OnPropertyChanged(nameof(CurrentPlanSubtitleStyleDisplayText));
+        OnPropertyChanged(nameof(CurrentPlanSubtitleFontDisplayText));
+        OnPropertyChanged(nameof(CurrentPlanSubtitleReasonText));
 
-        if (value != null && !string.IsNullOrEmpty(value.SuggestedBgm))
+        if (value != null)
         {
-            var match = AvailableBgmTracks.FirstOrDefault(t => 
-                t.Id.Equals(value.SuggestedBgm, StringComparison.OrdinalIgnoreCase) ||
-                t.Mood.Equals(value.SuggestedBgm, StringComparison.OrdinalIgnoreCase));
+            EnableSubtitles = value.EnableSubtitles;
 
-            if (match != null)
+            if (!string.IsNullOrEmpty(value.SuggestedBgm))
             {
-                SelectedBgmTrack = match;
-                EnableBgm = match.Id != "none";
+                var match = AvailableBgmTracks.FirstOrDefault(t => 
+                    t.Id.Equals(value.SuggestedBgm, StringComparison.OrdinalIgnoreCase) ||
+                    t.Mood.Equals(value.SuggestedBgm, StringComparison.OrdinalIgnoreCase));
+
+                if (match != null)
+                {
+                    SelectedBgmTrack = match;
+                    EnableBgm = match.Id != "none";
+                }
             }
         }
     }
@@ -620,7 +687,10 @@ public partial class ScriptGeneratorViewModel : ObservableObject
                     EnableVignette = CurrentPlan?.EnableVignette ?? false,
                     Music = SelectedBgmTrack?.FilePath ?? SelectedBgmTrack?.Id,
                     EnableMusic = EnableBgm && SelectedBgmTrack != null && SelectedBgmTrack.Id != "none",
-                    MusicVolume = BgmVolume
+                    MusicVolume = BgmVolume,
+                    EnableSubtitles = EnableSubtitles,
+                    SubtitleStyle = CurrentPlan?.SubtitleStyle ?? "cinematic",
+                    SubtitleFont = CurrentPlan?.SubtitleFont ?? "Segoe UI Bold"
                 },
                 Scenes = GeneratedScenes.Select(s => new ScriptScene
                 {

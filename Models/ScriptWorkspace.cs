@@ -39,6 +39,15 @@ public class ScriptMetadata
 
     [JsonPropertyName("enable_vignette")]
     public bool EnableVignette { get; set; } = false;
+
+    [JsonPropertyName("enable_subtitles")]
+    public bool EnableSubtitles { get; set; } = true;
+
+    [JsonPropertyName("subtitle_style")]
+    public string SubtitleStyle { get; set; } = "cinematic";
+
+    [JsonPropertyName("subtitle_font")]
+    public string SubtitleFont { get; set; } = "Segoe UI Bold";
 }
 
 public class ScriptScene
