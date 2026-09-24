@@ -121,7 +121,6 @@ public class GeminiScriptService
             "  \"metadata\": {\n" +
             $"    \"ratio\": \"{plan.Ratio}\",\n" +
             $"    \"voice\": \"{plan.Voice}\",\n" +
-            $"    \"motion_effect\": \"{plan.MotionEffect}\",\n" +
             $"    \"enable_fade\": {plan.EnableFadeTransition.ToString().ToLower()},\n" +
             $"    \"enable_vignette\": {plan.EnableVignette.ToString().ToLower()},\n" +
             $"    \"music\": \"{plan.SuggestedBgm}\",\n" +
@@ -130,6 +129,12 @@ public class GeminiScriptService
             $"    \"enable_subtitles\": {plan.EnableSubtitles.ToString().ToLower()},\n" +
             $"    \"subtitle_style\": \"{plan.SubtitleStyle}\",\n" +
             $"    \"subtitle_font\": \"{plan.SubtitleFont}\"\n" +
+            "  },\n" +
+            "  \"publish_info\": {\n" +
+            "    \"title\": \"Tiêu đề video cực giật gân, cuốn hút cho TikTok/Shorts/Reels (dưới 80 ký tự)\",\n" +
+            "    \"alternative_titles\": \"- Gợi ý tiêu đề 2 (tò mò)\\n- Gợi ý tiêu đề 3 (kịch tính)\",\n" +
+            "    \"description\": \"Đoạn mô tả ngắn 2-3 câu khơi gợi sự tò mò của video, kèm kêu gọi hành động\",\n" +
+            "    \"hashtags\": \"#chude #bian #kienthuc #xuhuong #fyp #shorts #tiktok #viral\"\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
             "    { \"text\": \"Vietnamese voiceover text...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" }\n" +
@@ -150,7 +155,8 @@ public class GeminiScriptService
             "   - 'pan_up': revealing character outfit to face, tall structures, trees, sky (ideal for vertical 9:16 format)\n" +
             "   - 'pan_down': looking down from above, descending, gravity, shock\n" +
             "   - 'zoom_pan_right': dynamic corner focus, building tension\n" +
-            "   - 'zoom_pan_left': dynamic left focus\n";
+            "   - 'zoom_pan_left': dynamic left focus\n" +
+            "8. 'publish_info': Provide an outstanding social media publishing kit for TikTok, YouTube Shorts, and Reels in Vietnamese: catchiest hook 'title', 2 'alternative_titles', engaging 'description' with call-to-action, and 10-15 trending 'hashtags'.\n";
 
         var userPrompt = $"Topic/Raw content to transform into a {numScenes}-scene video script:\n'{topic}'\n\n";
 
@@ -168,6 +174,37 @@ public class GeminiScriptService
         userPrompt += $"Please generate the complete JSON script with exactly {numScenes} scenes.";
 
         return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);
+    }
+
+    /// <summary>
+    /// Sinh hoặc tạo lại bộ Tiêu đề, Mô tả, Hashtags đăng mạng xã hội (TikTok, Shorts, Reels)
+    /// </summary>
+    public async Task<VideoPublishInfo> GeneratePublishInfoAsync(
+        string topicOrSummary,
+        string scenesContent,
+        string location = "us-central1",
+        CancellationToken ct = default)
+    {
+        var token = await _authService.GetAccessTokenAsync();
+        var projectId = _authService.ProjectId;
+
+        var systemInstruction =
+            "You are a top-tier viral content marketing expert and social media strategist specializing in TikTok, YouTube Shorts, and Facebook/Instagram Reels. " +
+            "Your job is to analyze the video's topic and scene scripts, and produce a viral, high-converting social media publishing kit in Vietnamese. " +
+            "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
+            "The JSON schema must exactly match:\n" +
+            "{\n" +
+            "  \"title\": \"Tiêu đề giật gân, siêu cuốn hút (dưới 80 ký tự), có thể kèm emoji gây tò mò\",\n" +
+            "  \"alternative_titles\": \"- Tiêu đề thay thế 1 (Dạng câu hỏi bí ẩn)\\n- Tiêu đề thay thế 2 (Dạng giật gân A/B test)\",\n" +
+            "  \"description\": \"Mô tả ngắn gọn (2-3 câu) tóm tắt kịch tính nội dung video, kèm lời kêu gọi hành động (CTA) kích thích bình luận\",\n" +
+            "  \"hashtags\": \"#chude #bian #kienthuc #xuhuong #fyp #shorts #tiktok #viral (khoảng 10-15 thẻ hashtag có dấu và không dấu cách nhau bằng khoảng trắng)\"\n" +
+            "}";
+
+        var userPrompt = $"Nội dung chủ đề video:\n{topicOrSummary}\n\n" +
+                         $"Các phân cảnh / lời thoại trong video:\n{scenesContent}\n\n" +
+                         "Hãy tạo bộ tiêu đề, mô tả và hashtags bùng nổ tương tác cho video này.";
+
+        return await CallGeminiForJson<VideoPublishInfo>(systemInstruction, userPrompt, projectId, location, token, ct);
     }
 
     /// <summary>

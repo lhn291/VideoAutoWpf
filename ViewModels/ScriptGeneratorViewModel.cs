@@ -57,6 +57,13 @@ public partial class ScriptGeneratorViewModel : ObservableObject
     // ── Scene Count Options ──
     public List<int> SceneCountOptions { get; } = new() { 3, 4, 5, 6, 7, 8, 10, 12, 15 };
 
+    // ── Metadata Đăng Bài (Tiêu đề, Hashtags) do AI sinh ──
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGeneratedPublishInfo))]
+    private VideoPublishInfo? _generatedPublishInfo;
+
+    public bool HasGeneratedPublishInfo => GeneratedPublishInfo != null && !string.IsNullOrWhiteSpace(GeneratedPublishInfo.Title);
+
     // ── Plan Popup States ──
     [ObservableProperty]
     private bool _isPlanStylePopupOpen;
@@ -598,6 +605,7 @@ public partial class ScriptGeneratorViewModel : ObservableObject
 
             StatusText = $"✅ Đã tạo thành công {GeneratedScenes.Count} phân cảnh!";
             ResultWorkspace = workspace;
+            GeneratedPublishInfo = workspace.PublishInfo;
         }
         catch (Exception ex)
         {
@@ -697,7 +705,8 @@ public partial class ScriptGeneratorViewModel : ObservableObject
                     Text = s.Text ?? string.Empty,
                     ImagePrompt = s.ImagePrompt ?? string.Empty,
                     MotionEffect = s.MotionEffect
-                }).ToList()
+                }).ToList(),
+                PublishInfo = GeneratedPublishInfo ?? ResultWorkspace?.PublishInfo
             };
 
             Cleanup();

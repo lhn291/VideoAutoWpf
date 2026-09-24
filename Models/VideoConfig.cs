@@ -20,6 +20,8 @@ public class VideoConfig
     public string SubtitleStyle { get; set; } = "cinematic"; // cinematic, boxed, viral_yellow, neon, gold, ticker
     public string SubtitleFont { get; set; } = "Segoe UI Bold";
     public int SubtitleFontSize { get; set; } = 0; // 0 = Auto theo độ phân giải video
+    public string Voice { get; set; } = "vi-VN-Wavenet-B";
+    public VideoPublishInfo? PublishInfo { get; set; }
 
     public (int width, int height) GetDimensions()
     {

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
@@ -119,6 +120,21 @@ public partial class MainViewModel : ObservableObject
     private string _googleStatusText = "Đang kiểm tra Google Cloud...";
 
     public bool HasGeneratedVideo => !string.IsNullOrEmpty(LastGeneratedVideoPath) && File.Exists(LastGeneratedVideoPath);
+
+    // ── Bộ Công Cụ Đăng Bài Mạng Xã Hội (Publish Info) ──
+    [ObservableProperty]
+    private VideoPublishInfo _currentPublishInfo = new();
+
+    [ObservableProperty]
+    private string _lastGeneratedTxtPath = string.Empty;
+
+    [ObservableProperty]
+    private string _copyFeedbackMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _isGeneratingPublishInfo;
+
+    public bool HasPublishInfo => !string.IsNullOrWhiteSpace(CurrentPublishInfo?.Title) || !string.IsNullOrWhiteSpace(CurrentPublishInfo?.Hashtags);
 
     // ── Ước Tính Chi Phí Google Cloud API ──
     public const double ImagenCostPerImageUsd = 0.030; // $0.03 / ảnh Imagen 3
@@ -491,6 +507,28 @@ public partial class MainViewModel : ObservableObject
                 MotionEffect = string.IsNullOrEmpty(sc.MotionEffect) ? "zoom_in" : sc.MotionEffect,
                 Status = "Kịch bản mới"
             });
+        }
+
+        // Áp dụng thông tin đăng bài (Tiêu đề, Mô tả, Hashtags)
+        if (workspace.PublishInfo != null)
+        {
+            CurrentPublishInfo = workspace.PublishInfo;
+            OnPropertyChanged(nameof(CurrentPublishInfo));
+            OnPropertyChanged(nameof(HasPublishInfo));
+
+            if (!string.IsNullOrWhiteSpace(workspace.PublishInfo.Title))
+            {
+                var safeTitle = workspace.PublishInfo.Title;
+                foreach (var c in Path.GetInvalidFileNameChars())
+                    safeTitle = safeTitle.Replace(c, '_');
+                safeTitle = safeTitle.Replace(' ', '_').Trim('_');
+                if (safeTitle.Length > 45) safeTitle = safeTitle.Substring(0, 45);
+                OutputFileName = $"{safeTitle}.mp4";
+            }
+        }
+        else
+        {
+            EnsureBasicPublishInfo();
         }
 
         AppendLog($"[Kịch bản] Đã nạp thành công {Scenes.Count} phân cảnh vào dự án!");
@@ -1014,6 +1052,8 @@ public partial class MainViewModel : ObservableObject
                 }
             }
 
+            EnsureBasicPublishInfo();
+
             var config = new VideoConfig
             {
                 AspectRatio = AspectRatio,
@@ -1026,8 +1066,10 @@ public partial class MainViewModel : ObservableObject
                 EnableSubtitles = EnableSubtitles,
                 SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
                 SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
+                Voice = SelectedVoice,
                 OutputDirectory = OutputDirectory,
-                OutputFileName = string.IsNullOrWhiteSpace(OutputFileName) ? $"video_{DateTime.Now:yyyyMMdd_HHmmss}.mp4" : OutputFileName
+                OutputFileName = string.IsNullOrWhiteSpace(OutputFileName) ? $"video_{DateTime.Now:yyyyMMdd_HHmmss}.mp4" : OutputFileName,
+                PublishInfo = CurrentPublishInfo
             };
 
             var progress = new Progress<GenerationProgress>(p =>
@@ -1044,7 +1086,29 @@ public partial class MainViewModel : ObservableObject
             LastGeneratedVideoPath = resultFile;
             StatusMessage = "Tạo video thành công!";
             ProgressPercentage = 100;
-            MessageBox.Show($"Video đã được tạo thành công tại:\n{resultFile}", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            // Lấy thư mục project (parent của Video/)
+            var projectFolder = Path.GetDirectoryName(Path.GetDirectoryName(resultFile)) ?? OutputDirectory;
+            var txtFile = Path.Combine(projectFolder, "DANG_BAI_METADATA.txt");
+            if (File.Exists(txtFile))
+            {
+                LastGeneratedTxtPath = txtFile;
+            }
+
+            var dialogResult = MessageBox.Show(
+                $"🎉 Video đã được tạo thành công!\n\n" +
+                $"📁 Thư mục project:\n{projectFolder}\n\n" +
+                $"🎬 Video:\n{resultFile}\n\n" +
+                $"📝 File đăng bài (.txt):\n{txtFile}\n\n" +
+                $"👉 Bạn có muốn mở ngay 'Bộ Đăng Bài Mạng Xã Hội' để sao chép Tiêu đề, Caption và Hashtags không?",
+                "Tạo Video Thành Công!",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+
+            if (dialogResult == MessageBoxResult.Yes)
+            {
+                OpenSocialPublishWindow();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1097,11 +1161,20 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenOutputDir()
     {
-        if (Directory.Exists(OutputDirectory))
+        // Ưu tiên mở thư mục project (parent của Video/) nếu có video đã tạo
+        var targetDir = OutputDirectory;
+        if (!string.IsNullOrEmpty(LastGeneratedVideoPath) && File.Exists(LastGeneratedVideoPath))
+        {
+            var projectDir = Path.GetDirectoryName(Path.GetDirectoryName(LastGeneratedVideoPath));
+            if (!string.IsNullOrEmpty(projectDir) && Directory.Exists(projectDir))
+                targetDir = projectDir;
+        }
+
+        if (Directory.Exists(targetDir))
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = OutputDirectory,
+                FileName = targetDir,
                 UseShellExecute = true
             });
         }
@@ -1111,6 +1184,214 @@ public partial class MainViewModel : ObservableObject
     private void ClearLog()
     {
         LogText = string.Empty;
+    }
+
+    [RelayCommand]
+    private void OpenSocialPublishWindow()
+    {
+        EnsureBasicPublishInfo();
+        var win = new SocialPublishWindow(this)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        win.ShowDialog();
+    }
+
+    [RelayCommand]
+    private void CopyFullCaption()
+    {
+        EnsureBasicPublishInfo();
+        SetClipboardText(CurrentPublishInfo.FullCaption);
+        TriggerCopyFeedback("✅ Đã sao chép toàn bộ bài đăng vào Clipboard!");
+        AppendLog("[Clipboard] Đã sao chép toàn bộ bài đăng (Tiêu đề + Mô tả + Hashtags).");
+    }
+
+    [RelayCommand]
+    private void CopyPublishTitle()
+    {
+        EnsureBasicPublishInfo();
+        SetClipboardText(CurrentPublishInfo.Title);
+        TriggerCopyFeedback("✅ Đã sao chép Tiêu đề!");
+        AppendLog($"[Clipboard] Đã sao chép Tiêu đề: \"{CurrentPublishInfo.Title}\"");
+    }
+
+    [RelayCommand]
+    private void CopyPublishDescription()
+    {
+        EnsureBasicPublishInfo();
+        SetClipboardText(CurrentPublishInfo.Description);
+        TriggerCopyFeedback("✅ Đã sao chép Mô tả!");
+        AppendLog("[Clipboard] Đã sao chép Mô tả video.");
+    }
+
+    [RelayCommand]
+    private void CopyPublishHashtags()
+    {
+        EnsureBasicPublishInfo();
+        SetClipboardText(CurrentPublishInfo.Hashtags);
+        TriggerCopyFeedback("✅ Đã sao chép Hashtags!");
+        AppendLog($"[Clipboard] Đã sao chép Hashtags: {CurrentPublishInfo.Hashtags}");
+    }
+
+    [RelayCommand]
+    private void OpenPublishTxtFile()
+    {
+        var targetFile = LastGeneratedTxtPath;
+        if (string.IsNullOrEmpty(targetFile) || !File.Exists(targetFile))
+        {
+            if (!string.IsNullOrEmpty(LastGeneratedVideoPath))
+            {
+                var projectFolder = Path.GetDirectoryName(Path.GetDirectoryName(LastGeneratedVideoPath));
+                if (!string.IsNullOrEmpty(projectFolder))
+                {
+                    var potentialFile = Path.Combine(projectFolder, "DANG_BAI_METADATA.txt");
+                    if (File.Exists(potentialFile))
+                        targetFile = potentialFile;
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(targetFile) || !File.Exists(targetFile))
+        {
+            EnsureBasicPublishInfo();
+            var tempDir = Path.Combine(Path.GetTempPath(), "VideoAutoWpf");
+            Directory.CreateDirectory(tempDir);
+            var tempTxt = Path.Combine(tempDir, "DANG_BAI_METADATA.txt");
+            File.WriteAllText(tempTxt, CurrentPublishInfo.GenerateFormattedTxt(
+                videoFileName: OutputFileName,
+                aspectRatio: AspectRatio,
+                voice: SelectedVoice,
+                sceneCount: Scenes.Count,
+                bgmName: SelectedBgmTrack?.Title
+            ), new UTF8Encoding(true));
+            targetFile = tempTxt;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = targetFile,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Không thể mở file:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    [RelayCommand]
+    private async Task RegenerateSocialMetadataAsync()
+    {
+        if (Scenes.Count == 0)
+        {
+            MessageBox.Show("Chưa có phân cảnh nào trong dự án để tạo metadata!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        IsGeneratingPublishInfo = true;
+        StatusMessage = "⏳ AI đang sáng tạo Tiêu đề, Mô tả và Hashtags bùng nổ...";
+        AppendLog("[Gemini AI] Đang tạo bộ Tiêu đề, Mô tả và Hashtags chuẩn SEO cho video...");
+
+        try
+        {
+            var scenesContent = string.Join("\n", Scenes.Select(s => $"Cảnh {s.Index}: {s.Text}"));
+            var summary = $"Video gồm {Scenes.Count} cảnh, định dạng {AspectRatio}";
+
+            var result = await _geminiService.GeneratePublishInfoAsync(summary, scenesContent);
+            if (result != null)
+            {
+                CurrentPublishInfo = result;
+                OnPropertyChanged(nameof(CurrentPublishInfo));
+                OnPropertyChanged(nameof(HasPublishInfo));
+
+                if (!string.IsNullOrWhiteSpace(result.Title))
+                {
+                    var safeTitle = result.Title;
+                    foreach (var c in Path.GetInvalidFileNameChars())
+                        safeTitle = safeTitle.Replace(c, '_');
+                    safeTitle = safeTitle.Replace(' ', '_').Trim('_');
+                    if (safeTitle.Length > 45) safeTitle = safeTitle.Substring(0, 45);
+                    OutputFileName = $"{safeTitle}.mp4";
+                }
+
+                StatusMessage = "✅ Đã tạo mới bộ Tiêu đề & Hashtags thành công!";
+                AppendLog($"[Gemini AI] Đã tạo tiêu đề mới: \"{result.Title}\" với bộ hashtags chuẩn xu hướng.");
+                TriggerCopyFeedback("✅ AI đã tạo mới Tiêu đề & Hashtags!");
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = "Có lỗi khi AI tạo metadata.";
+            AppendLog($"[Lỗi Gemini] {ex.Message}");
+            MessageBox.Show($"Không thể tạo metadata bằng AI:\n{ex.Message}", "Lỗi AI", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsGeneratingPublishInfo = false;
+        }
+    }
+
+    public void EnsureBasicPublishInfo()
+    {
+        if (CurrentPublishInfo == null) CurrentPublishInfo = new VideoPublishInfo();
+
+        if (string.IsNullOrWhiteSpace(CurrentPublishInfo.Title))
+        {
+            if (Scenes.Count > 0 && !string.IsNullOrWhiteSpace(Scenes[0].Text))
+            {
+                var firstLine = Scenes[0].Text!.Trim();
+                CurrentPublishInfo.Title = firstLine.Length > 50 ? firstLine.Substring(0, 50) + "..." : firstLine;
+            }
+            else
+            {
+                CurrentPublishInfo.Title = Path.GetFileNameWithoutExtension(OutputFileName).Replace('_', ' ');
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(CurrentPublishInfo.Description))
+        {
+            var texts = Scenes.Where(s => !string.IsNullOrWhiteSpace(s.Text)).Take(3).Select(s => s.Text);
+            CurrentPublishInfo.Description = string.Join(" ", texts);
+        }
+
+        if (string.IsNullOrWhiteSpace(CurrentPublishInfo.Hashtags))
+        {
+            CurrentPublishInfo.Hashtags = "#kienthuc #bian #khampha #shorts #xuhuong #viral #fyp #tiktok #reels";
+        }
+
+        OnPropertyChanged(nameof(CurrentPublishInfo));
+        OnPropertyChanged(nameof(HasPublishInfo));
+    }
+
+    private static void SetClipboardText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch
+        {
+            try
+            {
+                Clipboard.SetDataObject(text, true);
+            }
+            catch { }
+        }
+    }
+
+    private async void TriggerCopyFeedback(string msg)
+    {
+        CopyFeedbackMessage = msg;
+        try
+        {
+            await Task.Delay(2500);
+            if (CopyFeedbackMessage == msg)
+                CopyFeedbackMessage = string.Empty;
+        }
+        catch { }
     }
 
     public async Task HandleDroppedFilesAsync(string[] files)

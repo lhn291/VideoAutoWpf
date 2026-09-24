@@ -194,17 +194,35 @@ public partial class FFmpegService : IFFmpegService
         if (string.IsNullOrEmpty(ffmpeg))
             throw new FileNotFoundException("Không tìm thấy FFmpeg trên hệ thống. Vui lòng cài đặt FFmpeg hoặc chỉ định đường dẫn.");
 
-        // Thư mục đầu ra và thư mục tạm
-        var outputDir = string.IsNullOrWhiteSpace(config.OutputDirectory)
+        // Thư mục đầu ra gốc
+        var baseOutputDir = string.IsNullOrWhiteSpace(config.OutputDirectory)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput")
             : config.OutputDirectory;
 
-        Directory.CreateDirectory(outputDir);
+        Directory.CreateDirectory(baseOutputDir);
 
-        var tempDir = Path.Combine(outputDir, $"temp_{DateTime.Now:yyyyMMdd_HHmmss}");
+        // Tạo thư mục project riêng cho mỗi video (tên video không .mp4)
+        var videoName = Path.GetFileNameWithoutExtension(config.OutputFileName);
+        if (string.IsNullOrWhiteSpace(videoName)) videoName = $"video_{DateTime.Now:yyyyMMdd_HHmmss}";
+
+        // Sanitize tên folder: bỏ ký tự không hợp lệ
+        foreach (var c in Path.GetInvalidFileNameChars())
+            videoName = videoName.Replace(c, '_');
+
+        var projectDir = Path.Combine(baseOutputDir, videoName);
+        var imagesDir = Path.Combine(projectDir, "Images");
+        var audioDir = Path.Combine(projectDir, "Audio");
+        var videoDir = Path.Combine(projectDir, "Video");
+
+        Directory.CreateDirectory(projectDir);
+        Directory.CreateDirectory(imagesDir);
+        Directory.CreateDirectory(audioDir);
+        Directory.CreateDirectory(videoDir);
+
+        var tempDir = Path.Combine(projectDir, $"_temp_{DateTime.Now:HHmmss}");
         Directory.CreateDirectory(tempDir);
 
-        var finalOutputPath = Path.Combine(outputDir, config.OutputFileName);
+        var finalOutputPath = Path.Combine(videoDir, config.OutputFileName);
         if (!finalOutputPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
             finalOutputPath += ".mp4";
 
@@ -217,7 +235,7 @@ public partial class FFmpegService : IFFmpegService
             {
                 Percentage = 5,
                 StepTitle = "Kiểm tra tài nguyên & đo thời lượng",
-                LogMessage = $"Bắt đầu xử lý {scenes.Count} phân cảnh (Tỷ lệ: {config.AspectRatio}, Độ phân giải: {width}x{height})..."
+                LogMessage = $"Bắt đầu xử lý {scenes.Count} phân cảnh (Tỷ lệ: {config.AspectRatio}, Độ phân giải: {width}x{height})...\n📁 Thư mục project: {projectDir}"
             });
 
             // Bước 1: Render từng phân cảnh
@@ -232,6 +250,16 @@ public partial class FFmpegService : IFFmpegService
 
                 if (string.IsNullOrEmpty(scene.AudioPath) || !File.Exists(scene.AudioPath))
                     throw new FileNotFoundException($"Không tìm thấy file âm thanh cho phân cảnh #{sceneNum}: {scene.AudioPath}");
+
+                // Sao lưu ảnh vào thư mục Images/ của project
+                var imgExt = Path.GetExtension(scene.ImagePath);
+                var projectImagePath = Path.Combine(imagesDir, $"scene_{sceneNum:D3}{imgExt}");
+                File.Copy(scene.ImagePath, projectImagePath, true);
+
+                // Sao lưu audio vào thư mục Audio/ của project
+                var audioExt = Path.GetExtension(scene.AudioPath);
+                var projectAudioPath = Path.Combine(audioDir, $"scene_{sceneNum:D3}{audioExt}");
+                File.Copy(scene.AudioPath, projectAudioPath, true);
 
                 // Lấy thời lượng âm thanh nếu chưa có
                 var duration = scene.DurationSeconds;
@@ -312,6 +340,10 @@ public partial class FFmpegService : IFFmpegService
                     LogMessage = $"Đang trộn nhạc nền '{Path.GetFileName(config.BackgroundMusicPath)}' (Âm lượng: {(int)(config.BackgroundMusicVolume * 100)}%)..."
                 });
 
+                // Copy BGM vào thư mục Audio/ của project
+                var bgmDestPath = Path.Combine(audioDir, $"bgm_{Path.GetFileName(config.BackgroundMusicPath)}");
+                File.Copy(config.BackgroundMusicPath, bgmDestPath, true);
+
                 var volStr = config.BackgroundMusicVolume.ToString("0.00", CultureInfo.InvariantCulture);
                 var filterComplex = $"\"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[a1];[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume={volStr}[a2];[a1][a2]amix=inputs=2:duration=first:dropout_transition=3[a]\"";
                 var mixArgs = $"-y -i \"{mergedVideoPath}\" -stream_loop -1 -i \"{config.BackgroundMusicPath}\" -filter_complex {filterComplex} -map 0:v -map \"[a]\" -c:v copy -c:a aac -b:a 192k \"{finalOutputPath}\"";
@@ -324,11 +356,40 @@ public partial class FFmpegService : IFFmpegService
                 File.Move(mergedVideoPath, finalOutputPath);
             }
 
+            // Bước 4: Tự động tạo file .txt chứa Tiêu đề, Mô tả, Hashtags và Caption đầy đủ
+            var publishInfo = config.PublishInfo ?? new VideoPublishInfo();
+            if (string.IsNullOrWhiteSpace(publishInfo.Title))
+            {
+                publishInfo.Title = videoName.Replace('_', ' ');
+            }
+            if (string.IsNullOrWhiteSpace(publishInfo.Description))
+            {
+                var sceneTexts = scenes.Where(s => !string.IsNullOrWhiteSpace(s.Text)).Take(3).Select(s => s.Text);
+                publishInfo.Description = string.Join(" ", sceneTexts);
+            }
+            if (string.IsNullOrWhiteSpace(publishInfo.Hashtags))
+            {
+                publishInfo.Hashtags = "#shorts #xuhuong #viral #fyp #tiktok #reels #video";
+            }
+
+            var txtContent = publishInfo.GenerateFormattedTxt(
+                videoFileName: Path.GetFileName(finalOutputPath),
+                aspectRatio: $"{config.AspectRatio} ({width}x{height})",
+                voice: config.Voice,
+                sceneCount: scenes.Count,
+                bgmName: config.EnableBackgroundMusic && !string.IsNullOrEmpty(config.BackgroundMusicPath)
+                    ? Path.GetFileName(config.BackgroundMusicPath)
+                    : "Không sử dụng"
+            );
+
+            var infoFilePath = Path.Combine(projectDir, "DANG_BAI_METADATA.txt");
+            await File.WriteAllTextAsync(infoFilePath, txtContent, new UTF8Encoding(true), ct);
+
             progress?.Report(new GenerationProgress
             {
                 Percentage = 100,
                 StepTitle = "Hoàn thành xuất sắc!",
-                LogMessage = $"TẠO VIDEO THÀNH CÔNG!\nVideo đã lưu tại: {finalOutputPath}"
+                LogMessage = $"TẠO VIDEO THÀNH CÔNG!\n📁 Thư mục project: {projectDir}\n🎬 Video: {finalOutputPath}\n📝 File đăng bài (.txt): {infoFilePath}\n🖼️ Ảnh: {imagesDir} ({scenes.Count} files)\n🔊 Audio: {audioDir}"
             });
 
             return finalOutputPath;

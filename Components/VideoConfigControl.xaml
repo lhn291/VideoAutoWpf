@@ -70,59 +70,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- PHỤ ĐỀ / CHỮ VIDEO (SUBTITLES) -->
-                <Border Background="#1e1e2e" CornerRadius="8" Padding="10" BorderBrush="{StaticResource BorderDark}" BorderThickness="1" Margin="0,0,0,10">
-                    <StackPanel>
-                        <!-- Header with CheckBox toggle -->
-                        <Grid Margin="0,0,0,8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <CheckBox IsChecked="{Binding EnableSubtitles}" Foreground="{StaticResource TextPrimary}" FontSize="12" FontWeight="SemiBold" Cursor="Hand" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="💬 Chữ Chạy / Phụ Đề" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </CheckBox>
-
-                            <Border Grid.Column="1" Background="#26273b" CornerRadius="4" Padding="5,1">
-                                <TextBlock Text="Có thể ẩn/hiện" FontSize="9" Foreground="{StaticResource TextMuted}"/>
-                            </Border>
-                        </Grid>
-
-                        <StackPanel IsEnabled="{Binding EnableSubtitles}">
-                            <!-- Kiểu chữ chạy -->
-                            <TextBlock Text="Kiểu hiển thị chữ:" FontSize="10.5" Foreground="{StaticResource TextMuted}" Margin="0,0,0,3"/>
-                            <ComboBox ItemsSource="{Binding AvailableSubtitleStyles}" 
-                                      SelectedItem="{Binding SelectedSubtitleStyle}"
-                                      Margin="0,0,0,8">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Icon}" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                            <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-
-                            <!-- Phông chữ -->
-                            <TextBlock Text="Phông chữ (Font):" FontSize="10.5" Foreground="{StaticResource TextMuted}" Margin="0,0,0,3"/>
-                            <ComboBox ItemsSource="{Binding AvailableSubtitleFonts}" 
-                                      SelectedItem="{Binding SelectedSubtitleFont}">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="🔤" FontSize="10" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                            <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
 
                 <!-- ƯỚC TÍNH CHI PHÍ API (GOOGLE CLOUD) -->
                 <Border Background="#1b1c2e" CornerRadius="8" Padding="10" BorderBrush="#363854" BorderThickness="1" Margin="0,0,0,12"

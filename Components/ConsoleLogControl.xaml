@@ -25,7 +25,7 @@
                     <TextBlock Text="{Binding StatusMessage}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AccentBlue}"/>
                 </StackPanel>
 
-                <!-- Các nút: Xem video, Mở thư mục, Xóa log -->
+                <!-- Các nút: Xem video, Mở thư mục, Đăng bài, Xóa log -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button Content="🎬 Xem Video" Command="{Binding OpenVideoCommand}" IsEnabled="{Binding HasGeneratedVideo}"
                             Style="{StaticResource BtnSuccess}"
@@ -33,6 +33,11 @@
 
                     <Button Content="📁 Mở Thư Mục" Command="{Binding OpenOutputDirCommand}"
                             FontSize="11" Padding="10,4" Margin="0,0,6,0" />
+
+                    <Button Content="📱 Đăng Bài &amp; Hashtags" Command="{Binding OpenSocialPublishWindowCommand}"
+                            Background="#2d224e" BorderBrush="#6c5ce7" BorderThickness="1" Foreground="#cba6f7" FontWeight="Bold"
+                            FontSize="11" Padding="12,4" Margin="0,0,6,0" Cursor="Hand"
+                            ToolTip="Mở bộ công cụ sao chép Tiêu đề, Mô tả và Hashtags chuẩn SEO để đăng lên TikTok, Shorts, Reels" />
 
                     <Button Content="Xóa Log" Command="{Binding ClearLogCommand}"
                             FontSize="11" Padding="8,4" />

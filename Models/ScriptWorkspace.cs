@@ -9,6 +9,9 @@ public class ScriptWorkspace
 
     [JsonPropertyName("scenes")]
     public List<ScriptScene> Scenes { get; set; } = new();
+
+    [JsonPropertyName("publish_info")]
+    public VideoPublishInfo? PublishInfo { get; set; }
 }
 
 public class ScriptMetadata

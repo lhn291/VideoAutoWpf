@@ -68,4 +68,8 @@ public partial class ScriptPlan : ObservableObject
     [ObservableProperty]
     [JsonPropertyName("subtitle_reason")]
     private string _subtitleReason = string.Empty;
+
+    [ObservableProperty]
+    [JsonPropertyName("enable_text_on_image")]
+    private bool _enableTextOnImage;
 }
