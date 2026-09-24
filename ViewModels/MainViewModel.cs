@@ -98,6 +98,25 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string _outputFileName = "video_thanh_pham.mp4";
 
+    // ── Quản Lý Chuỗi Video Nhiều Tập (Series Mode) ──
+    [ObservableProperty]
+    private SeriesProject? _currentSeries;
+
+    [ObservableProperty]
+    private bool _isSeriesMode;
+
+    [ObservableProperty]
+    private EpisodeItem? _selectedEpisode;
+
+    [ObservableProperty]
+    private bool _isBatchRenderingSeries;
+
+    [ObservableProperty]
+    private double _batchRenderProgress;
+
+    [ObservableProperty]
+    private string _batchRenderStatusText = string.Empty;
+
     [ObservableProperty]
     private bool _isRendering;
 
@@ -535,6 +554,255 @@ public partial class MainViewModel : ObservableObject
         MessageBox.Show($"Đã nạp thành công {Scenes.Count} phân cảnh vào dự án!", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    // ══════════════════════════════════════════════════════════════
+    // QUẢN LÝ CHUỖI VIDEO NHIỀU TẬP (MULTI-EPISODE SERIES MODE)
+    // ══════════════════════════════════════════════════════════════
+
+    [RelayCommand]
+    private void OpenSeriesCreator()
+    {
+        var win = new SeriesCreatorWindow(_geminiService)
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (win.ShowDialog() == true && win.ResultSeriesProject != null)
+        {
+            LoadSeriesProject(win.ResultSeriesProject);
+        }
+    }
+
+    public void LoadSeriesProject(SeriesProject series)
+    {
+        CurrentSeries = series;
+        IsSeriesMode = true;
+
+        if (!string.IsNullOrEmpty(series.AspectRatio))
+            AspectRatio = series.AspectRatio;
+
+        if (!string.IsNullOrEmpty(series.GlobalVoice) && AvailableVoices.Contains(series.GlobalVoice))
+            SelectedVoice = series.GlobalVoice;
+
+        if (series.Episodes.Count > 0)
+        {
+            SelectEpisode(series.Episodes[0]);
+        }
+        else
+        {
+            Scenes.Clear();
+            SelectedEpisode = null;
+        }
+
+        StatusMessage = $"Đang làm việc trên Series: {series.SeriesTitle} ({series.Episodes.Count} tập)";
+        AppendLog($"[Series] Đã nạp thành công series '{series.SeriesTitle}' ({series.Episodes.Count} tập).");
+    }
+
+    [RelayCommand]
+    private void SelectEpisode(EpisodeItem? ep)
+    {
+        if (ep == null) return;
+
+        // Lưu trạng thái của tập hiện tại trước khi chuyển sang tập mới
+        if (SelectedEpisode != null && SelectedEpisode != ep)
+        {
+            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
+            SelectedEpisode.PublishInfo = CurrentPublishInfo;
+        }
+
+        SelectedEpisode = ep;
+
+        // Cập nhật trạng thái IsSelected cho tất cả các tập
+        if (CurrentSeries != null)
+        {
+            foreach (var item in CurrentSeries.Episodes)
+            {
+                item.IsSelected = (item == ep);
+            }
+        }
+
+        // Nạp danh sách cảnh của tập được chọn
+        Scenes.Clear();
+        foreach (var sc in ep.Scenes)
+        {
+            Scenes.Add(sc);
+        }
+
+        // Nạp thông tin đăng bài của tập
+        if (ep.PublishInfo != null)
+        {
+            CurrentPublishInfo = ep.PublishInfo;
+        }
+        else
+        {
+            EnsureBasicPublishInfo();
+            CurrentPublishInfo.Title = $"{CurrentSeries?.SeriesTitle ?? "Series"} - Tập {ep.EpisodeNumber}: {ep.EpisodeTitle}";
+            CurrentPublishInfo.Description = $"Xem trọn bộ {CurrentSeries?.SeriesTitle}!\nTập {ep.EpisodeNumber}: {ep.EpisodeTitle}\n{ep.EpisodeHook}\n{ep.Cliffhanger}";
+            ep.PublishInfo = CurrentPublishInfo;
+        }
+        OnPropertyChanged(nameof(CurrentPublishInfo));
+        OnPropertyChanged(nameof(HasPublishInfo));
+
+        // Cập nhật tên file video dự kiến
+        var safeTitle = MakeSafeFileName(ep.EpisodeTitle);
+        OutputFileName = $"Tap_{ep.EpisodeNumber:D2}_{safeTitle}.mp4";
+
+        StatusMessage = $"Đang chọn Tập {ep.EpisodeNumber}: {ep.EpisodeTitle}";
+        AppendLog($"[Series] Đã chuyển sang Tập {ep.EpisodeNumber}: {ep.EpisodeTitle} ({Scenes.Count} phân cảnh).");
+    }
+
+    [RelayCommand]
+    private void AddNewEpisode()
+    {
+        if (CurrentSeries == null) return;
+
+        var nextNum = CurrentSeries.Episodes.Count + 1;
+        var newEp = new EpisodeItem
+        {
+            EpisodeNumber = nextNum,
+            EpisodeTitle = $"Tập {nextNum}: Tiếp nối câu chuyện",
+            EpisodeHook = "Tiếp nối phần trước...",
+            Cliffhanger = "Chuyện gì sẽ xảy ra tiếp theo?",
+            Status = "Chưa dựng"
+        };
+        CurrentSeries.Episodes.Add(newEp);
+        SelectEpisode(newEp);
+        AppendLog($"[Series] Đã thêm Tập {nextNum} vào chuỗi.");
+    }
+
+    [RelayCommand]
+    private void RemoveEpisode(EpisodeItem? ep)
+    {
+        if (CurrentSeries == null || ep == null) return;
+
+        if (MessageBox.Show($"Bạn có chắc chắn muốn xóa Tập {ep.EpisodeNumber}: {ep.EpisodeTitle} khỏi Series?", "Xác nhận", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        {
+            var idx = CurrentSeries.Episodes.IndexOf(ep);
+            CurrentSeries.Episodes.Remove(ep);
+
+            // Đánh lại số thứ tự các tập
+            for (int i = 0; i < CurrentSeries.Episodes.Count; i++)
+            {
+                CurrentSeries.Episodes[i].EpisodeNumber = i + 1;
+            }
+
+            if (SelectedEpisode == ep)
+            {
+                if (CurrentSeries.Episodes.Count > 0)
+                {
+                    var newIdx = Math.Min(idx, CurrentSeries.Episodes.Count - 1);
+                    SelectEpisode(CurrentSeries.Episodes[newIdx]);
+                }
+                else
+                {
+                    SelectedEpisode = null;
+                    Scenes.Clear();
+                }
+            }
+            AppendLog($"[Series] Đã xóa tập phim khỏi series.");
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExitSeriesModeAsync()
+    {
+        if (SelectedEpisode != null)
+        {
+            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
+            SelectedEpisode.PublishInfo = CurrentPublishInfo;
+        }
+
+        var result = MessageBox.Show(
+            "Bạn có muốn lưu dự án Series (.series.json) trước khi thoát về chế độ video đơn lẻ không?",
+            "Thoát chế độ Series",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Question);
+
+        if (result == MessageBoxResult.Cancel) return;
+
+        if (result == MessageBoxResult.Yes && CurrentSeries != null)
+        {
+            await SaveSeriesProjectAsync();
+        }
+
+        IsSeriesMode = false;
+        StatusMessage = "Đã thoát chế độ Series. Trở lại chế độ video đơn lẻ.";
+        AppendLog("[Series] Đã thoát chế độ Series.");
+    }
+
+    [RelayCommand]
+    private async Task SaveSeriesProjectAsync()
+    {
+        if (CurrentSeries == null) return;
+
+        if (SelectedEpisode != null)
+        {
+            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
+            SelectedEpisode.PublishInfo = CurrentPublishInfo;
+        }
+
+        var safeName = MakeSafeFileName(CurrentSeries.SeriesTitle);
+        var dlg = new SaveFileDialog
+        {
+            Title = "Lưu dự án Series",
+            Filter = "Series Project (*.series.json)|*.series.json|JSON File (*.json)|*.json",
+            FileName = $"{safeName}.series.json"
+        };
+
+        if (dlg.ShowDialog() == true)
+        {
+            try
+            {
+                await CurrentSeries.SaveToFileAsync(dlg.FileName);
+                AppendLog($"[Series] Đã lưu dự án Series vào: {dlg.FileName}");
+                MessageBox.Show("Đã lưu dự án Series thành công!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi khi lưu Series:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task LoadSeriesProjectFromFileAsync()
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "Mở dự án Series",
+            Filter = "Series Project (*.series.json;*.json)|*.series.json;*.json|Tất cả tệp (*.*)|*.*"
+        };
+
+        if (dlg.ShowDialog() == true)
+        {
+            try
+            {
+                var series = await SeriesProject.LoadFromFileAsync(dlg.FileName);
+                if (series != null)
+                {
+                    LoadSeriesProject(series);
+                }
+                else
+                {
+                    MessageBox.Show("Không thể đọc dữ liệu dự án Series từ tệp được chọn!", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi khi mở Series:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    private static string MakeSafeFileName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "video";
+        var safe = name;
+        foreach (var c in Path.GetInvalidFileNameChars())
+            safe = safe.Replace(c, '_');
+        safe = safe.Replace(' ', '_').Trim('_');
+        return safe.Length > 40 ? safe.Substring(0, 40) : safe;
+    }
+
     [RelayCommand]
     private void AddScene()
     {
@@ -963,6 +1231,77 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private async Task EnsureAssetsForScenesAsync(List<SceneItem> targetScenes, string assetsDir, CancellationToken ct)
+    {
+        for (int i = 0; i < targetScenes.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var s = targetScenes[i];
+            var sNum = i + 1;
+
+            if (!s.HasAudio)
+            {
+                if (!string.IsNullOrWhiteSpace(s.Text))
+                {
+                    StatusMessage = $"Đang sinh giọng đọc cho cảnh {sNum}/{targetScenes.Count}...";
+                    AppendLog($"[Tự động] Cảnh #{sNum}: Đang gọi Google TTS tạo lời thoại...");
+                    s.IsGeneratingAudio = true;
+                    var audioOut = Path.Combine(assetsDir, $"voice_scene_{sNum:D3}_{DateTime.Now:HHmmss}.mp3");
+                    await _ttsService.SynthesizeSpeechAsync(s.Text, audioOut, SelectedVoice, ct: ct);
+                    s.AudioPath = audioOut;
+                    s.DurationSeconds = await _ffmpegService.GetAudioDurationAsync(audioOut, ct: ct);
+                    s.IsGeneratingAudio = false;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Phân cảnh #{sNum} chưa có file âm thanh và chưa có nội dung lời thoại!");
+                }
+            }
+
+            if (!s.HasImage)
+            {
+                if (!string.IsNullOrWhiteSpace(s.ImagePrompt))
+                {
+                    StatusMessage = $"Đang gọi Gemini Image vẽ ảnh cảnh {sNum}/{targetScenes.Count}...";
+                    AppendLog($"[Tự động] Cảnh #{sNum}: Đang gửi prompt tới Gemini Image...");
+                    s.IsGeneratingImage = true;
+                    var imgOut = Path.Combine(assetsDir, $"image_scene_{sNum:D3}_{DateTime.Now:HHmmss}.png");
+                    try
+                    {
+                        await _imagenService.GenerateImageAsync(s.ImagePrompt, imgOut, AspectRatio, onLog: msg => AppendLog(msg), ct: ct);
+                        s.ImagePath = imgOut;
+                    }
+                    catch (Exception ex)
+                    {
+                        // Cơ chế dự phòng (Fallback): Nếu bị hạn mức Quota và phân cảnh trước đã có ảnh, tái sử dụng để video không bị đứt đoạn
+                        var prevSceneWithImage = targetScenes.Take(i).LastOrDefault(x => !string.IsNullOrEmpty(x.ImagePath) && File.Exists(x.ImagePath));
+                        if (prevSceneWithImage != null)
+                        {
+                            AppendLog($"[Dự phòng Quota] Cảnh #{sNum} không thể tạo ảnh mới ({ex.Message}). Sử dụng lại ảnh từ cảnh #{prevSceneWithImage.Index} để tiếp tục tạo video!");
+                            File.Copy(prevSceneWithImage.ImagePath!, imgOut, true);
+                            s.ImagePath = imgOut;
+                        }
+                        else
+                        {
+                            throw;
+                        }
+                    }
+                    finally
+                    {
+                        s.IsGeneratingImage = false;
+                    }
+
+                    // Nghỉ một chút giữa các phân cảnh để tránh vượt hạn mức Quota (RPM) của Vertex AI
+                    await Task.Delay(2500, ct);
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Phân cảnh #{sNum} chưa có file ảnh và chưa có mô tả (prompt) để vẽ!");
+                }
+            }
+        }
+    }
+
     [RelayCommand]
     private async Task StartRender()
     {
@@ -984,73 +1323,7 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            for (int i = 0; i < Scenes.Count; i++)
-            {
-                ct.ThrowIfCancellationRequested();
-                var s = Scenes[i];
-                var sNum = i + 1;
-
-                if (!s.HasAudio)
-                {
-                    if (!string.IsNullOrWhiteSpace(s.Text))
-                    {
-                        StatusMessage = $"Đang sinh giọng đọc cho cảnh {sNum}/{Scenes.Count}...";
-                        AppendLog($"[Tự động] Cảnh #{sNum}: Đang gọi Google TTS tạo lời thoại...");
-                        s.IsGeneratingAudio = true;
-                        var audioOut = Path.Combine(tempAssetsDir, $"voice_scene_{sNum:D3}_{DateTime.Now:HHmmss}.mp3");
-                        await _ttsService.SynthesizeSpeechAsync(s.Text, audioOut, SelectedVoice, ct: ct);
-                        s.AudioPath = audioOut;
-                        s.DurationSeconds = await _ffmpegService.GetAudioDurationAsync(audioOut, ct: ct);
-                        s.IsGeneratingAudio = false;
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"Phân cảnh #{sNum} chưa có file âm thanh và chưa có nội dung lời thoại!");
-                    }
-                }
-
-                if (!s.HasImage)
-                {
-                    if (!string.IsNullOrWhiteSpace(s.ImagePrompt))
-                    {
-                        StatusMessage = $"Đang gọi Gemini Image vẽ ảnh cảnh {sNum}/{Scenes.Count}...";
-                        AppendLog($"[Tự động] Cảnh #{sNum}: Đang gửi prompt tới Gemini Image...");
-                        s.IsGeneratingImage = true;
-                        var imgOut = Path.Combine(tempAssetsDir, $"image_scene_{sNum:D3}_{DateTime.Now:HHmmss}.png");
-                        try
-                        {
-                            await _imagenService.GenerateImageAsync(s.ImagePrompt, imgOut, AspectRatio, onLog: msg => AppendLog(msg), ct: ct);
-                            s.ImagePath = imgOut;
-                        }
-                        catch (Exception ex)
-                        {
-                            // Cơ chế dự phòng (Fallback): Nếu bị hạn mức Quota và phân cảnh trước đã có ảnh, tái sử dụng để video không bị đứt đoạn
-                            var prevSceneWithImage = Scenes.Take(i).LastOrDefault(x => !string.IsNullOrEmpty(x.ImagePath) && File.Exists(x.ImagePath));
-                            if (prevSceneWithImage != null)
-                            {
-                                AppendLog($"[Dự phòng Quota] Cảnh #{sNum} không thể tạo ảnh mới ({ex.Message}). Sử dụng lại ảnh từ cảnh #{prevSceneWithImage.Index} để tiếp tục tạo video!");
-                                File.Copy(prevSceneWithImage.ImagePath!, imgOut, true);
-                                s.ImagePath = imgOut;
-                            }
-                            else
-                            {
-                                throw;
-                            }
-                        }
-                        finally
-                        {
-                            s.IsGeneratingImage = false;
-                        }
-
-                        // Nghỉ một chút giữa các phân cảnh để tránh vượt hạn mức Quota (RPM) của Vertex AI
-                        await Task.Delay(2500, ct);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"Phân cảnh #{sNum} chưa có file ảnh và chưa có mô tả (prompt) để vẽ!");
-                    }
-                }
-            }
+            await EnsureAssetsForScenesAsync(Scenes.ToList(), tempAssetsDir, ct);
 
             EnsureBasicPublishInfo();
 
@@ -1142,6 +1415,178 @@ public partial class MainViewModel : ObservableObject
             _cts.Cancel();
             StatusMessage = "Đang gửi yêu cầu dừng...";
             AppendLog("[Hệ thống] Đang hủy tiến trình...");
+        }
+    }
+
+    [RelayCommand]
+    private async Task StartBatchRenderSeriesAsync()
+    {
+        if (CurrentSeries == null || CurrentSeries.Episodes.Count == 0)
+        {
+            MessageBox.Show("Không có tập phim nào trong Series để render!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        // Đảm bảo tập hiện tại đã được đồng bộ các cảnh
+        if (SelectedEpisode != null)
+        {
+            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
+            SelectedEpisode.PublishInfo = CurrentPublishInfo;
+        }
+
+        var episodesToRender = CurrentSeries.Episodes.ToList();
+        if (episodesToRender.All(e => e.Scenes.Count == 0))
+        {
+            MessageBox.Show("Tất cả các tập trong Series đều chưa có kịch bản/phân cảnh!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            $"Bạn sắp bắt đầu BATCH RENDER toàn bộ chuỗi {CurrentSeries.Episodes.Count} tập phim!\n\n" +
+            $"Tên Series: {CurrentSeries.SeriesTitle}\n" +
+            $"Thư mục xuất: {OutputDirectory}\n\n" +
+            $"Quá trình này sẽ tự động sinh giọng đọc Cloud TTS, vẽ ảnh AI Imagen 3 và render video từng tập.\n" +
+            $"Bạn có muốn tiếp tục không?",
+            "Xác nhận Batch Render Series",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (confirm != MessageBoxResult.Yes) return;
+
+        IsRendering = true;
+        IsBatchRenderingSeries = true;
+        BatchRenderProgress = 0;
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        var safeSeries = MakeSafeFileName(CurrentSeries.SeriesTitle);
+        var seriesOutputDir = Path.Combine(OutputDirectory, $"Series_{safeSeries}");
+        Directory.CreateDirectory(seriesOutputDir);
+
+        int totalEpisodes = episodesToRender.Count;
+        int completedCount = 0;
+
+        try
+        {
+            for (int i = 0; i < totalEpisodes; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var ep = episodesToRender[i];
+                var epNum = ep.EpisodeNumber;
+                var safeTitle = MakeSafeFileName(ep.EpisodeTitle);
+
+                SelectEpisode(ep);
+
+                BatchRenderStatusText = $"[Tập {epNum}/{totalEpisodes}] Đang xử lý: {ep.EpisodeTitle}...";
+                BatchRenderProgress = (double)i / totalEpisodes * 100;
+                ep.Status = "Đang render";
+
+                if (ep.Scenes.Count == 0)
+                {
+                    AppendLog($"[Batch Series] Bỏ qua Tập {epNum} vì chưa có phân cảnh nào.");
+                    ep.Status = "Chưa dựng";
+                    continue;
+                }
+
+                var epTempAssets = Path.Combine(seriesOutputDir, $"temp_assets_ep{epNum:D2}");
+                Directory.CreateDirectory(epTempAssets);
+
+                AppendLog($"[Batch Series] === BẮT ĐẦU XỬ LÝ TẬP {epNum}: {ep.EpisodeTitle} ({ep.Scenes.Count} cảnh) ===");
+
+                // 1. Sinh âm thanh & hình ảnh AI cho tập này
+                await EnsureAssetsForScenesAsync(ep.Scenes.ToList(), epTempAssets, ct);
+
+                // 2. Cấu hình xuất video cho tập này
+                var epConfig = new VideoConfig
+                {
+                    AspectRatio = AspectRatio,
+                    MotionEffect = SelectedMotionEffect?.Id ?? "random",
+                    EnableFadeTransition = EnableFadeTransition,
+                    EnableVignette = EnableVignette,
+                    EnableBackgroundMusic = EnableBgm,
+                    BackgroundMusicPath = BgmPath,
+                    BackgroundMusicVolume = BgmVolume,
+                    EnableSubtitles = EnableSubtitles,
+                    SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
+                    SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
+                    Voice = SelectedVoice,
+                    OutputDirectory = seriesOutputDir,
+                    OutputFileName = $"Tap_{epNum:D2}_{safeTitle}.mp4",
+                    PublishInfo = ep.PublishInfo ?? CurrentPublishInfo
+                };
+
+                var progress = new Progress<GenerationProgress>(p =>
+                {
+                    if (p.Percentage > 0)
+                        ProgressPercentage = p.Percentage;
+                    if (!string.IsNullOrEmpty(p.StepTitle))
+                        StatusMessage = $"[Tập {epNum}/{totalEpisodes}] {p.StepTitle}";
+                    if (!string.IsNullOrEmpty(p.LogMessage))
+                        AppendLog($"[Tập {epNum}] {p.LogMessage}");
+                });
+
+                // 3. Render video qua FFmpeg
+                var resultFile = await _ffmpegService.GenerateVideoAsync(ep.Scenes.ToList(), epConfig, progress, ct);
+                ep.OutputVideoPath = resultFile;
+                ep.LastRenderedDate = DateTime.Now;
+                ep.Status = "Hoàn thành";
+                completedCount++;
+
+                // Dọn dẹp folder tạm nếu có
+                try
+                {
+                    if (Directory.Exists(epTempAssets))
+                        Directory.Delete(epTempAssets, true);
+                }
+                catch { }
+
+                AppendLog($"[Batch Series] ✅ Hoàn thành xuất video Tập {epNum}: {resultFile}");
+
+                // Lưu lại trạng thái dự án series vào file series_project.json
+                var seriesProjectFile = Path.Combine(seriesOutputDir, "series_project.json");
+                await CurrentSeries.SaveToFileAsync(seriesProjectFile);
+
+                BatchRenderProgress = (double)(i + 1) / totalEpisodes * 100;
+            }
+
+            BatchRenderProgress = 100;
+            BatchRenderStatusText = $"🎉 Hoàn thành render {completedCount}/{totalEpisodes} tập của Series!";
+            StatusMessage = "Xuất toàn bộ Series thành công!";
+
+            MessageBox.Show(
+                $"🎉 Đã hoàn tất Batch Render toàn bộ chuỗi video!\n\n" +
+                $"Số tập hoàn thành: {completedCount}/{totalEpisodes}\n" +
+                $"Thư mục Series:\n{seriesOutputDir}\n\n" +
+                $"Mỗi tập đã được lưu đầy đủ vào từng thư mục riêng (Images, Audio, Video, DANG_BAI_METADATA.txt)!",
+                "Thành Công Rực Rỡ",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (OperationCanceledException)
+        {
+            BatchRenderStatusText = "Đã dừng render Series.";
+            StatusMessage = "Đã hủy render bởi người dùng.";
+            AppendLog("[Batch Series] Người dùng đã dừng quá trình render series.");
+        }
+        catch (Exception ex)
+        {
+            BatchRenderStatusText = "❌ Có lỗi xảy ra trong quá trình Batch Render.";
+            StatusMessage = "Lỗi khi render series!";
+            AppendLog($"[Lỗi Batch Series] {ex.Message}");
+            MessageBox.Show($"Lỗi trong quá trình render series:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            foreach (var sc in Scenes)
+            {
+                sc.IsGeneratingAudio = false;
+                sc.IsGeneratingImage = false;
+            }
+            IsRendering = false;
+            IsBatchRenderingSeries = false;
+            _cts?.Dispose();
+            _cts = null;
         }
     }
 

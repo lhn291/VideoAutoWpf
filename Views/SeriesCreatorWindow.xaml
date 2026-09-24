@@ -1,0 +1,323 @@
+<Window x:Class="VideoAutoWpf.Views.SeriesCreatorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:viewmodels="clr-namespace:VideoAutoWpf.ViewModels"
+        xmlns:models="clr-namespace:VideoAutoWpf.Models"
+        mc:Ignorable="d"
+        Title="Tạo Chuỗi Video Nhiều Tập (Gemini AI Multi-Episode Engine)" 
+        Height="760" Width="980"
+        MinHeight="620" MinWidth="800"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgDark}"
+        Foreground="{StaticResource TextPrimary}"
+        FontFamily="Segoe UI, Segoe UI Variable, Arial"
+        d:DataContext="{d:DesignInstance Type=viewmodels:SeriesCreatorViewModel}">
+
+    <Window.Resources>
+        <Style x:Key="HeroSeriesBtn" TargetType="Button">
+            <Setter Property="Background">
+                <Setter.Value>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#89b4fa" Offset="0"/>
+                        <GradientStop Color="#cba6f7" Offset="0.5"/>
+                        <GradientStop Color="#b4befe" Offset="1"/>
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Foreground" Value="#11111b"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="SBtnBd" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="12" ShadowDepth="3" Direction="270" Opacity="0.35" Color="#89b4fa"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SBtnBd" Property="Opacity" Value="0.92"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="SBtnBd" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <!-- 0: Header -->
+            <RowDefinition Height="Auto" />
+            <!-- 1: Main Content -->
+            <RowDefinition Height="*" />
+            <!-- 2: Footer -->
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- HEADER -->
+        <Border Grid.Row="0" Margin="0,0,0,12" Padding="14,10" Background="{StaticResource BgCard}" CornerRadius="10" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Vertical">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="📺" FontSize="22" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="KHỞI TẠO CHUỖI VIDEO NHIỀU TẬP (SERIES)" FontSize="16" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" VerticalAlignment="Center"/>
+                        <Border Background="#2a2542" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="Episodic Storytelling • Cliffhanger • Character Bible" FontSize="10" FontWeight="Bold" Foreground="#cba6f7"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Chia nhỏ truyện dài hoặc chủ đề lớn thành từng tập 45-90s, giữ vững 100% nhất quán nhân vật và cài cắm kết lửng nghẹt thở." 
+                               FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="32,3,0,0"/>
+                </StackPanel>
+
+                <!-- Status indicator -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding BatchStatusText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}" TextWrapping="Wrap" MaxWidth="320" TextAlignment="Right"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- STEP 1: NHẬP CỐT TRUYỆN & CẤU HÌNH (Hiện khi chưa có plan) -->
+        <Border Grid.Row="1" Background="{StaticResource BgCard}" CornerRadius="10" Padding="16" BorderBrush="{StaticResource BorderDark}" BorderThickness="1"
+                Visibility="{Binding HasSeriesPlan, Converter={StaticResource InverseBoolToVisConverter}}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Orientation="Vertical">
+                    <TextBlock Text="1. Nhập Ý Tưởng / Cốt Truyện Dài Của Series" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Bạn có thể dán toàn bộ một câu chuyện, tóm tắt tiểu thuyết, vụ án kỳ bí, hoặc tóm tắt chủ đề mà bạn muốn làm chuỗi video:" 
+                               FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                    
+                    <TextBox Text="{Binding TopicOrStory, UpdateSourceTrigger=PropertyChanged}"
+                             AcceptsReturn="True" TextWrapping="Wrap" MinHeight="160" MaxHeight="240"
+                             Background="#161726" Foreground="{StaticResource TextPrimary}" BorderBrush="#313244"
+                             FontSize="12" Padding="10" Margin="0,0,0,16">
+                        <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></TextBox.Resources>
+                    </TextBox>
+
+                    <!-- Cấu hình 3 cột: Số tập, Phong cách vẽ, Giọng đọc -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="2*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Cột 1: Số tập -->
+                        <Border Grid.Column="0" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="🔢 Số Tập Dự Kiến" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
+                                <TextBlock Text="Chọn số phần chia nhỏ:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                                <ComboBox ItemsSource="{Binding EpisodeCountOptions}"
+                                          SelectedItem="{Binding SelectedEpisodeCount}"
+                                          FontSize="12" FontWeight="SemiBold" Padding="8,4"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Cột 2: Phong cách vẽ -->
+                        <Border Grid.Column="2" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="🎨 Phong Cách Vẽ (Series Style)" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
+                                <TextBlock Text="Phong cách đồng nhất cho mọi tập:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                                <ComboBox ItemsSource="{Binding StyleCards}"
+                                          SelectedItem="{Binding SelectedStyleCard}"
+                                          FontSize="12" Padding="8,4">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Icon}" Margin="0,0,6,0" FontSize="13"/>
+                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Cột 3: Giọng đọc -->
+                        <Border Grid.Column="4" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="🎙️ Giọng Thuyết Minh Cố Định" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
+                                <TextBlock Text="Giọng đọc nhận diện chuỗi:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                                <ComboBox ItemsSource="{Binding VoiceCards}"
+                                          SelectedItem="{Binding SelectedVoiceCard}"
+                                          FontSize="12" Padding="8,4">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding Gender, StringFormat=' ({0})'}" Foreground="{StaticResource TextMuted}" FontSize="11"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Nút bắt đầu phân tích -->
+                    <Button Content="🤖 AI PHÂN TÍCH &amp; LẬP DÀN Ý CHUỖI VIDEO"
+                            Command="{Binding PlanSeriesCommand}"
+                            IsEnabled="{Binding IsPlanningSeries, Converter={StaticResource InverseBoolConverter}}"
+                            Style="{StaticResource HeroSeriesBtn}"
+                            Height="48" Margin="0,6,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- STEP 2: DUYỆT DÀN Ý & SINH KỊCH BẢN (Hiện khi đã có plan) -->
+        <Border Grid.Row="1" Background="{StaticResource BgCard}" CornerRadius="10" Padding="14" BorderBrush="{StaticResource BorderDark}" BorderThickness="1"
+                Visibility="{Binding HasSeriesPlan, Converter={StaticResource BoolToVisConverter}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <!-- Series Summary Header -->
+                    <RowDefinition Height="Auto" />
+                    <!-- List of episodes -->
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Series Summary Box -->
+                <Border Grid.Row="0" Background="#161726" CornerRadius="8" Padding="12" Margin="0,0,0,10" BorderBrush="#313244" BorderThickness="1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Vertical">
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="🎬 Tên Series:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" Text="{Binding CurrentSeriesPlan.SeriesTitle, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="13" FontWeight="Bold" Background="#26273b" Foreground="{StaticResource TextPrimary}"
+                                         Padding="6,3" Margin="8,0,0,0" BorderBrush="#3d4066">
+                                    <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                                </TextBox>
+                            </Grid>
+                            <TextBlock Text="{Binding CurrentSeriesPlan.OverallPremise}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,2,0,4"/>
+                            
+                            <!-- Character Bible preview -->
+                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                <TextBlock Text="👤 Character Bible (Đồng nhất nhân vật): " FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource AccentCyan}"/>
+                                <TextBlock Text="{Binding CurrentSeriesPlan.CharacterBible}" FontSize="10.5" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" MaxWidth="500"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Back to edit premise button -->
+                        <Button Grid.Column="1" Content="✏️ Nhập Lại Ý Tưởng" Command="{Binding BackToInputCommand}"
+                                Padding="10,4" Margin="10,0,0,0" VerticalAlignment="Top" FontSize="11"/>
+                    </Grid>
+                </Border>
+
+                <!-- Episodes List -->
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding CurrentSeriesPlan.Episodes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type models:EpisodePlanItem}">
+                                <Border Background="#1a1b2e" CornerRadius="8" Padding="12" Margin="0,0,0,8" BorderBrush="#313244" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Row 0: Badge + Title -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Background="{StaticResource AccentBlue}" CornerRadius="4" Padding="6,2" Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding EpisodeNumber, StringFormat='TẬP {0}'}" FontSize="11" FontWeight="Bold" Foreground="#11111b"/>
+                                            </Border>
+                                            <TextBox Grid.Column="1" Text="{Binding EpisodeTitle, UpdateSourceTrigger=PropertyChanged}"
+                                                     FontSize="12" FontWeight="SemiBold" Background="#26273b" Foreground="{StaticResource TextPrimary}"
+                                                     Padding="6,3" BorderBrush="#3d4066">
+                                                <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                                            </TextBox>
+                                            <TextBlock Grid.Column="2" Text="{Binding SuggestedSceneCount, StringFormat='~{0} cảnh'}"
+                                                       FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </Grid>
+
+                                        <!-- Row 1: Diễn biến chính (Plot beat) -->
+                                        <TextBlock Grid.Row="1" Text="{Binding PlotBeat}" FontSize="11" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" Margin="0,3,0,4"/>
+
+                                        <!-- Row 2: Cliffhanger (Nghẹt thở) -->
+                                        <Border Grid.Row="2" Background="#2b1a2e" CornerRadius="4" Padding="8,4" Margin="0,2,0,0" BorderBrush="#6c2d62" BorderThickness="1">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="⚡ Cliffhanger kết tập: " FontSize="10.5" FontWeight="Bold" Foreground="#f38ba8"/>
+                                                <TextBlock Text="{Binding Cliffhanger}" FontSize="10.5" Foreground="#f5c2e7" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- FOOTER ACTIONS -->
+        <Border Grid.Row="2" Background="{StaticResource BgCard}" CornerRadius="10" Padding="12,10" Margin="0,12,0,0" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: Progress bar during batch generation -->
+                <StackPanel Orientation="Vertical" VerticalAlignment="Center" Margin="0,0,14,0"
+                            Visibility="{Binding IsGeneratingEpisodes, Converter={StaticResource BoolToVisConverter}}">
+                    <TextBlock Text="{Binding BatchStatusText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBlue}" Margin="0,0,0,4"/>
+                    <ProgressBar Value="{Binding BatchProgress}" Minimum="0" Maximum="100" Height="6"
+                                 Foreground="{StaticResource AccentBlue}" Background="#181825" BorderThickness="0">
+                        <ProgressBar.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="3"/></Style></ProgressBar.Resources>
+                    </ProgressBar>
+                </StackPanel>
+
+                <!-- Right buttons -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Nút áp dụng chỉ dàn ý -->
+                    <Button Content="Chỉ Áp Dụng Dàn Ý" Command="{Binding ApplyPlanOnlyCommand}"
+                            Visibility="{Binding HasSeriesPlan, Converter={StaticResource BoolToVisConverter}}"
+                            IsEnabled="{Binding IsGeneratingEpisodes, Converter={StaticResource InverseBoolConverter}}"
+                            Padding="12,6" Margin="0,0,8,0" Cursor="Hand"
+                            ToolTip="Nạp danh sách các tập vào dự án để bạn tự biên tập kịch bản từng tập sau"/>
+
+                    <!-- Nút Sinh Toàn Bộ Kịch Bản Hàng Loạt -->
+                    <Button Content="⚡ TẠO KỊCH BẢN TẤT CẢ CÁC TẬP (BATCH GENERATE)"
+                            Command="{Binding GenerateAllEpisodesCommand}"
+                            Visibility="{Binding HasSeriesPlan, Converter={StaticResource BoolToVisConverter}}"
+                            IsEnabled="{Binding IsGeneratingEpisodes, Converter={StaticResource InverseBoolConverter}}"
+                            Style="{StaticResource HeroSeriesBtn}"
+                            Height="38" Padding="16,0" Margin="0,0,8,0"
+                            ToolTip="AI sẽ tuần tự viết kịch bản chi tiết cho từng tập một và lưu vào dự án chuỗi"/>
+
+                    <!-- Nút Đóng -->
+                    <Button Content="Đóng" Click="CloseButton_Click"
+                            IsEnabled="{Binding IsGeneratingEpisodes, Converter={StaticResource InverseBoolConverter}}"
+                            Padding="14,6" Cursor="Hand"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

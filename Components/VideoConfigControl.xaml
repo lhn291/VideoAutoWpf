@@ -138,18 +138,67 @@
 
                 <!-- ACTION BUTTONS -->
                 <StackPanel Orientation="Vertical">
-                    <!-- Nút Render lớn 1-Click -->
-                    <Button Content="🚀 BẮT ĐẦU TẠO VIDEO (1-CLICK)" Command="{Binding StartRenderCommand}"
-                            IsEnabled="{Binding IsRendering, Converter={StaticResource InverseBoolConverter}}"
-                            Style="{StaticResource BtnPrimary}"
-                            FontSize="13" Height="46" Margin="0,0,0,8"
-                            ToolTip="Tự động gọi Google TTS cho audio thiếu + Imagen 3 cho ảnh thiếu + FFmpeg ghép video" />
+                    <!-- KHỐI SERIES MODE (Khi đang làm việc với Series) -->
+                    <Border Visibility="{Binding IsSeriesMode, Converter={StaticResource BoolToVisConverter}}"
+                            Background="#1e1e2e" BorderBrush="#7287fd" BorderThickness="1.5" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="🎬 XUẤT CHUỖI SERIES" FontSize="12.5" FontWeight="Bold" Foreground="#cdd6f4"/>
+                                    <TextBlock Text="{Binding CurrentSeries.SeriesTitle}" FontSize="11" Foreground="#89b4fa" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <Border Grid.Column="1" Background="#313244" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding CurrentSeries.Episodes.Count, StringFormat='{}{0} tập'}" FontSize="11" FontWeight="Bold" Foreground="#a6e3a1"/>
+                                </Border>
+                            </Grid>
 
-                    <!-- Nút Hủy (Chỉ hiện khi đang render) -->
-                    <Button Content="⛔ Dừng / Hủy Render" Command="{Binding CancelRenderCommand}"
-                            Visibility="{Binding IsRendering, Converter={StaticResource BoolToVisConverter}}"
-                            Style="{StaticResource BtnDanger}"
-                            FontSize="12" Height="36" />
+                            <!-- Tiến độ Batch Render nếu đang chạy -->
+                            <StackPanel Visibility="{Binding IsBatchRenderingSeries, Converter={StaticResource BoolToVisConverter}}" Margin="0,0,0,8">
+                                <ProgressBar Value="{Binding BatchRenderProgress}" Maximum="100" Height="8" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding BatchRenderStatusText}" FontSize="10.5" Foreground="#f9e2af" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <!-- Nút Xuất toàn bộ Series -->
+                            <Button Content="🎬 XUẤT TOÀN BỘ SERIES (BATCH)" Command="{Binding StartBatchRenderSeriesCommand}"
+                                    IsEnabled="{Binding IsRendering, Converter={StaticResource InverseBoolConverter}}"
+                                    Background="#7287fd" Foreground="White" BorderThickness="0" FontWeight="Bold"
+                                    FontSize="12.5" Height="42" Margin="0,0,0,6"
+                                    ToolTip="Tự động duyệt qua từng tập, gọi AI tạo ảnh, lồng tiếng và render video trọn gói" />
+
+                            <!-- Nút Render riêng tập đang chọn -->
+                            <Button Content="▶️ Chỉ Xuất Tập Này" Command="{Binding StartRenderCommand}"
+                                    IsEnabled="{Binding IsRendering, Converter={StaticResource InverseBoolConverter}}"
+                                    Background="#313244" Foreground="#cdd6f4" BorderBrush="#45475a" BorderThickness="1"
+                                    FontSize="11.5" Height="34" Margin="0,0,0,4"
+                                    ToolTip="Chỉ render video cho riêng tập phim đang chọn trên màn hình" />
+
+                            <!-- Nút Dừng Render Series -->
+                            <Button Content="⛔ Dừng / Hủy Render" Command="{Binding CancelRenderCommand}"
+                                    Visibility="{Binding IsRendering, Converter={StaticResource BoolToVisConverter}}"
+                                    Style="{StaticResource BtnDanger}"
+                                    FontSize="11.5" Height="32" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- KHỐI CHẾ ĐỘ THƯỜNG (Khi KHÔNG trong Series Mode) -->
+                    <StackPanel Visibility="{Binding IsSeriesMode, Converter={StaticResource InverseBoolToVisConverter}}">
+                        <!-- Nút Render lớn 1-Click -->
+                        <Button Content="🚀 BẮT ĐẦU TẠO VIDEO (1-CLICK)" Command="{Binding StartRenderCommand}"
+                                IsEnabled="{Binding IsRendering, Converter={StaticResource InverseBoolConverter}}"
+                                Style="{StaticResource BtnPrimary}"
+                                FontSize="13" Height="46" Margin="0,0,0,8"
+                                ToolTip="Tự động gọi Google TTS cho audio thiếu + Imagen 3 cho ảnh thiếu + FFmpeg ghép video" />
+
+                        <!-- Nút Hủy (Chỉ hiện khi đang render) -->
+                        <Button Content="⛔ Dừng / Hủy Render" Command="{Binding CancelRenderCommand}"
+                                Visibility="{Binding IsRendering, Converter={StaticResource BoolToVisConverter}}"
+                                Style="{StaticResource BtnDanger}"
+                                FontSize="12" Height="36" />
+                    </StackPanel>
                 </StackPanel>
 
             </StackPanel>

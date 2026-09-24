@@ -208,6 +208,119 @@ public class GeminiScriptService
     }
 
     /// <summary>
+    /// AI Lập kế hoạch Series nhiều tập: Phân chia các hồi, xác định cliffhangers và Character Bible
+    /// </summary>
+    public async Task<SeriesPlan> GenerateSeriesPlanAsync(
+        string topicOrPremise,
+        int totalEpisodes = 3,
+        string styleKey = "dark-anime",
+        string voiceKey = "vi-VN-Wavenet-B",
+        string location = "us-central1",
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(topicOrPremise))
+            throw new ArgumentException("Chủ đề hoặc cốt truyện không được để trống.", nameof(topicOrPremise));
+
+        var token = await _authService.GetAccessTokenAsync();
+        var projectId = _authService.ProjectId;
+
+        var systemInstruction =
+            "You are an acclaimed showrunner and executive producer for viral short episodic video series on TikTok, YouTube Shorts, and Reels. " +
+            "Your task is to take a premise, long story, or topic and divide it into a gripping MULTI-EPISODE series. " +
+            "Every episode must have a strong hook, rising action, and an INTENSE CLIFFHANGER at the end (except the final episode which resolves the series). " +
+            "You MUST also formulate a detailed 'character_bible' in English describing the protagonist and key characters' exact visual features (hair, eyes, face, outfit, colors, accessories) so Imagen 3 can render them identically in every scene of every episode. " +
+            "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
+            "The JSON structure must exactly match this schema:\n" +
+            "{\n" +
+            "  \"series_title\": \"Tên Series giật gân, cuốn hút bằng tiếng Việt\",\n" +
+            "  \"overall_premise\": \"Tóm tắt tổng quan mạch truyện toàn bộ series bằng tiếng Việt (3-4 câu)\",\n" +
+            "  \"character_bible\": \"Extremely detailed English visual character description for Imagen 3 consistency (e.g. 'A 28-year-old Vietnamese detective named Minh, short messy black hair, sharp jawline, wearing a charcoal grey trench coat over a white collared shirt, silver wristwatch on left wrist, intense focused dark eyes'). If no character, describe the unified recurring environment.\",\n" +
+            $"  \"suggested_style\": \"{styleKey}\",\n" +
+            $"  \"suggested_voice\": \"{voiceKey}\",\n" +
+            "  \"episodes\": [\n" +
+            "    {\n" +
+            "      \"episode_number\": 1,\n" +
+            "      \"episode_title\": \"Tiêu đề tập 1 (ngắn gọn, tò mò)\",\n" +
+            "      \"plot_beat\": \"Tóm tắt diễn biến chính của tập này bằng tiếng Việt\",\n" +
+            "      \"episode_hook\": \"Câu thoại hoặc ý tưởng mở đầu gây sốc của tập 1\",\n" +
+            "      \"cliffhanger\": \"Điểm nghẹt thở kết thúc tập này khiến người xem bắt buộc phải xem tiếp tập 2\",\n" +
+            "      \"suggested_scene_count\": 5\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}";
+
+        var userPrompt = $"Hãy lên kế hoạch chuỗi video {totalEpisodes} tập dựa trên nội dung sau:\n'{topicOrPremise}'\n\n" +
+                         $"Yêu cầu chia thành đúng {totalEpisodes} tập với kịch bản nối tiếp liền mạch, cliffhanger kịch tính cuối mỗi tập.";
+
+        return await CallGeminiForJson<SeriesPlan>(systemInstruction, userPrompt, projectId, location, token, ct);
+    }
+
+    /// <summary>
+    /// AI Sinh kịch bản chi tiết cho 1 tập trong Series, đảm bảo đồng bộ Character Bible và Cliffhanger
+    /// </summary>
+    public async Task<ScriptWorkspace> GenerateEpisodeScriptAsync(
+        SeriesPlan seriesPlan,
+        EpisodePlanItem episodePlan,
+        int totalEpisodes,
+        string previousEpisodeEndingContext = "",
+        string location = "us-central1",
+        CancellationToken ct = default)
+    {
+        var token = await _authService.GetAccessTokenAsync();
+        var projectId = _authService.ProjectId;
+
+        var chosenStyle = StylePrompts.TryGetValue(seriesPlan.SuggestedStyle, out var styleVal) ? styleVal : StylePrompts["dark-anime"];
+        var numScenes = episodePlan.SuggestedSceneCount > 0 ? episodePlan.SuggestedSceneCount : 5;
+        var epNum = episodePlan.EpisodeNumber;
+        var isLastEp = epNum >= totalEpisodes;
+
+        var systemInstruction =
+            "You are an expert short video screenwriter writing a specific episode of a viral video series. " +
+            "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
+            "The JSON structure must exactly match this schema:\n" +
+            "{\n" +
+            "  \"metadata\": {\n" +
+            "    \"ratio\": \"9:16\",\n" +
+            $"    \"voice\": \"{seriesPlan.SuggestedVoice}\",\n" +
+            "    \"motion_effect\": \"auto\",\n" +
+            "    \"enable_fade\": true,\n" +
+            "    \"enable_vignette\": false,\n" +
+            "    \"music\": \"dramatic\",\n" +
+            "    \"enable_music\": true,\n" +
+            "    \"music_volume\": 0.15,\n" +
+            "    \"enable_subtitles\": true,\n" +
+            "    \"subtitle_style\": \"cinematic\",\n" +
+            "    \"subtitle_font\": \"Segoe UI Bold\"\n" +
+            "  },\n" +
+            "  \"publish_info\": {\n" +
+            $"    \"title\": \"🔥 {seriesPlan.SeriesTitle} - [TẬP {epNum}]: {episodePlan.EpisodeTitle} | #shorts\",\n" +
+            "    \"alternative_titles\": \"- Gợi ý tiêu đề 2\\n- Gợi ý tiêu đề 3\",\n" +
+            $"    \"description\": \"Tóm tắt tập {epNum}. " + (isLastEp ? "Đại kết cục của series!" : $"Đón xem TẬP {epNum + 1} vào ngày mai! Hãy bấm Follow kênh ngay nhé!") + "\",\n" +
+            $"    \"hashtags\": \"#series #tap{epNum} #shorts #tiktok #reels #viral #xuhuong\"\n" +
+            "  },\n" +
+            "  \"scenes\": [\n" +
+            "    { \"text\": \"Vietnamese voiceover...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" }\n" +
+            "  ]\n" +
+            "}\n\n" +
+            "Guidelines:\n" +
+            $"1. Video ratio 9:16. Voice is '{seriesPlan.SuggestedVoice}'.\n" +
+            $"2. Generate exactly {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'.\n" +
+            $"3. Scene 1 hook: {episodePlan.EpisodeHook}. (If Episode > 1, start with a quick 1-sentence recap or immediate escalation).\n" +
+            $"4. Final scene MUST end on this cliffhanger: {episodePlan.Cliffhanger}\n" +
+            $"5. CRITICAL: The 'image_prompt' MUST start with this exact style prefix: '{chosenStyle}' AND include the character description verbatim: '{seriesPlan.CharacterBible}' in every scene where characters appear.\n";
+
+        var userPrompt = $"Series: '{seriesPlan.SeriesTitle}' (Total {totalEpisodes} episodes)\n" +
+                         $"Overall Plot: {seriesPlan.OverallPremise}\n" +
+                         $"Currently writing Episode {epNum}/{totalEpisodes}: '{episodePlan.EpisodeTitle}'\n" +
+                         $"Episode Plot Beat: {episodePlan.PlotBeat}\n" +
+                         (string.IsNullOrWhiteSpace(previousEpisodeEndingContext) ? "" : $"Context from previous episode ending: {previousEpisodeEndingContext}\n") +
+                         $"Episode Cliffhanger ending: {episodePlan.Cliffhanger}\n\n" +
+                         $"Please generate the complete JSON script for Episode {epNum} with exactly {numScenes} scenes.";
+
+        return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);
+    }
+
+    /// <summary>
     /// Overload cũ để backward-compatible với code gọi trực tiếp (nếu cần)
     /// </summary>
     public async Task<ScriptWorkspace> GenerateScriptAsync(
