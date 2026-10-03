@@ -529,7 +529,9 @@ public class GeminiScriptService
         CancellationToken ct) where T : class
     {
         var apiKey = ApiKey;
-        var modelsToTry = new[] { "gemini-2.0-flash", "gemini-1.5-flash" };
+        var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
+            ? new[] { "gemini-2.0-flash", "gemini-1.5-flash" }
+            : new[] { "gemini-1.5-flash-002", "gemini-1.5-flash-001", "gemini-2.0-flash-001", "gemini-1.5-flash", "gemini-2.0-flash" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
@@ -632,6 +634,11 @@ public class GeminiScriptService
         if (lastError != null && (lastError.Contains("BILLING_DISABLED") || lastError.Contains("billing to be enabled")))
         {
             throw new Exception("Dự án Google Cloud Vertex AI chưa bật Billing. Vui lòng bật Billing trên Google Cloud Console hoặc nhập Gemini API Key miễn phí từ Google AI Studio (aistudio.google.com).");
+        }
+
+        if (string.IsNullOrWhiteSpace(apiKey) && lastError != null && (lastError.Contains("PERMISSION_DENIED") || lastError.Contains("aiplatform.endpoints.predict") || lastError.Contains("was not found or your project does not have access to it")))
+        {
+            throw new Exception($"Service Account trong file google_credentials.json (project: {projectId}) chưa được cấp quyền Vertex AI trên Google Cloud.\n\n👉 Cách cấp quyền: Vào Google Cloud Console > IAM > Gán quyền 'Vertex AI User' (roles/aiplatform.user) cho service account 'tts-app@{projectId}.iam.gserviceaccount.com'.\nHoặc lấy Gemini API Key miễn phí từ aistudio.google.com.");
         }
 
         throw new Exception($"Không thể gọi Gemini AI: {lastError}");
