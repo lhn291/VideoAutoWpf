@@ -8,6 +8,7 @@ public partial class SocialPublishWindow : Window
     public SocialPublishWindow(MainViewModel viewModel)
     {
         InitializeComponent();
+        WindowState = WindowState.Maximized;
         DataContext = viewModel;
     }
 

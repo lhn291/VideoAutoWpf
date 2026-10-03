@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using VideoAutoWpf.Services;
 
 namespace VideoAutoWpf.Models;
 
@@ -6,6 +7,12 @@ public partial class SceneItem : ObservableObject
 {
     [ObservableProperty]
     private int _index = 1;
+
+    /// <summary>
+    /// Word-level timestamps từ Speech-to-Text Chirp 2.
+    /// Dùng để render phụ đề karaoke nhảy từng chữ.
+    /// </summary>
+    public List<WordTimestamp>? WordTimestamps { get; set; }
 
     [ObservableProperty]
     private string? _text;

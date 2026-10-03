@@ -9,7 +9,8 @@
         Title="Tạo Chuỗi Video Nhiều Tập (Gemini AI Multi-Episode Engine)" 
         Height="760" Width="980"
         MinHeight="620" MinWidth="800"
-        WindowStartupLocation="CenterOwner"
+        WindowState="Maximized"
+        WindowStartupLocation="CenterScreen"
         Background="{StaticResource BgDark}"
         Foreground="{StaticResource TextPrimary}"
         FontFamily="Segoe UI, Segoe UI Variable, Arial"
@@ -106,32 +107,79 @@
                         <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></TextBox.Resources>
                     </TextBox>
 
-                    <!-- Cấu hình 3 cột: Số tập, Phong cách vẽ, Giọng đọc -->
-                    <Grid Margin="0,0,0,16">
+                    <!-- Cấu hình Series: 2 Hàng thông số chuyên sâu -->
+                    <!-- HÀNG 1: Số tập, Số cảnh mỗi tập, Tỷ lệ khung hình -->
+                    <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="12" />
-                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="12" />
-                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
                         <!-- Cột 1: Số tập -->
                         <Border Grid.Column="0" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="🔢 Số Tập Dự Kiến" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
-                                <TextBlock Text="Chọn số phần chia nhỏ:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                                <TextBlock Text="🔢 Số Tập Dự Kiến" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Chọn hoặc gõ số tập (2-50+):" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
                                 <ComboBox ItemsSource="{Binding EpisodeCountOptions}"
                                           SelectedItem="{Binding SelectedEpisodeCount}"
+                                          IsEditable="True"
                                           FontSize="12" FontWeight="SemiBold" Padding="8,4"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Cột 2: Số cảnh mỗi tập -->
+                        <Border Grid.Column="2" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="🎬 Số Cảnh Mỗi Tập" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding EstimatedDurationPerEpisode}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}" Margin="0,0,0,8"/>
+                                <ComboBox ItemsSource="{Binding ScenesPerEpisodeOptions}"
+                                          SelectedItem="{Binding SelectedScenesPerEpisode}"
+                                          IsEditable="True"
+                                          FontSize="12" FontWeight="SemiBold" Padding="8,4"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Cột 3: Tỷ lệ video -->
+                        <Border Grid.Column="4" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="📐 Tỷ Lệ Khung Hình" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Định dạng video xuất:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                                <ComboBox ItemsSource="{Binding AspectRatioOptions}"
+                                          SelectedItem="{Binding SelectedAspectRatioDisplay}"
+                                          FontSize="12" FontWeight="SemiBold" Padding="8,4"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- HÀNG 2: Thể loại/Nhịp điệu, Phong cách vẽ, Giọng đọc -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.2*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Cột 1: Thể loại & Nhịp điệu -->
+                        <Border Grid.Column="0" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="🎭 Thể Loại &amp; Nhịp Điệu" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Định hình cách AI xây dựng hook &amp; twist:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                                <ComboBox ItemsSource="{Binding SeriesToneOptions}"
+                                          SelectedItem="{Binding SelectedSeriesTone}"
+                                          FontSize="11.5" Padding="8,4"/>
                             </StackPanel>
                         </Border>
 
                         <!-- Cột 2: Phong cách vẽ -->
                         <Border Grid.Column="2" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="🎨 Phong Cách Vẽ (Series Style)" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
-                                <TextBlock Text="Phong cách đồng nhất cho mọi tập:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                                <TextBlock Text="🎨 Phong Cách Vẽ (Series Style)" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Nhất quán cho mọi tập:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
                                 <ComboBox ItemsSource="{Binding StyleCards}"
                                           SelectedItem="{Binding SelectedStyleCard}"
                                           FontSize="12" Padding="8,4">
@@ -150,8 +198,8 @@
                         <!-- Cột 3: Giọng đọc -->
                         <Border Grid.Column="4" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
                             <StackPanel>
-                                <TextBlock Text="🎙️ Giọng Thuyết Minh Cố Định" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
-                                <TextBlock Text="Giọng đọc nhận diện chuỗi:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                                <TextBlock Text="🎙️ Giọng Thuyết Minh" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
+                                <TextBlock Text="Giọng nhận diện thương hiệu:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
                                 <ComboBox ItemsSource="{Binding VoiceCards}"
                                           SelectedItem="{Binding SelectedVoiceCard}"
                                           FontSize="12" Padding="8,4">
@@ -218,9 +266,17 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <!-- Back to edit premise button -->
-                        <Button Grid.Column="1" Content="✏️ Nhập Lại Ý Tưởng" Command="{Binding BackToInputCommand}"
-                                Padding="10,4" Margin="10,0,0,0" VerticalAlignment="Top" FontSize="11"/>
+                        <!-- Actions on plan -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="10,0,0,0">
+                            <Button Content="➕ Thêm Tập" Command="{Binding AddEpisodeCommand}"
+                                    Padding="10,5" Margin="0,0,6,0" FontSize="11" Background="#2e3860" Foreground="#89b4fa" FontWeight="SemiBold"
+                                    ToolTip="Thêm 1 tập mới vào cuối chuỗi"/>
+                            <Button Content="🔄 Đồng Bộ Cảnh" Command="{Binding ApplySceneCountToAllEpisodesCommand}"
+                                    Padding="10,5" Margin="0,0,6,0" FontSize="11" Background="#282245" Foreground="#cba6f7" FontWeight="SemiBold"
+                                    ToolTip="Gán số cảnh mặc định cho toàn bộ các tập trong danh sách"/>
+                            <Button Content="✏️ Nhập Lại Ý Tưởng" Command="{Binding BackToInputCommand}"
+                                    Padding="10,5" FontSize="11"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
@@ -238,7 +294,7 @@
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
 
-                                        <!-- Row 0: Badge + Title -->
+                                        <!-- Row 0: Badge + Title + Scene count + Delete button -->
                                         <Grid Grid.Row="0" Margin="0,0,0,4">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
@@ -253,8 +309,20 @@
                                                      Padding="6,3" BorderBrush="#3d4066">
                                                 <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
                                             </TextBox>
-                                            <TextBlock Grid.Column="2" Text="{Binding SuggestedSceneCount, StringFormat='~{0} cảnh'}"
-                                                       FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                <TextBlock Text="🎬" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <TextBox Text="{Binding SuggestedSceneCount, UpdateSourceTrigger=PropertyChanged}"
+                                                         Width="36" TextAlignment="Center" FontSize="11" FontWeight="Bold"
+                                                         Background="#26273b" Foreground="{StaticResource AccentYellow}" Padding="2"
+                                                         BorderBrush="#3d4066" ToolTip="Số cảnh chi tiết AI sẽ viết cho tập này">
+                                                    <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                                                </TextBox>
+                                                <TextBlock Text="cảnh" FontSize="10.5" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="4,0,8,0"/>
+                                                <Button Content="🗑️" ToolTip="Xóa tập này" FontSize="11" Padding="4,2" Background="Transparent"
+                                                        BorderThickness="0" Cursor="Hand" Foreground="{StaticResource AccentRed}"
+                                                        Command="{Binding DataContext.RemoveEpisodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </StackPanel>
                                         </Grid>
 
                                         <!-- Row 1: Diễn biến chính (Plot beat) -->

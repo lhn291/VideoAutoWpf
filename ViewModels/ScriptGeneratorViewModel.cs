@@ -355,6 +355,56 @@ public partial class ScriptGeneratorViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Nạp dữ liệu ý tưởng, công thức hook và phong cách trực tiếp từ YouTube Analytics
+    /// </summary>
+    public void InitFromAnalyticsRequest(CreateVideoFromAnalyticsRequest req)
+    {
+        Topic = req.Title;
+
+        var sb = new System.Text.StringBuilder();
+        if (!string.IsNullOrWhiteSpace(req.HookOpening))
+        {
+            sb.AppendLine($"[CHIẾN LƯỢC RETENTION HOOK 0-15S TỪ {req.SourceInfo}]");
+            sb.AppendLine($"- Phân cảnh 1 (Scene 1) BẮT BUỘC mở màn bằng câu Hook: \"{req.HookOpening}\"");
+            if (!string.IsNullOrWhiteSpace(req.HookStrategy))
+                sb.AppendLine($"- Kỹ thuật giữ chân: {req.HookStrategy}");
+            if (!string.IsNullOrWhiteSpace(req.TargetEmotion))
+                sb.AppendLine($"- Cảm xúc nhắm đến: {req.TargetEmotion}");
+            if (!string.IsNullOrWhiteSpace(req.TargetAudience))
+                sb.AppendLine($"- Khán giả mục tiêu: {req.TargetAudience}");
+        }
+        CharacterRules = sb.ToString();
+
+        if (!string.IsNullOrWhiteSpace(req.SuggestedStyle))
+        {
+            var matchStyle = StyleCards.FirstOrDefault(s => s.Key.Equals(req.SuggestedStyle, StringComparison.OrdinalIgnoreCase));
+            if (matchStyle != null)
+            {
+                SelectedStyleCard = matchStyle;
+                SelectedStyleDisplayText = $"{matchStyle.Icon} {matchStyle.Title}";
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(req.SuggestedBgm))
+        {
+            var matchBgm = AvailableBgmTracks.FirstOrDefault(t =>
+                t.Id.Equals(req.SuggestedBgm, StringComparison.OrdinalIgnoreCase) ||
+                t.Mood.Equals(req.SuggestedBgm, StringComparison.OrdinalIgnoreCase));
+            if (matchBgm != null)
+            {
+                SelectedBgmTrack = matchBgm;
+                EnableBgm = matchBgm.Id != "none";
+            }
+        }
+
+        StatusText = $"🎯 Đã nạp ý tưởng & retention hook từ {req.SourceInfo}! Đang phân tích kịch bản...";
+        
+        // Tự động kích hoạt AI Planning
+        _ = GeneratePlan();
+    }
+
+
+    /// <summary>
     /// Khi user bấm vào 1 Topic Card → set genre preset (style + tone + voice)
     /// </summary>
     [RelayCommand]

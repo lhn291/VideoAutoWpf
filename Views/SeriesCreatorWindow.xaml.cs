@@ -10,15 +10,22 @@ public partial class SeriesCreatorWindow : Window
     public SeriesCreatorViewModel ViewModel { get; }
     public SeriesProject? ResultSeriesProject => ViewModel.ResultSeriesProject;
 
-    public SeriesCreatorWindow(GeminiScriptService geminiService)
+    public SeriesCreatorWindow(GeminiScriptService geminiService, CreateVideoFromAnalyticsRequest? analyticsRequest = null)
     {
         InitializeComponent();
+        WindowState = WindowState.Maximized;
         ViewModel = new SeriesCreatorViewModel(geminiService);
         ViewModel.RequestClose = (dialogResult) =>
         {
             DialogResult = dialogResult;
             Close();
         };
+
+        if (analyticsRequest != null)
+        {
+            ViewModel.InitFromAnalyticsRequest(analyticsRequest);
+        }
+
         DataContext = ViewModel;
     }
 

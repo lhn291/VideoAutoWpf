@@ -27,6 +27,16 @@
 
             <!-- Status Badges -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- YouTube Analytics Button -->
+                <Button Command="{Binding OpenYouTubeAnalyticsCommand}" 
+                        Padding="10,6" Margin="0,0,8,0" Cursor="Hand"
+                        Background="#2a1520" BorderBrush="#FF0000" BorderThickness="1" Foreground="#f38ba8"
+                        ToolTip="Mở công cụ phân tích YouTube: Nghiên cứu kênh, phân tích đối thủ, tìm video trending &amp; từ khóa SEO">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="▶" FontSize="12" Foreground="#FF0000" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="YouTube Analytics" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
                 <!-- Google Cloud Status -->
                 <Border Background="#26273b" CornerRadius="8" Padding="10,6" Margin="0,0,8,0" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">

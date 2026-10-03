@@ -301,7 +301,10 @@ public partial class FFmpegService : IFFmpegService
                     config.SubtitleStyle,
                     config.SubtitleFont,
                     tempDir,
-                    sceneNum);
+                    sceneNum,
+                    scene.WordTimestamps,
+                    config.EnableKaraokeSubtitles,
+                    config.KaraokeHighlightColor);
 
                 tempSegmentFiles.Add(segmentPath);
                 scene.Status = "Hoàn thành";
@@ -434,7 +437,10 @@ public partial class FFmpegService : IFFmpegService
         string subtitleStyle = "cinematic",
         string subtitleFont = "Segoe UI Bold",
         string? tempDir = null,
-        int sceneNumber = 1)
+        int sceneNumber = 1,
+        List<WordTimestamp>? wordTimestamps = null,
+        bool enableKaraoke = false,
+        string karaokeHighlightColor = "#ffd43b")
     {
         string filterString;
         var durStr = duration.ToString("0.000", CultureInfo.InvariantCulture);
@@ -514,33 +520,49 @@ public partial class FFmpegService : IFFmpegService
         {
             try
             {
-                var isTicker = subtitleStyle.Equals("ticker", StringComparison.OrdinalIgnoreCase);
-                var maxChars = width > height ? 48 : 34; // 16:9 vs 9:16
-                var formattedText = isTicker 
-                    ? subtitleText.Trim().Replace("\r", " ").Replace("\n", " ") 
-                    : WrapText(subtitleText.Trim(), maxChars);
-
-                var subTxtFile = Path.Combine(tempDir, $"subtitle_{sceneNumber:D3}.txt");
-                await File.WriteAllTextAsync(subTxtFile, formattedText, new UTF8Encoding(false), ct);
-
-                var safeTxt = subTxtFile.Replace('\\', '/').Replace(":", "\\:");
                 var fontFile = ResolveFontFile(subtitleFont);
                 var safeFont = fontFile.Replace('\\', '/').Replace(":", "\\:");
-
                 int fontSize = width > height ? Math.Max(28, height / 26) : Math.Max(32, height / 36);
                 int yOffset = width > height ? (int)(height * 0.10) : (int)(height * 0.12);
 
-                string drawTextFilter = subtitleStyle.ToLowerInvariant() switch
+                // ── CHẾ ĐỘ KARAOKE: Phụ đề nhảy từng chữ (Speech-to-Text Chirp 2) ──
+                if (enableKaraoke && wordTimestamps != null && wordTimestamps.Count > 0)
                 {
-                    "boxed" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=14:borderw=1:bordercolor=black@0.5:x=(w-text_w)/2:y=h-text_h-{yOffset}",
-                    "viral_yellow" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize + 2}:fontcolor=#ffd43b:borderw=4:bordercolor=black:shadowcolor=black@0.85:shadowx=3:shadowy=3:x=(w-text_w)/2:y=h-text_h-{yOffset}",
-                    "neon" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=#89dceb:borderw=2:bordercolor=black:shadowcolor=#1e66f5@0.85:shadowx=3:shadowy=3:box=1:boxcolor=#11111b@0.5:boxborderw=10:x=(w-text_w)/2:y=h-text_h-{yOffset}",
-                    "gold" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=#f9e2af:borderw=2:bordercolor=#181825:shadowcolor=black@0.65:shadowx=2:shadowy=2:x=(w-text_w)/2:y=h-text_h-{yOffset}",
-                    "ticker" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={Math.Max(26, fontSize - 6)}:fontcolor=white:box=1:boxcolor=#11111b@0.85:boxborderw=12:borderw=2:bordercolor=black:x='w-t*200':y=h-text_h-36",
-                    "cinematic" or _ => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=white:borderw=3:bordercolor=black@0.9:shadowcolor=black@0.7:shadowx=2:shadowy=2:x=(w-text_w)/2:y=h-text_h-{yOffset}"
-                };
+                    var karaokeFilters = BuildKaraokeDrawTextFilters(
+                        wordTimestamps, safeFont, fontSize, yOffset, width, height,
+                        karaokeHighlightColor, tempDir, sceneNumber);
+                    filterParts.AddRange(karaokeFilters);
 
-                filterParts.Add(drawTextFilter);
+                    progress?.Report(new GenerationProgress
+                    {
+                        LogMessage = $"[Cảnh {sceneNumber}] 🎤 Karaoke: {wordTimestamps.Count} từ được highlight theo thời gian thực."
+                    });
+                }
+                else
+                {
+                    // ── CHẾ ĐỘ THƯỜNG: Phụ đề tĩnh (giữ nguyên logic cũ) ──
+                    var isTicker = subtitleStyle.Equals("ticker", StringComparison.OrdinalIgnoreCase);
+                    var maxChars = width > height ? 48 : 34; // 16:9 vs 9:16
+                    var formattedText = isTicker 
+                        ? subtitleText.Trim().Replace("\r", " ").Replace("\n", " ") 
+                        : WrapText(subtitleText.Trim(), maxChars);
+
+                    var subTxtFile = Path.Combine(tempDir, $"subtitle_{sceneNumber:D3}.txt");
+                    await File.WriteAllTextAsync(subTxtFile, formattedText, new UTF8Encoding(false), ct);
+                    var safeTxt = subTxtFile.Replace('\\', '/').Replace(":", "\\:");
+
+                    string drawTextFilter = subtitleStyle.ToLowerInvariant() switch
+                    {
+                        "boxed" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=14:borderw=1:bordercolor=black@0.5:x=(w-text_w)/2:y=h-text_h-{yOffset}",
+                        "viral_yellow" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize + 2}:fontcolor=#ffd43b:borderw=4:bordercolor=black:shadowcolor=black@0.85:shadowx=3:shadowy=3:x=(w-text_w)/2:y=h-text_h-{yOffset}",
+                        "neon" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=#89dceb:borderw=2:bordercolor=black:shadowcolor=#1e66f5@0.85:shadowx=3:shadowy=3:box=1:boxcolor=#11111b@0.5:boxborderw=10:x=(w-text_w)/2:y=h-text_h-{yOffset}",
+                        "gold" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=#f9e2af:borderw=2:bordercolor=#181825:shadowcolor=black@0.65:shadowx=2:shadowy=2:x=(w-text_w)/2:y=h-text_h-{yOffset}",
+                        "ticker" => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={Math.Max(26, fontSize - 6)}:fontcolor=white:box=1:boxcolor=#11111b@0.85:boxborderw=12:borderw=2:bordercolor=black:x='w-t*200':y=h-text_h-36",
+                        "cinematic" or _ => $"drawtext=fontfile='{safeFont}':textfile='{safeTxt}':fontsize={fontSize}:fontcolor=white:borderw=3:bordercolor=black@0.9:shadowcolor=black@0.7:shadowx=2:shadowy=2:x=(w-text_w)/2:y=h-text_h-{yOffset}"
+                    };
+
+                    filterParts.Add(drawTextFilter);
+                }
             }
             catch (Exception ex)
             {
@@ -587,6 +609,161 @@ public partial class FFmpegService : IFFmpegService
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Xây dựng chuỗi drawtext filters cho chế độ Karaoke — phụ đề nhảy từng chữ.
+    /// 
+    /// Cơ chế hoạt động:
+    /// - Chia word timestamps thành các nhóm (dòng) dựa trên maxCharsPerLine.
+    /// - Mỗi dòng được render bằng 2 lớp drawtext chồng lên nhau:
+    ///   1. Lớp nền (chữ trắng): Hiển thị toàn bộ dòng khi dòng đang active.
+    ///   2. Lớp highlight (chữ vàng): Từng từ được bật/tắt chính xác theo timestamp
+    ///      bằng FFmpeg `enable` expression: enable='between(t, startTime, endTime)'.
+    /// - Kết quả: Từ nào đang được đọc → đổi sang màu vàng nổi bật, tạo hiệu ứng
+    ///   karaoke real-time y hệt CapCut Pro / Hormozi / Alex Earle style.
+    /// </summary>
+    private static List<string> BuildKaraokeDrawTextFilters(
+        List<WordTimestamp> words,
+        string safeFont,
+        int fontSize,
+        int yOffset,
+        int width,
+        int height,
+        string highlightColor,
+        string tempDir,
+        int sceneNumber)
+    {
+        var filters = new List<string>();
+        if (words.Count == 0) return filters;
+
+        // Tăng font size cho karaoke (chữ cần to hơn để đọc nhanh)
+        var karaokeFontSize = fontSize + 4;
+        var maxChars = width > height ? 40 : 28;
+
+        // ── Bước 1: Chia words thành các dòng (lines) ──
+        var lines = new List<KaraokeLine>();
+        var currentLineWords = new List<WordTimestamp>();
+        var currentLineLength = 0;
+
+        foreach (var word in words)
+        {
+            if (currentLineLength + word.Word.Length + 1 > maxChars && currentLineWords.Count > 0)
+            {
+                lines.Add(new KaraokeLine(currentLineWords));
+                currentLineWords = new List<WordTimestamp>();
+                currentLineLength = 0;
+            }
+            currentLineWords.Add(word);
+            currentLineLength += word.Word.Length + 1;
+        }
+        if (currentLineWords.Count > 0)
+            lines.Add(new KaraokeLine(currentLineWords));
+
+        // ── Bước 2: Tạo drawtext filter cho từng dòng ──
+        for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
+        {
+            var line = lines[lineIdx];
+            var lineText = line.FullText;
+
+            // Tạo file text cho dòng này
+            var lineTxtFile = Path.Combine(tempDir, $"karaoke_{sceneNumber:D3}_line{lineIdx:D2}.txt");
+            File.WriteAllText(lineTxtFile, lineText, new UTF8Encoding(false));
+            var safeLineTxt = lineTxtFile.Replace('\\', '/').Replace(":", "\\:");
+
+            var lineStartStr = line.StartTime.ToString("0.000", CultureInfo.InvariantCulture);
+            var lineEndStr = line.EndTime.ToString("0.000", CultureInfo.InvariantCulture);
+
+            // Lớp 1: Nền chữ trắng — hiển thị toàn bộ dòng khi dòng active
+            var baseFilter = $"drawtext=fontfile='{safeFont}':textfile='{safeLineTxt}'"
+                + $":fontsize={karaokeFontSize}:fontcolor=white"
+                + $":borderw=3:bordercolor=black@0.9"
+                + $":shadowcolor=black@0.7:shadowx=2:shadowy=2"
+                + $":x=(w-text_w)/2:y=h-text_h-{yOffset}"
+                + $":enable='between(t,{lineStartStr},{lineEndStr})'";
+            filters.Add(baseFilter);
+
+            // Lớp 2: Highlight từng từ — mỗi từ có enable riêng theo timestamp
+            // Sử dụng kỹ thuật: vẽ lại chỉ phần text đã qua bằng màu highlight
+            var xAccumulated = 0;
+            foreach (var word in line.Words)
+            {
+                var wordTxtFile = Path.Combine(tempDir, $"karaoke_{sceneNumber:D3}_line{lineIdx:D2}_w{xAccumulated:D4}.txt");
+                File.WriteAllText(wordTxtFile, word.Word, new UTF8Encoding(false));
+                var safeWordTxt = wordTxtFile.Replace('\\', '/').Replace(":", "\\:");
+
+                var wordStartStr = word.StartTime.ToString("0.000", CultureInfo.InvariantCulture);
+                var wordEndStr = word.EndTime.ToString("0.000", CultureInfo.InvariantCulture);
+
+                // Tính vị trí X của từ này trong dòng
+                // Sử dụng text_w để tính offset dựa trên vị trí tương đối
+                var prefix = line.GetTextBefore(word);
+                var prefixTxtFile = Path.Combine(tempDir, $"karaoke_{sceneNumber:D3}_line{lineIdx:D2}_pfx{xAccumulated:D4}.txt");
+                File.WriteAllText(prefixTxtFile, string.IsNullOrEmpty(prefix) ? " " : prefix, new UTF8Encoding(false));
+                var safePrefixTxt = prefixTxtFile.Replace('\\', '/').Replace(":", "\\:");
+
+                // Vẽ từ highlight với vị trí X = (center offset của dòng) + (chiều rộng prefix)
+                // Dùng kỹ thuật: x = (w - lineTextWidth) / 2 + prefixWidth
+                // FFmpeg expression: x = (w - text_w)/2 nhưng cần biết lineTextWidth trước
+                // → Cách đơn giản hơn: dùng drawtext với text=fullLine nhưng fontcolor theo từ
+                // → Cách thực tế nhất: vẽ từng từ highlight chồng lên đúng vị trí
+                var highlightFilter = $"drawtext=fontfile='{safeFont}':textfile='{safeWordTxt}'"
+                    + $":fontsize={karaokeFontSize}:fontcolor={highlightColor}"
+                    + $":borderw=3:bordercolor=black@0.9"
+                    + $":shadowcolor={highlightColor}@0.4:shadowx=0:shadowy=0"
+                    + $":x=(w-main_w)/2+{(prefix.Length > 0 ? $"tw('{safePrefixTxt}','{safeFont}',{karaokeFontSize})" : "0")}"
+                    + $":y=h-text_h-{yOffset}"
+                    + $":enable='between(t,{wordStartStr},{wordEndStr})'";
+
+                // Fallback đơn giản hơn: sử dụng char offset ratio
+                // x = (w - lineW) / 2 + (charOffset / lineLen) * lineW
+                var charOffset = prefix.Length;
+                var lineLen = Math.Max(lineText.Length, 1);
+                var highlightFilterSimple = $"drawtext=fontfile='{safeFont}':textfile='{safeWordTxt}'"
+                    + $":fontsize={karaokeFontSize}:fontcolor={highlightColor}"
+                    + $":borderw=4:bordercolor=black@0.95"
+                    + $":shadowcolor={highlightColor}@0.3:shadowx=1:shadowy=1"
+                    + $":x='(w-tw(\''{safeLineTxt}\'\'))/2+tw(\''{safePrefixTxt}\'\')'" 
+                    + $":y=h-text_h-{yOffset}"
+                    + $":enable='between(t,{wordStartStr},{wordEndStr})'";
+
+                filters.Add(highlightFilterSimple);
+                xAccumulated++;
+            }
+        }
+
+        return filters;
+    }
+
+    /// <summary>
+    /// Helper class đại diện cho 1 dòng karaoke (nhóm các từ liên tiếp hiển thị trên cùng 1 dòng).
+    /// </summary>
+    private class KaraokeLine
+    {
+        public List<WordTimestamp> Words { get; }
+        public string FullText => string.Join(" ", Words.Select(w => w.Word));
+        public double StartTime => Words.First().StartTime;
+        public double EndTime => Words.Last().EndTime;
+
+        public KaraokeLine(List<WordTimestamp> words)
+        {
+            Words = new List<WordTimestamp>(words);
+        }
+
+        /// <summary>
+        /// Lấy text phần prefix (các từ trước từ hiện tại) kèm khoảng trắng.
+        /// Dùng để tính vị trí X của từ highlight.
+        /// </summary>
+        public string GetTextBefore(WordTimestamp targetWord)
+        {
+            var parts = new List<string>();
+            foreach (var w in Words)
+            {
+                if (ReferenceEquals(w, targetWord)) break;
+                parts.Add(w.Word);
+            }
+            return parts.Count > 0 ? string.Join(" ", parts) + " " : "";
+        }
     }
 
     private static string ResolveFontFile(string fontName)

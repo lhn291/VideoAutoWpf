@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -29,6 +30,63 @@ public class GeminiScriptService
     /// Danh sách style keys có sẵn, dùng cho AI chọn
     /// </summary>
     public static readonly string AvailableStyleKeys = string.Join(", ", StylePrompts.Keys);
+
+    private string? _apiKey;
+
+    /// <summary>
+    /// Gemini API Key từ Google AI Studio (miễn phí, không cần billing / credit card)
+    /// </summary>
+    public string? ApiKey
+    {
+        get => _apiKey ??= LoadApiKey();
+        set => _apiKey = value;
+    }
+
+    public static string? LoadApiKey()
+    {
+        // 1. Biến môi trường GEMINI_API_KEY
+        var env = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+        if (!string.IsNullOrWhiteSpace(env)) return env.Trim();
+
+        // 2. File Config/gemini_api_key.txt
+        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        var paths = new[]
+        {
+            Path.Combine(baseDir, "Config", "gemini_api_key.txt"),
+            Path.Combine(baseDir, "..", "..", "..", "Config", "gemini_api_key.txt"),
+            Path.Combine(baseDir, "gemini_api_key.txt"),
+            Path.Combine(baseDir, "..", "..", "..", "gemini_api_key.txt")
+        };
+
+        foreach (var p in paths)
+        {
+            if (File.Exists(p))
+            {
+                var content = File.ReadAllText(p).Trim();
+                if (!string.IsNullOrWhiteSpace(content)) return content;
+            }
+        }
+
+        return null;
+    }
+
+    public static void SaveApiKey(string key)
+    {
+        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        var configDir = Path.Combine(baseDir, "Config");
+        Directory.CreateDirectory(configDir);
+        File.WriteAllText(Path.Combine(configDir, "gemini_api_key.txt"), key.Trim());
+
+        try
+        {
+            var srcConfigDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "Config"));
+            if (Directory.Exists(srcConfigDir))
+            {
+                File.WriteAllText(Path.Combine(srcConfigDir, "gemini_api_key.txt"), key.Trim());
+            }
+        }
+        catch { }
+    }
 
     public GeminiScriptService(GoogleAuthService authService)
     {
@@ -213,8 +271,11 @@ public class GeminiScriptService
     public async Task<SeriesPlan> GenerateSeriesPlanAsync(
         string topicOrPremise,
         int totalEpisodes = 3,
+        int defaultScenesPerEpisode = 6,
         string styleKey = "dark-anime",
         string voiceKey = "vi-VN-Wavenet-B",
+        string toneOrPacing = "Kịch tính, dồn dập, giật gân (Dramatic / Thriller)",
+        string aspectRatio = "9:16",
         string location = "us-central1",
         CancellationToken ct = default)
     {
@@ -227,6 +288,7 @@ public class GeminiScriptService
         var systemInstruction =
             "You are an acclaimed showrunner and executive producer for viral short episodic video series on TikTok, YouTube Shorts, and Reels. " +
             "Your task is to take a premise, long story, or topic and divide it into a gripping MULTI-EPISODE series. " +
+            $"The desired pacing and tone is: '{toneOrPacing}'. Video format ratio is '{aspectRatio}'. " +
             "Every episode must have a strong hook, rising action, and an INTENSE CLIFFHANGER at the end (except the final episode which resolves the series). " +
             "You MUST also formulate a detailed 'character_bible' in English describing the protagonist and key characters' exact visual features (hair, eyes, face, outfit, colors, accessories) so Imagen 3 can render them identically in every scene of every episode. " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
@@ -244,12 +306,15 @@ public class GeminiScriptService
             "      \"plot_beat\": \"Tóm tắt diễn biến chính của tập này bằng tiếng Việt\",\n" +
             "      \"episode_hook\": \"Câu thoại hoặc ý tưởng mở đầu gây sốc của tập 1\",\n" +
             "      \"cliffhanger\": \"Điểm nghẹt thở kết thúc tập này khiến người xem bắt buộc phải xem tiếp tập 2\",\n" +
-            "      \"suggested_scene_count\": 5\n" +
+            $"      \"suggested_scene_count\": {defaultScenesPerEpisode}\n" +
             "    }\n" +
             "  ]\n" +
             "}";
 
-        var userPrompt = $"Hãy lên kế hoạch chuỗi video {totalEpisodes} tập dựa trên nội dung sau:\n'{topicOrPremise}'\n\n" +
+        var userPrompt = $"Hãy lên kế hoạch chuỗi video đúng {totalEpisodes} tập dựa trên nội dung sau:\n'{topicOrPremise}'\n\n" +
+                         $"Thể loại & Nhịp điệu mong muốn: {toneOrPacing}\n" +
+                         $"Định dạng khung hình: {aspectRatio}\n" +
+                         $"Số cảnh mục tiêu mỗi tập: khoảng {defaultScenesPerEpisode} cảnh.\n" +
                          $"Yêu cầu chia thành đúng {totalEpisodes} tập với kịch bản nối tiếp liền mạch, cliffhanger kịch tính cuối mỗi tập.";
 
         return await CallGeminiForJson<SeriesPlan>(systemInstruction, userPrompt, projectId, location, token, ct);
@@ -263,6 +328,8 @@ public class GeminiScriptService
         EpisodePlanItem episodePlan,
         int totalEpisodes,
         string previousEpisodeEndingContext = "",
+        string aspectRatio = "9:16",
+        string toneOrPacing = "",
         string location = "us-central1",
         CancellationToken ct = default)
     {
@@ -270,9 +337,10 @@ public class GeminiScriptService
         var projectId = _authService.ProjectId;
 
         var chosenStyle = StylePrompts.TryGetValue(seriesPlan.SuggestedStyle, out var styleVal) ? styleVal : StylePrompts["dark-anime"];
-        var numScenes = episodePlan.SuggestedSceneCount > 0 ? episodePlan.SuggestedSceneCount : 5;
+        var numScenes = episodePlan.SuggestedSceneCount > 0 ? episodePlan.SuggestedSceneCount : 6;
         var epNum = episodePlan.EpisodeNumber;
         var isLastEp = epNum >= totalEpisodes;
+        var ratio = string.IsNullOrWhiteSpace(aspectRatio) ? "9:16" : aspectRatio;
 
         var systemInstruction =
             "You are an expert short video screenwriter writing a specific episode of a viral video series. " +
@@ -280,7 +348,7 @@ public class GeminiScriptService
             "The JSON structure must exactly match this schema:\n" +
             "{\n" +
             "  \"metadata\": {\n" +
-            "    \"ratio\": \"9:16\",\n" +
+            $"    \"ratio\": \"{ratio}\",\n" +
             $"    \"voice\": \"{seriesPlan.SuggestedVoice}\",\n" +
             "    \"motion_effect\": \"auto\",\n" +
             "    \"enable_fade\": true,\n" +
@@ -303,7 +371,7 @@ public class GeminiScriptService
             "  ]\n" +
             "}\n\n" +
             "Guidelines:\n" +
-            $"1. Video ratio 9:16. Voice is '{seriesPlan.SuggestedVoice}'.\n" +
+            $"1. Video ratio {ratio}. Voice is '{seriesPlan.SuggestedVoice}'. {(string.IsNullOrWhiteSpace(toneOrPacing) ? "" : $"Tone: '{toneOrPacing}'.")}\n" +
             $"2. Generate exactly {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'.\n" +
             $"3. Scene 1 hook: {episodePlan.EpisodeHook}. (If Episode > 1, start with a quick 1-sentence recap or immediate escalation).\n" +
             $"4. Final scene MUST end on this cliffhanger: {episodePlan.Cliffhanger}\n" +
@@ -343,6 +411,108 @@ public class GeminiScriptService
     }
 
     /// <summary>
+    /// AI bóc tách công thức tiêu đề, chiến lược hook và tâm lý khán giả của kênh đối thủ dựa trên top video
+    /// </summary>
+    public async Task<CompetitorAiAnalysis> AnalyzeCompetitorFormulasAsync(
+        string channelTitle,
+        string channelDescription,
+        IEnumerable<YouTubeVideoInfo> topVideos,
+        string location = "us-central1",
+        CancellationToken ct = default)
+    {
+        var token = await _authService.GetAccessTokenAsync();
+        var projectId = _authService.ProjectId;
+
+        var videoListSummary = new StringBuilder();
+        int idx = 1;
+        foreach (var v in topVideos.Take(15))
+        {
+            videoListSummary.AppendLine($"{idx}. Tiêu đề: \"{v.Title}\" | Views: {v.ViewCountDisplay} | Likes: {v.LikeCountDisplay} | Thời lượng: {v.DurationDisplay}");
+            if (!string.IsNullOrWhiteSpace(v.Description))
+            {
+                var shortDesc = v.Description.Length > 150 ? v.Description[..150] + "..." : v.Description;
+                videoListSummary.AppendLine($"   Mô tả: {shortDesc.Replace('\n', ' ')}");
+            }
+            if (!string.IsNullOrWhiteSpace(v.Tags))
+            {
+                videoListSummary.AppendLine($"   Tags: {v.Tags}");
+            }
+            idx++;
+        }
+
+        var systemInstruction =
+            "Bạn là một chuyên gia hàng đầu về Viral YouTube Algorithm, Phân tích Kỹ thuật Đặt Tiêu đề (Title Blueprint) và Kỹ thuật Hook tâm lý (Retention Hook). " +
+            "Nhiệm vụ của bạn là bóc tách chính xác vì sao các video của kênh này lại đạt hàng triệu view, chỉ ra công thức đặt tiêu đề, cách mở màn (hook), và tạo ra các ý tưởng video tương tự để áp dụng. " +
+            "Bạn PHẢI trả về duy nhất khối JSON thô, không bọc trong markdown hay codeblock, đúng schema sau:\n" +
+            "{\n" +
+            "  \"channel_name\": \"Tên kênh\",\n" +
+            "  \"summary\": \"Tóm tắt 2-3 câu về phong cách cốt lõi và chiến lược thành công của kênh\",\n" +
+            "  \"core_audience\": \"Mô tả đối tượng khán giả mục tiêu của kênh (độ tuổi, tâm lý, nỗi đau, sở thích)\",\n" +
+            "  \"title_formulas\": [\n" +
+            "    {\n" +
+            "      \"name\": \"Tên công thức (ví dụ: POV + Hoài niệm quá khứ)\",\n" +
+            "      \"formula\": \"Cấu trúc cú pháp (ví dụ: POV: Bạn thức dậy ở [Năm cũ])\",\n" +
+            "      \"why_it_works\": \"Lý giải tâm lý học khiến người xem tò mò bấm vào\",\n" +
+            "      \"example\": \"Ví dụ tiêu đề thực tế từ kênh\"\n" +
+            "    }\n" +
+            "  ],\n" +
+            "  \"hook_strategies\": [\n" +
+            "    {\n" +
+            "      \"hook_type\": \"Tên chiến thuật hook (ví dụ: In Media Res / Tình huống hoang mang)\",\n" +
+            "      \"description\": \"Cách họ giữ chân người xem trong 5-15 giây đầu tiên\",\n" +
+            "      \"example_script\": \"Đoạn thoại mở màn mẫu giả định phù hợp phong cách kênh\"\n" +
+            "    }\n" +
+            "  ],\n" +
+            "  \"psychology_triggers\": [\n" +
+            "    \"Trigger 1 (ví dụ: Nỗi sợ bị bỏ lại phía sau / FOMO)\",\n" +
+            "    \"Trigger 2 (ví dụ: Cảm xúc hoài niệm tuổi thơ/thời học sinh)\"\n" +
+            "  ],\n" +
+            "  \"suggested_ideas\": [\n" +
+            "    {\n" +
+            "      \"title\": \"Gợi ý tiêu đề video mới áp dụng đúng công thức trên\",\n" +
+            "      \"hook_opening\": \"Câu hook mở đầu video 5-10s\",\n" +
+            "      \"target_emotion\": \"Cảm xúc nhắm đến\"\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}";
+
+        var userPrompt = $"Phân tích kênh YouTube sau:\n" +
+                         $"Tên kênh: {channelTitle}\n" +
+                         $"Mô tả kênh: {channelDescription}\n\n" +
+                         $"Danh sách Top video nhiều lượt xem nhất:\n{videoListSummary}\n\n" +
+                         $"Hãy bóc tách thật sâu các công thức đặt tiêu đề, kỹ thuật hook mở đầu, tâm lý khán giả, và đưa ra 5 ý tưởng video mới siêu hấp dẫn chuẩn bị làm nội dung.";
+
+        return await CallGeminiForJson<CompetitorAiAnalysis>(systemInstruction, userPrompt, projectId, location, token, ct);
+    }
+
+    /// <summary>
+    /// AI bóc tách chi tiết tiêu đề, hook và tối ưu SEO cho 1 video cụ thể
+    /// </summary>
+    public async Task<CompetitorAiAnalysis> AnalyzeSingleVideoAsync(
+        YouTubeVideoInfo video,
+        string location = "us-central1",
+        CancellationToken ct = default)
+    {
+        var token = await _authService.GetAccessTokenAsync();
+        var projectId = _authService.ProjectId;
+
+        var systemInstruction =
+            "Bạn là chuyên gia phân tích Viral Content YouTube. " +
+            "Nhiệm vụ: Phân tích sâu 1 video YouTube về lý do thành công của tiêu đề, cách tạo hook gây tò mò, và gợi ý 5 video tương tự. " +
+            "Trả về DUY NHẤT khối JSON thô theo schema đã cho.";
+
+        var userPrompt = $"Phân tích video YouTube sau:\n" +
+                         $"Tiêu đề: {video.Title}\n" +
+                         $"Lượt xem: {video.ViewCountDisplay} | Likes: {video.LikeCountDisplay} | Tương tác: {video.EngagementRate:F2}%\n" +
+                         $"Thời lượng: {video.DurationDisplay}\n" +
+                         $"Tags: {video.Tags}\n" +
+                         $"Mô tả: {video.Description}\n\n" +
+                         $"Hãy phân tích công thức tiêu đề, hook giả định, và gợi ý 5 tiêu đề tương tự.";
+
+        return await CallGeminiForJson<CompetitorAiAnalysis>(systemInstruction, userPrompt, projectId, location, token, ct);
+    }
+
+    /// <summary>
     /// Generic helper gọi Gemini API và parse JSON response
     /// </summary>
     private async Task<T> CallGeminiForJson<T>(
@@ -353,12 +523,14 @@ public class GeminiScriptService
         string token,
         CancellationToken ct) where T : class
     {
+        var apiKey = ApiKey;
         var modelsToTry = new[] { "gemini-2.5-flash", "gemini-1.5-flash" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
         {
-            var endpoint = $"https://{location}-aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{modelName}:generateContent";
+            string endpoint;
+            HttpRequestMessage request;
 
             var requestBody = new
             {
@@ -374,16 +546,29 @@ public class GeminiScriptService
                         parts = new[] { new { text = userPrompt } }
                     }
                 },
-                generation_config = new
+                generationConfig = new
                 {
-                    response_mime_type = "application/json"
+                    responseMimeType = "application/json"
                 }
             };
 
             var jsonContent = JsonSerializer.Serialize(requestBody);
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                // Gọi qua Google AI Studio (Free Tier, không cần Billing/Credit card)
+                endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent?key={apiKey}";
+                request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            }
+            else
+            {
+                // Gọi qua Google Cloud Vertex AI (Cần liên kết Billing Account)
+                endpoint = $"https://{location}-aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{modelName}:generateContent";
+                request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            }
 
             try
             {
@@ -431,6 +616,15 @@ public class GeminiScriptService
             {
                 lastError = ex.Message;
             }
+            finally
+            {
+                request.Dispose();
+            }
+        }
+
+        if (lastError != null && (lastError.Contains("BILLING_DISABLED") || lastError.Contains("billing to be enabled")))
+        {
+            throw new Exception("Dự án Google Cloud Vertex AI chưa bật Billing. Vui lòng bật Billing trên Google Cloud Console hoặc nhập Gemini API Key miễn phí từ Google AI Studio (aistudio.google.com).");
         }
 
         throw new Exception($"Không thể gọi Gemini AI: {lastError}");

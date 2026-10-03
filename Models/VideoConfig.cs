@@ -17,9 +17,22 @@ public class VideoConfig
 
     // Cấu hình chữ / phụ đề trên video
     public bool EnableSubtitles { get; set; } = true;
-    public string SubtitleStyle { get; set; } = "cinematic"; // cinematic, boxed, viral_yellow, neon, gold, ticker
+    public string SubtitleStyle { get; set; } = "cinematic"; // cinematic, boxed, viral_yellow, neon, gold, ticker, karaoke
     public string SubtitleFont { get; set; } = "Segoe UI Bold";
     public int SubtitleFontSize { get; set; } = 0; // 0 = Auto theo độ phân giải video
+
+    /// <summary>
+    /// Bật chế độ phụ đề Karaoke nhảy từng chữ (sử dụng Speech-to-Text Chirp 2).
+    /// Khi bật, mỗi từ sẽ được highlight đổi màu đúng lúc giọng đọc phát âm từ đó.
+    /// </summary>
+    public bool EnableKaraokeSubtitles { get; set; } = false;
+
+    /// <summary>
+    /// Màu highlight cho từ đang được đọc trong chế độ Karaoke.
+    /// Mặc định: Vàng (#ffd43b) — nổi bật nhất trên nền tối.
+    /// </summary>
+    public string KaraokeHighlightColor { get; set; } = "#ffd43b";
+
     public string Voice { get; set; } = "vi-VN-Wavenet-B";
     public VideoPublishInfo? PublishInfo { get; set; }
 

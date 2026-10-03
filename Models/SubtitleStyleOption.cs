@@ -72,6 +72,17 @@ public class SubtitleStyleOption
             SampleColor = "#ffffff",
             SampleBackground = "#cc11111b",
             SampleBorder = "#89b4fa"
+        },
+        new SubtitleStyleOption
+        {
+            Id = "karaoke",
+            Name = "🔥 Karaoke Viral (Nhảy Từng Chữ)",
+            Description = "Từng chữ đổi màu vàng nổi bật đúng lúc giọng đọc, kiểu CapCut / Hormozi (cần Speech-to-Text)",
+            Icon = "🎤",
+            DefaultFont = "Impact",
+            SampleColor = "#ffffff",
+            SampleBackground = "#99000000",
+            SampleBorder = "#ffd43b"
         }
     };
 }

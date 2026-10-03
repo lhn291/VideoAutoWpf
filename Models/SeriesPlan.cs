@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -26,7 +27,7 @@ public partial class SeriesPlan : ObservableObject
     private string _suggestedVoice = "vi-VN-Wavenet-B";
 
     [JsonPropertyName("episodes")]
-    public List<EpisodePlanItem> Episodes { get; set; } = new();
+    public ObservableCollection<EpisodePlanItem> Episodes { get; set; } = new();
 }
 
 public partial class EpisodePlanItem : ObservableObject

@@ -22,6 +22,7 @@ public partial class MainViewModel : ObservableObject
     private readonly GoogleTtsService _ttsService;
     private readonly VertexImagenService _imagenService;
     private readonly GeminiScriptService _geminiService;
+    private readonly YouTubeAnalyticsService _youtubeService;
     private CancellationTokenSource? _cts;
     private MediaPlayer? _bgmPlayer;
 
@@ -190,6 +191,7 @@ public partial class MainViewModel : ObservableObject
         _ttsService = new GoogleTtsService(_authService);
         _imagenService = new VertexImagenService(_authService);
         _geminiService = new GeminiScriptService(_authService);
+        _youtubeService = new YouTubeAnalyticsService(_authService);
 
         var defaultOut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput");
         _outputDirectory = defaultOut;
@@ -433,14 +435,30 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenScriptGenerator()
     {
+        var mainWin = Application.Current.MainWindow;
         var win = new ScriptGeneratorWindow(_geminiService, _ttsService, _bgmService)
         {
-            Owner = Application.Current.MainWindow
+            WindowState = WindowState.Maximized
         };
 
-        if (win.ShowDialog() == true && win.ResultWorkspace != null)
+        try
         {
-            ApplyWorkspace(win.ResultWorkspace);
+            mainWin?.Hide();
+            if (win.ShowDialog() == true && win.ResultWorkspace != null)
+            {
+                ApplyWorkspace(win.ResultWorkspace);
+            }
+        }
+        finally
+        {
+            if (mainWin != null)
+            {
+                Application.Current.MainWindow = mainWin;
+                mainWin.Show();
+                mainWin.WindowState = WindowState.Maximized;
+                mainWin.Activate();
+                mainWin.Focus();
+            }
         }
     }
 
@@ -561,14 +579,30 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenSeriesCreator()
     {
+        var mainWin = Application.Current.MainWindow;
         var win = new SeriesCreatorWindow(_geminiService)
         {
-            Owner = Application.Current.MainWindow
+            WindowState = WindowState.Maximized
         };
 
-        if (win.ShowDialog() == true && win.ResultSeriesProject != null)
+        try
         {
-            LoadSeriesProject(win.ResultSeriesProject);
+            mainWin?.Hide();
+            if (win.ShowDialog() == true && win.ResultSeriesProject != null)
+            {
+                LoadSeriesProject(win.ResultSeriesProject);
+            }
+        }
+        finally
+        {
+            if (mainWin != null)
+            {
+                Application.Current.MainWindow = mainWin;
+                mainWin.Show();
+                mainWin.WindowState = WindowState.Maximized;
+                mainWin.Activate();
+                mainWin.Focus();
+            }
         }
     }
 
@@ -1635,11 +1669,28 @@ public partial class MainViewModel : ObservableObject
     private void OpenSocialPublishWindow()
     {
         EnsureBasicPublishInfo();
+        var mainWin = Application.Current.MainWindow;
         var win = new SocialPublishWindow(this)
         {
-            Owner = Application.Current.MainWindow
+            WindowState = WindowState.Maximized
         };
-        win.ShowDialog();
+
+        try
+        {
+            mainWin?.Hide();
+            win.ShowDialog();
+        }
+        finally
+        {
+            if (mainWin != null)
+            {
+                Application.Current.MainWindow = mainWin;
+                mainWin.Show();
+                mainWin.WindowState = WindowState.Maximized;
+                mainWin.Activate();
+                mainWin.Focus();
+            }
+        }
     }
 
     [RelayCommand]
@@ -1907,4 +1958,109 @@ public partial class MainViewModel : ObservableObject
         ReindexScenes();
         AppendLog($"[Kéo thả] Đã thêm thành công {maxCount} phân cảnh mới!");
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // YOUTUBE ANALYTICS — PHÂN TÍCH KÊNH & VIDEO YOUTUBE
+    // ══════════════════════════════════════════════════════════════
+
+    [RelayCommand]
+    private void OpenYouTubeAnalytics()
+    {
+        var vm = new YouTubeAnalyticsViewModel(_youtubeService, _geminiService);
+        var mainWin = Application.Current.MainWindow;
+        var win = new Views.YouTubeAnalyticsWindow(vm)
+        {
+            WindowState = WindowState.Maximized
+        };
+
+        CreateVideoFromAnalyticsRequest? pendingRequest = null;
+        try
+        {
+            mainWin?.Hide();
+            win.ShowDialog();
+            pendingRequest = vm.PendingVideoRequest;
+        }
+        finally
+        {
+            if (mainWin != null)
+            {
+                Application.Current.MainWindow = mainWin;
+                mainWin.Show();
+                mainWin.WindowState = WindowState.Maximized;
+                mainWin.Activate();
+                mainWin.Focus();
+            }
+        }
+
+        if (pendingRequest != null)
+        {
+            if (pendingRequest.TargetMode == VideoCreationTargetMode.Series)
+            {
+                OpenSeriesCreatorWithRequest(pendingRequest);
+            }
+            else
+            {
+                OpenScriptGeneratorWithRequest(pendingRequest);
+            }
+        }
+    }
+
+    private void OpenSeriesCreatorWithRequest(CreateVideoFromAnalyticsRequest request)
+    {
+        var mainWin = Application.Current.MainWindow;
+        var win = new SeriesCreatorWindow(_geminiService, request)
+        {
+            WindowState = WindowState.Maximized
+        };
+
+        try
+        {
+            mainWin?.Hide();
+            if (win.ShowDialog() == true && win.ResultSeriesProject != null)
+            {
+                LoadSeriesProject(win.ResultSeriesProject);
+            }
+        }
+        finally
+        {
+            if (mainWin != null)
+            {
+                Application.Current.MainWindow = mainWin;
+                mainWin.Show();
+                mainWin.WindowState = WindowState.Maximized;
+                mainWin.Activate();
+                mainWin.Focus();
+            }
+        }
+    }
+
+    private void OpenScriptGeneratorWithRequest(CreateVideoFromAnalyticsRequest request)
+    {
+        var mainWin = Application.Current.MainWindow;
+        var win = new ScriptGeneratorWindow(_geminiService, _ttsService, _bgmService, request)
+        {
+            WindowState = WindowState.Maximized
+        };
+
+        try
+        {
+            mainWin?.Hide();
+            if (win.ShowDialog() == true && win.ResultWorkspace != null)
+            {
+                ApplyWorkspace(win.ResultWorkspace);
+            }
+        }
+        finally
+        {
+            if (mainWin != null)
+            {
+                Application.Current.MainWindow = mainWin;
+                mainWin.Show();
+                mainWin.WindowState = WindowState.Maximized;
+                mainWin.Activate();
+                mainWin.Focus();
+            }
+        }
+    }
 }
+
