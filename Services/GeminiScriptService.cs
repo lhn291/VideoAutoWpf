@@ -267,6 +267,8 @@ public class GeminiScriptService
 
     /// <summary>
     /// AI Lập kế hoạch Series nhiều tập: Phân chia các hồi, xác định cliffhangers và Character Bible
+    /// <summary>
+    /// AI Lập kế hoạch Series nhiều tập: Phân chia các hồi, xác định cliffhangers và Character Bible
     /// </summary>
     public async Task<SeriesPlan> GenerateSeriesPlanAsync(
         string topicOrPremise,
@@ -287,8 +289,10 @@ public class GeminiScriptService
 
         var systemInstruction =
             "You are an acclaimed showrunner and executive producer for viral short episodic video series on TikTok, YouTube Shorts, and Reels. " +
-            "Your task is to take a premise, long story, or topic and divide it into a gripping MULTI-EPISODE series. " +
+            $"Your task is to take a premise, long story, or topic and divide it into a gripping MULTI-EPISODE series with EXACTLY {totalEpisodes} EPISODES. " +
             $"The desired pacing and tone is: '{toneOrPacing}'. Video format ratio is '{aspectRatio}'. " +
+            $"CRITICAL MANDATORY REQUIREMENT: The 'episodes' array MUST CONTAIN EXACTLY {totalEpisodes} EPISODE OBJECTS (from episode_number = 1 to episode_number = {totalEpisodes}). " +
+            $"DO NOT return only 1 episode. You must outline ALL {totalEpisodes} episodes sequentially! Each episode MUST have 'suggested_scene_count' set to {defaultScenesPerEpisode}. " +
             "Every episode must have a strong hook, rising action, and an INTENSE CLIFFHANGER at the end (except the final episode which resolves the series). " +
             "You MUST also formulate a detailed 'character_bible' in English describing the protagonist and key characters' exact visual features (hair, eyes, face, outfit, colors, accessories) so Imagen 3 can render them identically in every scene of every episode. " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
@@ -300,22 +304,19 @@ public class GeminiScriptService
             $"  \"suggested_style\": \"{styleKey}\",\n" +
             $"  \"suggested_voice\": \"{voiceKey}\",\n" +
             "  \"episodes\": [\n" +
-            "    {\n" +
-            "      \"episode_number\": 1,\n" +
-            "      \"episode_title\": \"Tiêu đề tập 1 (ngắn gọn, tò mò)\",\n" +
-            "      \"plot_beat\": \"Tóm tắt diễn biến chính của tập này bằng tiếng Việt\",\n" +
-            "      \"episode_hook\": \"Câu thoại hoặc ý tưởng mở đầu gây sốc của tập 1\",\n" +
-            "      \"cliffhanger\": \"Điểm nghẹt thở kết thúc tập này khiến người xem bắt buộc phải xem tiếp tập 2\",\n" +
-            $"      \"suggested_scene_count\": {defaultScenesPerEpisode}\n" +
-            "    }\n" +
+            $"    {{ \"episode_number\": 1, \"episode_title\": \"Tiêu đề tập 1...\", \"plot_beat\": \"Diễn biến tập 1...\", \"episode_hook\": \"Hook tập 1...\", \"cliffhanger\": \"Kết lửng tập 1...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }},\n" +
+            $"    {{ \"episode_number\": 2, \"episode_title\": \"Tiêu đề tập 2...\", \"plot_beat\": \"Diễn biến tập 2...\", \"episode_hook\": \"Hook tập 2...\", \"cliffhanger\": \"Kết lửng tập 2...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }}\n" +
+            $"    // ... MUST include all {totalEpisodes} episodes up to episode_number {totalEpisodes}\n" +
             "  ]\n" +
             "}";
 
-        var userPrompt = $"Hãy lên kế hoạch chuỗi video đúng {totalEpisodes} tập dựa trên nội dung sau:\n'{topicOrPremise}'\n\n" +
-                         $"Thể loại & Nhịp điệu mong muốn: {toneOrPacing}\n" +
-                         $"Định dạng khung hình: {aspectRatio}\n" +
-                         $"Số cảnh mục tiêu mỗi tập: khoảng {defaultScenesPerEpisode} cảnh.\n" +
-                         $"Yêu cầu chia thành đúng {totalEpisodes} tập với kịch bản nối tiếp liền mạch, cliffhanger kịch tính cuối mỗi tập.";
+        var userPrompt = $"BẮT BUỘC: Bạn PHẢI tạo dàn ý ĐÚNG {totalEpisodes} TẬP cho chuỗi video này (từ Tập 1 đến Tập {totalEpisodes}). " +
+                         $"Mỗi tập đặt mục tiêu chính xác {defaultScenesPerEpisode} phân cảnh.\n\n" +
+                         $"Chủ đề / Cốt truyện:\n'{topicOrPremise}'\n\n" +
+                         $"Thể loại & Nhịp điệu: {toneOrPacing}\n" +
+                         $"Định dạng: {aspectRatio}\n" +
+                         $"Số tập bắt buộc: {totalEpisodes} tập (Mảng 'episodes' PHẢI có đủ {totalEpisodes} phần tử).\n" +
+                         $"Số cảnh mỗi tập: {defaultScenesPerEpisode} cảnh.";
 
         return await CallGeminiForJson<SeriesPlan>(systemInstruction, userPrompt, projectId, location, token, ct);
     }
@@ -345,6 +346,7 @@ public class GeminiScriptService
         var systemInstruction =
             "You are an expert short video screenwriter writing a specific episode of a viral video series. " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
+            $"CRITICAL REQUIREMENT: You MUST generate EXACTLY {numScenes} scenes inside the 'scenes' array. Do NOT generate fewer than {numScenes} scenes! " +
             "The JSON structure must exactly match this schema:\n" +
             "{\n" +
             "  \"metadata\": {\n" +
@@ -367,15 +369,17 @@ public class GeminiScriptService
             $"    \"hashtags\": \"#series #tap{epNum} #shorts #tiktok #reels #viral #xuhuong\"\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
-            "    { \"text\": \"Vietnamese voiceover...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" }\n" +
+            "    { \"text\": \"Vietnamese voiceover scene 1...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" },\n" +
+            "    { \"text\": \"Vietnamese voiceover scene 2...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"pan_left_right\" }\n" +
+            $"    // ... MUST continue until EXACTLY {numScenes} scenes are generated\n" +
             "  ]\n" +
             "}\n\n" +
             "Guidelines:\n" +
             $"1. Video ratio {ratio}. Voice is '{seriesPlan.SuggestedVoice}'. {(string.IsNullOrWhiteSpace(toneOrPacing) ? "" : $"Tone: '{toneOrPacing}'.")}\n" +
-            $"2. Generate exactly {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'.\n" +
+            $"2. MANDATORY SCENE COUNT: Generate EXACTLY {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'. The 'scenes' array MUST have length == {numScenes}. Each scene represents 4-8s of video narration.\n" +
             $"3. Scene 1 hook: {episodePlan.EpisodeHook}. (If Episode > 1, start with a quick 1-sentence recap or immediate escalation).\n" +
-            $"4. Final scene MUST end on this cliffhanger: {episodePlan.Cliffhanger}\n" +
-            $"5. CRITICAL: The 'image_prompt' MUST start with this exact style prefix: '{chosenStyle}' AND include the character description verbatim: '{seriesPlan.CharacterBible}' in every scene where characters appear.\n";
+            $"4. Final scene (Scene {numScenes}) MUST end on this cliffhanger: {episodePlan.Cliffhanger}\n" +
+            $"5. CRITICAL: The 'image_prompt' MUST start with this exact style prefix: '{chosenStyle}' AND include the character description: '{seriesPlan.CharacterBible}' in every scene where characters appear.\n";
 
         var userPrompt = $"Series: '{seriesPlan.SeriesTitle}' (Total {totalEpisodes} episodes)\n" +
                          $"Overall Plot: {seriesPlan.OverallPremise}\n" +
@@ -383,7 +387,8 @@ public class GeminiScriptService
                          $"Episode Plot Beat: {episodePlan.PlotBeat}\n" +
                          (string.IsNullOrWhiteSpace(previousEpisodeEndingContext) ? "" : $"Context from previous episode ending: {previousEpisodeEndingContext}\n") +
                          $"Episode Cliffhanger ending: {episodePlan.Cliffhanger}\n\n" +
-                         $"Please generate the complete JSON script for Episode {epNum} with exactly {numScenes} scenes.";
+                         $"BẮT BUỘC: Hãy viết kịch bản chi tiết gồm ĐÚNG {numScenes} PHÂN CẢNH (scenes) cho Tập {epNum}. " +
+                         $"Mảng 'scenes' trong JSON PHẢI có đủ đúng {numScenes} phần tử, tuyệt đối không được dừng lại ở ít cảnh hơn!";
 
         return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);
     }
@@ -524,7 +529,7 @@ public class GeminiScriptService
         CancellationToken ct) where T : class
     {
         var apiKey = ApiKey;
-        var modelsToTry = new[] { "gemini-2.5-flash", "gemini-1.5-flash" };
+        var modelsToTry = new[] { "gemini-2.0-flash", "gemini-1.5-flash" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
@@ -548,7 +553,9 @@ public class GeminiScriptService
                 },
                 generationConfig = new
                 {
-                    responseMimeType = "application/json"
+                    responseMimeType = "application/json",
+                    maxOutputTokens = 8192,
+                    temperature = 0.7
                 }
             };
 

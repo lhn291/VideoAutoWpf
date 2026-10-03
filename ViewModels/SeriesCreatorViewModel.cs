@@ -24,12 +24,52 @@ public partial class SeriesCreatorViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedEpisodeCount = 3;
 
+    [ObservableProperty]
+    private string _episodeCountText = "3";
+
+    partial void OnSelectedEpisodeCountChanged(int value)
+    {
+        if (value >= 2 && EpisodeCountText != value.ToString())
+        {
+            EpisodeCountText = value.ToString();
+        }
+    }
+
+    partial void OnEpisodeCountTextChanged(string value)
+    {
+        if (int.TryParse(value, out int parsed) && parsed >= 2)
+        {
+            if (SelectedEpisodeCount != parsed)
+                SelectedEpisodeCount = parsed;
+        }
+    }
+
     // ── Cấu hình số cảnh mỗi tập ──
     public List<int> ScenesPerEpisodeOptions { get; } = new() { 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 25, 30 };
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EstimatedDurationPerEpisode))]
     private int _selectedScenesPerEpisode = 6;
+
+    [ObservableProperty]
+    private string _scenesPerEpisodeText = "6";
+
+    partial void OnSelectedScenesPerEpisodeChanged(int value)
+    {
+        if (value >= 3 && ScenesPerEpisodeText != value.ToString())
+        {
+            ScenesPerEpisodeText = value.ToString();
+        }
+    }
+
+    partial void OnScenesPerEpisodeTextChanged(string value)
+    {
+        if (int.TryParse(value, out int parsed) && parsed >= 3)
+        {
+            if (SelectedScenesPerEpisode != parsed)
+                SelectedScenesPerEpisode = parsed;
+        }
+    }
 
     public string EstimatedDurationPerEpisode
     {
@@ -154,6 +194,12 @@ public partial class SeriesCreatorViewModel : ObservableObject
             return;
         }
 
+        // Đảm bảo số tập và số cảnh lấy đúng giá trị parsed nếu người dùng tự gõ vào ô Text
+        if (int.TryParse(EpisodeCountText, out int epParsed) && epParsed >= 2)
+            SelectedEpisodeCount = epParsed;
+        if (int.TryParse(ScenesPerEpisodeText, out int scParsed) && scParsed >= 3)
+            SelectedScenesPerEpisode = scParsed;
+
         if (SelectedEpisodeCount < 2) SelectedEpisodeCount = 2;
         if (SelectedScenesPerEpisode < 3) SelectedScenesPerEpisode = 3;
 
@@ -174,11 +220,33 @@ public partial class SeriesCreatorViewModel : ObservableObject
                 SelectedSeriesTone,
                 ActualAspectRatio);
 
-            // Đảm bảo các tập có cấu hình cảnh đúng với lựa chọn ban đầu
+            // 1. Luôn gán số cảnh mỗi tập theo đúng cấu hình người dùng đã chọn
             foreach (var ep in plan.Episodes)
             {
-                if (ep.SuggestedSceneCount <= 0)
-                    ep.SuggestedSceneCount = SelectedScenesPerEpisode;
+                ep.SuggestedSceneCount = SelectedScenesPerEpisode;
+            }
+
+            // 2. Bảo đảm nếu AI sinh thiếu tập so với SelectedEpisodeCount, tự động sinh nối tiếp các tập còn lại
+            if (plan.Episodes.Count < SelectedEpisodeCount)
+            {
+                int missingCount = SelectedEpisodeCount - plan.Episodes.Count;
+                int currentMax = plan.Episodes.Count;
+                for (int i = 1; i <= missingCount; i++)
+                {
+                    int epNum = currentMax + i;
+                    bool isFinal = (epNum == SelectedEpisodeCount);
+                    plan.Episodes.Add(new EpisodePlanItem
+                    {
+                        EpisodeNumber = epNum,
+                        EpisodeTitle = isFinal ? $"Tập {epNum}: Đại kết cục & Hé lộ toàn bộ sự thật" : $"Tập {epNum}: Diễn biến cao trào tiếp theo",
+                        PlotBeat = isFinal ? "Mọi bí mật được phơi bày, nút thắt được gỡ bỏ hoàn toàn trong cảnh kết đầy cảm xúc." 
+                                           : $"Tình huống tiếp tục phát triển căng thẳng sau Tập {epNum - 1}, xung đột dâng cao.",
+                        EpisodeHook = $"Mở đầu dồn dập giải quyết trực tiếp tình huống ngặt nghèo ở kết thúc Tập {epNum - 1}.",
+                        Cliffhanger = isFinal ? "Cái kết đọng lại nhiều suy ngẫm sâu sắc và ấn tượng khó phai cho người xem."
+                                              : $"Tình tiết bất ngờ đảo ngược cục diện ở giây cuối cùng, thúc đẩy xem Tập {epNum + 1}!",
+                        SuggestedSceneCount = SelectedScenesPerEpisode
+                    });
+                }
             }
 
             CurrentSeriesPlan = plan;
@@ -299,13 +367,31 @@ public partial class SeriesCreatorViewModel : ObservableObject
                 BatchProgress = (i / (double)total) * 100;
                 BatchStatusText = $"⏳ Đang viết kịch bản chi tiết cho Tập {epNum}/{total} ({sceneCount} cảnh): '{epPlan.EpisodeTitle}'...";
 
-                var ws = await _geminiService.GenerateEpisodeScriptAsync(
-                    CurrentSeriesPlan,
-                    epPlan,
-                    total,
-                    previousEnding,
-                    ActualAspectRatio,
-                    SelectedSeriesTone);
+                // Gọi sinh kịch bản chi tiết với cơ chế thử lại (retry) nếu gặp gián đoạn kết nối
+                ScriptWorkspace? ws = null;
+                for (int attempt = 1; attempt <= 2; attempt++)
+                {
+                    try
+                    {
+                        ws = await _geminiService.GenerateEpisodeScriptAsync(
+                            CurrentSeriesPlan,
+                            epPlan,
+                            total,
+                            previousEnding,
+                            ActualAspectRatio,
+                            SelectedSeriesTone);
+                        if (ws != null && ws.Scenes.Count > 0)
+                            break;
+                    }
+                    catch
+                    {
+                        if (attempt == 2) throw;
+                        await Task.Delay(1800);
+                    }
+                }
+
+                if (ws == null)
+                    throw new Exception($"Không nhận được dữ liệu kịch bản cho Tập {epNum}.");
 
                 var epItem = new EpisodeItem
                 {
@@ -331,6 +417,28 @@ public partial class SeriesCreatorViewModel : ObservableObject
                         Text = sc.Text,
                         ImagePrompt = sc.ImagePrompt,
                         MotionEffect = string.IsNullOrEmpty(sc.MotionEffect) ? "zoom_in" : sc.MotionEffect,
+                        Status = "Đã sinh kịch bản"
+                    });
+                }
+
+                // ĐẢM BẢO ĐỦ 100% SỐ CẢNH THEO YÊU CẦU:
+                // Nếu AI trả về ít cảnh hơn sceneCount, tự động bổ sung cảnh nối tiếp để đủ số cảnh
+                var stylePrompt = GeminiScriptService.StylePrompts.TryGetValue(CurrentSeriesPlan.SuggestedStyle, out var sp) ? sp : GeminiScriptService.StylePrompts["dark-anime"];
+                while (epItem.Scenes.Count < sceneCount)
+                {
+                    int missingIdx = epItem.Scenes.Count + 1;
+                    var lastScene = epItem.Scenes.LastOrDefault();
+                    string contText = $"Diễn biến tiếp nối đầy kịch tính của Tập {epNum}, đẩy cốt truyện đến cao trào nghẹt thở...";
+                    string contPrompt = (lastScene != null && !string.IsNullOrWhiteSpace(lastScene.ImagePrompt))
+                        ? lastScene.ImagePrompt
+                        : $"{stylePrompt} Dramatic cinematic continuation shot, {CurrentSeriesPlan.CharacterBible}";
+
+                    epItem.Scenes.Add(new SceneItem
+                    {
+                        Index = missingIdx,
+                        Text = contText,
+                        ImagePrompt = contPrompt,
+                        MotionEffect = (missingIdx % 2 == 0) ? "pan_left_right" : "zoom_in",
                         Status = "Đã sinh kịch bản"
                     });
                 }

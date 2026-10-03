@@ -568,6 +568,13 @@ public partial class MainViewModel : ObservableObject
             EnsureBasicPublishInfo();
         }
 
+        if (IsSeriesMode && SelectedEpisode != null)
+        {
+            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
+            SelectedEpisode.PublishInfo = CurrentPublishInfo;
+            SelectedEpisode.Status = "Kịch bản sẵn sàng";
+        }
+
         AppendLog($"[Kịch bản] Đã nạp thành công {Scenes.Count} phân cảnh vào dự án!");
         MessageBox.Show($"Đã nạp thành công {Scenes.Count} phân cảnh vào dự án!", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
     }

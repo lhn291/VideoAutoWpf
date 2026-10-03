@@ -125,6 +125,7 @@
                                 <TextBlock Text="Chọn hoặc gõ số tập (2-50+):" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
                                 <ComboBox ItemsSource="{Binding EpisodeCountOptions}"
                                           SelectedItem="{Binding SelectedEpisodeCount}"
+                                          Text="{Binding EpisodeCountText, UpdateSourceTrigger=PropertyChanged}"
                                           IsEditable="True"
                                           FontSize="12" FontWeight="SemiBold" Padding="8,4"/>
                             </StackPanel>
@@ -137,6 +138,7 @@
                                 <TextBlock Text="{Binding EstimatedDurationPerEpisode}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}" Margin="0,0,0,8"/>
                                 <ComboBox ItemsSource="{Binding ScenesPerEpisodeOptions}"
                                           SelectedItem="{Binding SelectedScenesPerEpisode}"
+                                          Text="{Binding ScenesPerEpisodeText, UpdateSourceTrigger=PropertyChanged}"
                                           IsEditable="True"
                                           FontSize="12" FontWeight="SemiBold" Padding="8,4"/>
                             </StackPanel>
