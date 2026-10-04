@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -17,6 +18,21 @@ public partial class SeriesCreatorViewModel : ObservableObject
 
     [ObservableProperty]
     private string _topicOrStory = string.Empty;
+
+    // ── Cấu hình Gemini API Key (Google AI Studio - Miễn phí) ──
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ApiKeyToggleText))]
+    private string _geminiApiKey = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ApiKeyToggleText))]
+    private bool _hasGeminiApiKey;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ApiKeyToggleText))]
+    private bool _showApiKeyInput;
+
+    public string ApiKeyToggleText => ShowApiKeyInput ? "▲ Thu gọn" : (HasGeminiApiKey ? "✏️ Đổi Key" : "➕ Nhập Key");
 
     // ── Cấu hình số tập mở rộng ──
     public List<int> EpisodeCountOptions { get; } = new() { 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 40, 50 };
@@ -146,6 +162,9 @@ public partial class SeriesCreatorViewModel : ObservableObject
         _geminiService = geminiService;
         _selectedStyleCard = StyleCards.FirstOrDefault(s => s.Key == "dark-anime") ?? StyleCards.FirstOrDefault();
         _selectedVoiceCard = VoiceCards.FirstOrDefault(v => v.Key == "vi-VN-Wavenet-B") ?? VoiceCards.FirstOrDefault();
+        _geminiApiKey = _geminiService.ApiKey ?? string.Empty;
+        _hasGeminiApiKey = !string.IsNullOrWhiteSpace(_geminiApiKey);
+        _showApiKeyInput = !_hasGeminiApiKey;
     }
 
     /// <summary>
@@ -220,10 +239,20 @@ public partial class SeriesCreatorViewModel : ObservableObject
                 SelectedSeriesTone,
                 ActualAspectRatio);
 
-            // 1. Luôn gán số cảnh mỗi tập theo đúng cấu hình người dùng đã chọn
-            foreach (var ep in plan.Episodes)
+            // 1. Luôn chuẩn hóa số tập và tiêu đề theo đúng thứ tự 1, 2, 3, 4, 5...
+            for (int i = 0; i < plan.Episodes.Count; i++)
             {
+                var ep = plan.Episodes[i];
+                ep.EpisodeNumber = i + 1; // BẮT BUỘC ĐÁNH SỐ TẬP TỪ 1 ĐẾN N
                 ep.SuggestedSceneCount = SelectedScenesPerEpisode;
+
+                // Chuẩn hóa tiêu đề: loại bỏ "Tập 1:", "Tập 2:", "1." nếu có sẵn từ AI để tránh lặp
+                var rawTitle = ep.EpisodeTitle?.Trim() ?? string.Empty;
+                var cleanTitle = System.Text.RegularExpressions.Regex.Replace(rawTitle, @"^(Tập\s*\d+|Episode\s*\d+|\d+)\s*[:\.\-]\s*", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+                if (string.IsNullOrWhiteSpace(cleanTitle))
+                    cleanTitle = string.IsNullOrWhiteSpace(rawTitle) ? $"Diễn biến gay cấn hồi {i + 1}" : rawTitle;
+
+                ep.EpisodeTitle = $"Tập {i + 1}: {cleanTitle}";
             }
 
             // 2. Bảo đảm nếu AI sinh thiếu tập so với SelectedEpisodeCount, tự động sinh nối tiếp các tập còn lại
@@ -249,6 +278,12 @@ public partial class SeriesCreatorViewModel : ObservableObject
                 }
             }
 
+            // Đảm bảo lại một lần nữa 100% số thứ tự tập từ 1 đến N
+            for (int i = 0; i < plan.Episodes.Count; i++)
+            {
+                plan.Episodes[i].EpisodeNumber = i + 1;
+            }
+
             CurrentSeriesPlan = plan;
             HasSeriesPlan = true;
             BatchStatusText = $"✅ Đã lập dàn ý {plan.Episodes.Count} tập thành công! Bạn có thể tùy biến số cảnh từng tập bên dưới.";
@@ -256,11 +291,56 @@ public partial class SeriesCreatorViewModel : ObservableObject
         catch (Exception ex)
         {
             BatchStatusText = "❌ Lỗi khi AI lập kế hoạch Series.";
+            if (!HasGeminiApiKey)
+            {
+                ShowApiKeyInput = true;
+            }
             MessageBox.Show($"Lỗi AI Series Planning:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
             IsPlanningSeries = false;
+        }
+    }
+
+    [RelayCommand]
+    private void SaveGeminiApiKey()
+    {
+        if (string.IsNullOrWhiteSpace(GeminiApiKey))
+        {
+            MessageBox.Show("Vui lòng dán mã Gemini API Key từ Google AI Studio (bắt đầu bằng AIzaSy...).", "Chưa nhập Key", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var key = GeminiApiKey.Trim();
+        _geminiService.ApiKey = key;
+        GeminiScriptService.SaveApiKey(key);
+        HasGeminiApiKey = true;
+        ShowApiKeyInput = false;
+        BatchStatusText = "✅ Đã lưu Gemini API Key! Bạn có thể bấm lập dàn ý chuỗi video ngay bây giờ.";
+        MessageBox.Show("Đã lưu Gemini API Key thành công!\nỨng dụng sẽ sử dụng Gemini AI miễn phí từ Google AI Studio (không cần thẻ tín dụng/billing).", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    [RelayCommand]
+    private void ToggleApiKeyInput()
+    {
+        ShowApiKeyInput = !ShowApiKeyInput;
+    }
+
+    [RelayCommand]
+    private void OpenAiStudioKeyPage()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://aistudio.google.com/app/apikey",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Không thể mở trình duyệt: {ex.Message}\nVui lòng truy cập thủ công: https://aistudio.google.com/app/apikey", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 

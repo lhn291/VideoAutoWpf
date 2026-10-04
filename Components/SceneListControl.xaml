@@ -152,6 +152,9 @@
                                                 <TextBlock Text="{Binding StatusBadgeIcon}" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                                 <TextBlock Text="{Binding DisplayTitle}" FontSize="11.5" FontWeight="SemiBold" 
                                                            Foreground="{Binding ChipForeground}" VerticalAlignment="Center"/>
+                                                <TextBlock Text=" ☁️" FontSize="11" Foreground="#89b4fa" VerticalAlignment="Center"
+                                                           Visibility="{Binding HasDriveLink, Converter={StaticResource BoolToVisConverter}}"
+                                                           ToolTip="Đã tải lên Google Drive! Bấm để xem thông tin."/>
                                             </StackPanel>
                                         </Button>
                                     </DataTemplate>

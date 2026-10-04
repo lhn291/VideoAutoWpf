@@ -364,4 +364,9 @@ FodyWeavers.xsd
 
 # Google Cloud Service Account credentials (DO NOT COMMIT)
 Config/google_credentials.json
-**/google_credentials.json
+**/google_credentials.json
+Config/gemini_api_key.txt
+**/gemini_api_key.txt
+Config/*_api_key.txt
+Config/drive_config.txt
+**/drive_config.txt

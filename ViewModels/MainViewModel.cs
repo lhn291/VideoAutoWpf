@@ -23,6 +23,7 @@ public partial class MainViewModel : ObservableObject
     private readonly VertexImagenService _imagenService;
     private readonly GeminiScriptService _geminiService;
     private readonly YouTubeAnalyticsService _youtubeService;
+    private readonly GoogleDriveService _driveService;
     private CancellationTokenSource? _cts;
     private MediaPlayer? _bgmPlayer;
 
@@ -180,6 +181,34 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasEstimatedCost;
 
+    // ── Tự Động Tải Lên Google Drive (Auto Upload Drive) ──
+    [ObservableProperty]
+    private bool _autoUploadToDrive = true;
+
+    [ObservableProperty]
+    private string _driveFolderId = string.Empty;
+
+    [ObservableProperty]
+    private string _driveServiceAccountEmail = string.Empty;
+
+    [ObservableProperty]
+    private bool _isUploadingToDrive;
+
+    [ObservableProperty]
+    private double _driveUploadProgress;
+
+    [ObservableProperty]
+    private string _driveStatusText = "Sẵn sàng tải lên Google Drive";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLastDriveLink))]
+    private string? _lastDriveVideoLink;
+
+    [ObservableProperty]
+    private string? _lastDriveFolderLink;
+
+    public bool HasLastDriveLink => !string.IsNullOrEmpty(LastDriveVideoLink);
+
     public MainViewModel() : this(new FFmpegService())
     {
     }
@@ -192,6 +221,9 @@ public partial class MainViewModel : ObservableObject
         _imagenService = new VertexImagenService(_authService);
         _geminiService = new GeminiScriptService(_authService);
         _youtubeService = new YouTubeAnalyticsService(_authService);
+        _driveService = new GoogleDriveService(_authService);
+        _driveFolderId = GoogleDriveService.LoadTargetFolderId() ?? string.Empty;
+        _driveServiceAccountEmail = _driveService.GetServiceAccountEmail() ?? string.Empty;
 
         var defaultOut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput");
         _outputDirectory = defaultOut;
@@ -1409,6 +1441,55 @@ public partial class MainViewModel : ObservableObject
                 LastGeneratedTxtPath = txtFile;
             }
 
+            // ── Tự Động Tải Lên Google Drive Nếu Được Bật ──
+            if (AutoUploadToDrive && File.Exists(resultFile))
+            {
+                try
+                {
+                    IsUploadingToDrive = true;
+                    DriveStatusText = "Đang tải video lên Google Drive...";
+                    AppendLog($"[Google Drive] ☁️ Bắt đầu tự động tải video lên Drive: {Path.GetFileName(resultFile)}");
+
+                    var driveProgress = new Progress<double>(pct =>
+                    {
+                        DriveUploadProgress = pct;
+                        DriveStatusText = $"Đang tải lên Drive: {pct:F0}%";
+                    });
+
+                    var driveRes = await _driveService.UploadVideoAsync(resultFile, null, driveProgress, ct);
+                    if (driveRes.Success)
+                    {
+                        LastDriveVideoLink = driveRes.WebViewLink;
+                        LastDriveFolderLink = driveRes.FolderLink;
+                        DriveStatusText = "✅ Đã tải lên Google Drive!";
+                        AppendLog($"[Google Drive] 🎉 Upload thành công! Link Drive:\n{driveRes.WebViewLink}");
+
+                        if (File.Exists(txtFile))
+                        {
+                            try
+                            {
+                                File.AppendAllText(txtFile, $"\n\n🔗 GOOGLE DRIVE LINK:\n{driveRes.WebViewLink}\n");
+                            }
+                            catch { }
+                        }
+                    }
+                    else
+                    {
+                        DriveStatusText = "❌ Tải lên Drive thất bại";
+                        AppendLog($"[Google Drive Lỗi] {driveRes.ErrorMessage}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DriveStatusText = "❌ Lỗi tải lên Drive: " + ex.Message;
+                    AppendLog($"[Google Drive Lỗi] {ex.Message}");
+                }
+                finally
+                {
+                    IsUploadingToDrive = false;
+                }
+            }
+
             var dialogResult = MessageBox.Show(
                 $"🎉 Video đã được tạo thành công!\n\n" +
                 $"📁 Thư mục project:\n{projectFolder}\n\n" +
@@ -1574,6 +1655,45 @@ public partial class MainViewModel : ObservableObject
                 ep.Status = "Hoàn thành";
                 completedCount++;
 
+                // 4. Tự động tải lên Google Drive nếu được bật
+                if (AutoUploadToDrive && File.Exists(resultFile))
+                {
+                    try
+                    {
+                        ep.IsUploadingDrive = true;
+                        BatchRenderStatusText = $"[Tập {epNum}/{totalEpisodes}] ☁️ Đang tải lên Google Drive...";
+                        AppendLog($"[Google Drive] Bắt đầu tải Tập {epNum} lên Google Drive...");
+
+                        var driveProgress = new Progress<double>(pct =>
+                        {
+                            ep.Status = $"Đang up Drive {pct:F0}%";
+                        });
+
+                        var driveResult = await _driveService.UploadVideoAsync(resultFile, CurrentSeries.SeriesTitle, driveProgress, ct);
+                        if (driveResult.Success)
+                        {
+                            ep.DriveVideoLink = driveResult.WebViewLink;
+                            ep.DriveFolderLink = driveResult.FolderLink;
+                            LastDriveVideoLink = driveResult.WebViewLink;
+                            LastDriveFolderLink = driveResult.FolderLink;
+                            AppendLog($"[Google Drive] ✅ Đã tải lên Drive Tập {epNum}: {driveResult.WebViewLink}");
+                        }
+                        else
+                        {
+                            AppendLog($"[Google Drive Lỗi Tập {epNum}] {driveResult.ErrorMessage}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"[Google Drive Lỗi Tập {epNum}] {ex.Message}");
+                    }
+                    finally
+                    {
+                        ep.IsUploadingDrive = false;
+                        ep.Status = "Hoàn thành";
+                    }
+                }
+
                 // Dọn dẹp folder tạm nếu có
                 try
                 {
@@ -1641,6 +1761,111 @@ public partial class MainViewModel : ObservableObject
                 FileName = LastGeneratedVideoPath,
                 UseShellExecute = true
             });
+        }
+    }
+
+    [RelayCommand]
+    private void OpenLastDriveLink()
+    {
+        if (!string.IsNullOrEmpty(LastDriveVideoLink))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = LastDriveVideoLink,
+                UseShellExecute = true
+            });
+        }
+    }
+
+    [RelayCommand]
+    private void OpenLastDriveFolderLink()
+    {
+        var targetLink = LastDriveFolderLink ?? LastDriveVideoLink;
+        if (!string.IsNullOrEmpty(targetLink))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = targetLink,
+                UseShellExecute = true
+            });
+        }
+    }
+
+    [RelayCommand]
+    private void SaveDriveFolderId()
+    {
+        GoogleDriveService.SaveTargetFolderId(DriveFolderId);
+        MessageBox.Show("Đã lưu ID Thư mục Google Drive thành công!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    [RelayCommand]
+    private async Task TestDriveConnectionAsync()
+    {
+        DriveStatusText = "Đang kiểm tra kết nối Google Drive...";
+        var (success, msg) = await _driveService.TestConnectionAsync(DriveFolderId);
+        DriveStatusText = msg;
+        MessageBox.Show(msg, success ? "Kết Nối Thành Công" : "Lỗi Kết Nối Drive", MessageBoxButton.OK, success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+    }
+
+    [RelayCommand]
+    private void CopyDriveServiceAccountEmail()
+    {
+        if (!string.IsNullOrEmpty(DriveServiceAccountEmail))
+        {
+            Clipboard.SetText(DriveServiceAccountEmail);
+            MessageBox.Show($"Đã sao chép email Service Account:\n\n{DriveServiceAccountEmail}\n\nHãy vào Google Drive cá nhân của bạn, chọn thư mục muốn lưu video -> Bấm 'Chia sẻ' (Share) -> Thêm email này làm 'Người chỉnh sửa' (Editor)!", "Đã sao chép email", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        else
+        {
+            MessageBox.Show("Không tìm thấy email Service Account trong google_credentials.json!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    [RelayCommand]
+    private async Task ManualUploadCurrentVideoToDriveAsync()
+    {
+        if (string.IsNullOrEmpty(LastGeneratedVideoPath) || !File.Exists(LastGeneratedVideoPath))
+        {
+            MessageBox.Show("Chưa có video thành phẩm nào được tạo để tải lên!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            IsUploadingToDrive = true;
+            DriveStatusText = "Đang tải video lên Google Drive...";
+            AppendLog($"[Google Drive] Tải video lên Drive thủ công: {Path.GetFileName(LastGeneratedVideoPath)}");
+
+            var progress = new Progress<double>(p =>
+            {
+                DriveUploadProgress = p;
+                DriveStatusText = $"Đang tải lên Drive: {p:F0}%";
+            });
+
+            var res = await _driveService.UploadVideoAsync(LastGeneratedVideoPath, null, progress);
+            if (res.Success)
+            {
+                LastDriveVideoLink = res.WebViewLink;
+                LastDriveFolderLink = res.FolderLink;
+                DriveStatusText = "✅ Đã tải lên Google Drive thành công!";
+                AppendLog($"[Google Drive] 🎉 Upload hoàn tất: {res.WebViewLink}");
+                MessageBox.Show($"🎉 Video đã được tải lên Google Drive thành công!\n\nLink xem trực tiếp:\n{res.WebViewLink}", "Google Drive", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                DriveStatusText = "❌ Tải lên Drive thất bại";
+                AppendLog($"[Google Drive Lỗi] {res.ErrorMessage}");
+                MessageBox.Show($"Tải lên Google Drive thất bại:\n{res.ErrorMessage}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            DriveStatusText = "❌ Lỗi: " + ex.Message;
+            MessageBox.Show($"Lỗi: {ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsUploadingToDrive = false;
         }
     }
 
@@ -1734,6 +1959,17 @@ public partial class MainViewModel : ObservableObject
         SetClipboardText(CurrentPublishInfo.Hashtags);
         TriggerCopyFeedback("✅ Đã sao chép Hashtags!");
         AppendLog($"[Clipboard] Đã sao chép Hashtags: {CurrentPublishInfo.Hashtags}");
+    }
+
+    [RelayCommand]
+    private void CopyDriveLink()
+    {
+        if (!string.IsNullOrEmpty(LastDriveVideoLink))
+        {
+            SetClipboardText(LastDriveVideoLink);
+            TriggerCopyFeedback("✅ Đã sao chép Link Google Drive!");
+            AppendLog($"[Clipboard] Đã sao chép Link Drive: {LastDriveVideoLink}");
+        }
     }
 
     [RelayCommand]

@@ -96,6 +96,59 @@
                 Visibility="{Binding HasSeriesPlan, Converter={StaticResource InverseBoolToVisConverter}}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Orientation="Vertical">
+                    <!-- GEMINI API KEY CONFIG PANEL (Cứu cánh khi Google Cloud Vertex AI gặp lỗi) -->
+                    <Border Background="#1f1d36" BorderBrush="#cba6f7" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,14">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🔑" FontSize="15" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="CẤU HÌNH GEMINI API KEY (MIỄN PHÍ - GOOGLE AI STUDIO)" FontSize="11.5" FontWeight="Bold" Foreground="#cba6f7" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                    <Button Command="{Binding OpenAiStudioKeyPageCommand}"
+                                            Content="🌐 Lấy Key Miễn Phí Tại AI Studio"
+                                            Padding="10,4" FontSize="11" Margin="0,0,8,0"
+                                            Background="#2d2a45" Foreground="{StaticResource AccentBlue}" BorderThickness="0"
+                                            ToolTip="Mở trang Google AI Studio để tạo API Key miễn phí không cần thẻ tín dụng"/>
+                                    <Button Command="{Binding ToggleApiKeyInputCommand}"
+                                            Content="{Binding ApiKeyToggleText}"
+                                            Padding="10,4" FontSize="11"
+                                            Background="#2d2a45" Foreground="{StaticResource TextSecondary}" BorderThickness="0"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Key input row (visible if ShowApiKeyInput == true) -->
+                            <StackPanel Visibility="{Binding ShowApiKeyInput, Converter={StaticResource BoolToVisConverter}}" Margin="0,8,0,0">
+                                <TextBlock Text="💡 Nếu Google Cloud Vertex AI chưa cấp được quyền hoặc chưa có thẻ, bạn chỉ cần dán Gemini API Key miễn phí tại đây (bắt đầu bằng AIzaSy...):" 
+                                           FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,6"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding GeminiApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="12" Padding="8,6" Background="#161726" Foreground="{StaticResource TextPrimary}"
+                                             BorderBrush="#313244">
+                                        <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="6"/></Style></TextBox.Resources>
+                                    </TextBox>
+                                    <Button Grid.Column="1" Command="{Binding SaveGeminiApiKeyCommand}"
+                                            Content="💾 Lưu &amp; Sử Dụng Ngay" Style="{StaticResource BtnSuccess}"
+                                            Padding="14,6" FontSize="11.5" Margin="8,0,0,0"/>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- Status when Key already configured -->
+                            <TextBlock Visibility="{Binding HasGeminiApiKey, Converter={StaticResource BoolToVisConverter}}"
+                                       Text="✅ Đang kích hoạt: Sử dụng Gemini AI qua API Key Google AI Studio (miễn phí, không phụ thuộc Google Cloud Vertex AI)."
+                                       FontSize="10.5" Foreground="{StaticResource AccentGreen}" Margin="0,5,0,0"/>
+                        </StackPanel>
+                    </Border>
+
                     <TextBlock Text="1. Nhập Ý Tưởng / Cốt Truyện Dài Của Series" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
                     <TextBlock Text="Bạn có thể dán toàn bộ một câu chuyện, tóm tắt tiểu thuyết, vụ án kỳ bí, hoặc tóm tắt chủ đề mà bạn muốn làm chuỗi video:" 
                                FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
@@ -122,12 +175,16 @@
                         <Border Grid.Column="0" Background="#161726" CornerRadius="8" Padding="12" BorderBrush="#313244" BorderThickness="1">
                             <StackPanel>
                                 <TextBlock Text="🔢 Số Tập Dự Kiến" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                                <TextBlock Text="Chọn hoặc gõ số tập (2-50+):" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                                <TextBlock Text="Chọn số tập cho chuỗi video:" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
                                 <ComboBox ItemsSource="{Binding EpisodeCountOptions}"
                                           SelectedItem="{Binding SelectedEpisodeCount}"
-                                          Text="{Binding EpisodeCountText, UpdateSourceTrigger=PropertyChanged}"
-                                          IsEditable="True"
-                                          FontSize="12" FontWeight="SemiBold" Padding="8,4"/>
+                                          FontSize="12" FontWeight="SemiBold" Padding="8,4">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding StringFormat='{}{0} tập'}" Foreground="{StaticResource TextPrimary}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
                         </Border>
 
@@ -138,9 +195,13 @@
                                 <TextBlock Text="{Binding EstimatedDurationPerEpisode}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}" Margin="0,0,0,8"/>
                                 <ComboBox ItemsSource="{Binding ScenesPerEpisodeOptions}"
                                           SelectedItem="{Binding SelectedScenesPerEpisode}"
-                                          Text="{Binding ScenesPerEpisodeText, UpdateSourceTrigger=PropertyChanged}"
-                                          IsEditable="True"
-                                          FontSize="12" FontWeight="SemiBold" Padding="8,4"/>
+                                          FontSize="12" FontWeight="SemiBold" Padding="8,4">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding StringFormat='{}{0} cảnh / tập'}" Foreground="{StaticResource TextPrimary}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
                         </Border>
 

@@ -42,11 +42,24 @@ public partial class EpisodeItem : ObservableObject
     private string? _outputVideoPath;
 
     [ObservableProperty]
+    [JsonPropertyName("drive_video_link")]
+    private string? _driveVideoLink;
+
+    [ObservableProperty]
+    [JsonPropertyName("drive_folder_link")]
+    private string? _driveFolderLink;
+
+    [ObservableProperty]
+    private bool _isUploadingDrive;
+
+    [ObservableProperty]
     [JsonPropertyName("last_rendered_date")]
     private DateTime? _lastRenderedDate;
 
     [ObservableProperty]
     private bool _isSelected;
+
+    public bool HasDriveLink => !string.IsNullOrEmpty(DriveVideoLink);
 
     public bool IsCompleted => !string.IsNullOrEmpty(OutputVideoPath) && System.IO.File.Exists(OutputVideoPath);
 
@@ -90,5 +103,10 @@ public partial class EpisodeItem : ObservableObject
     partial void OnOutputVideoPathChanged(string? value)
     {
         OnPropertyChanged(nameof(IsCompleted));
+    }
+
+    partial void OnDriveVideoLinkChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasDriveLink));
     }
 }

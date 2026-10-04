@@ -304,19 +304,20 @@ public class GeminiScriptService
             $"  \"suggested_style\": \"{styleKey}\",\n" +
             $"  \"suggested_voice\": \"{voiceKey}\",\n" +
             "  \"episodes\": [\n" +
-            $"    {{ \"episode_number\": 1, \"episode_title\": \"Tiêu đề tập 1...\", \"plot_beat\": \"Diễn biến tập 1...\", \"episode_hook\": \"Hook tập 1...\", \"cliffhanger\": \"Kết lửng tập 1...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }},\n" +
-            $"    {{ \"episode_number\": 2, \"episode_title\": \"Tiêu đề tập 2...\", \"plot_beat\": \"Diễn biến tập 2...\", \"episode_hook\": \"Hook tập 2...\", \"cliffhanger\": \"Kết lửng tập 2...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }}\n" +
-            $"    // ... MUST include all {totalEpisodes} episodes up to episode_number {totalEpisodes}\n" +
+            $"    {{ \"episode_number\": 1, \"episode_title\": \"Tập 1: [Tiêu đề mở màn bí ẩn]\", \"plot_beat\": \"Diễn biến tập 1...\", \"episode_hook\": \"Hook tập 1...\", \"cliffhanger\": \"Kết lửng tập 1...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }},\n" +
+            $"    {{ \"episode_number\": 2, \"episode_title\": \"Tập 2: [Tiêu đề xung đột dâng cao]\", \"plot_beat\": \"Diễn biến tập 2...\", \"episode_hook\": \"Hook tập 2...\", \"cliffhanger\": \"Kết lửng tập 2...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }},\n" +
+            $"    {{ \"episode_number\": 3, \"episode_title\": \"Tập 3: [Tiêu đề nút thắt rúng động]\", \"plot_beat\": \"Diễn biến tập 3...\", \"episode_hook\": \"Hook tập 3...\", \"cliffhanger\": \"Kết lửng tập 3...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }}\n" +
+            $"    // ... MUST include all {totalEpisodes} episodes strictly numbered 1, 2, 3... up to {totalEpisodes}\n" +
             "  ]\n" +
             "}";
 
-        var userPrompt = $"BẮT BUỘC: Bạn PHẢI tạo dàn ý ĐÚNG {totalEpisodes} TẬP cho chuỗi video này (từ Tập 1 đến Tập {totalEpisodes}). " +
+        var userPrompt = $"BẮT BUỘC: Bạn PHẢI tạo dàn ý ĐÚNG {totalEpisodes} TẬP cho chuỗi video này, đánh số tuần tự từ 1 đến {totalEpisodes}.\n" +
                          $"Mỗi tập đặt mục tiêu chính xác {defaultScenesPerEpisode} phân cảnh.\n\n" +
                          $"Chủ đề / Cốt truyện:\n'{topicOrPremise}'\n\n" +
                          $"Thể loại & Nhịp điệu: {toneOrPacing}\n" +
                          $"Định dạng: {aspectRatio}\n" +
-                         $"Số tập bắt buộc: {totalEpisodes} tập (Mảng 'episodes' PHẢI có đủ {totalEpisodes} phần tử).\n" +
-                         $"Số cảnh mỗi tập: {defaultScenesPerEpisode} cảnh.";
+                         $"Yêu cầu định dạng tiêu đề: Mảng 'episodes' BẮT BUỘC gồm {totalEpisodes} phần tử, đánh số episode_number lần lượt là 1, 2, 3, 4, 5... " +
+                         $"Tiêu đề mỗi tập PHẢI đặt theo mẫu: 'Tập 1: [Tên tập]', 'Tập 2: [Tên tập]', ..., 'Tập {totalEpisodes}: [Tên tập]'.";
 
         return await CallGeminiForJson<SeriesPlan>(systemInstruction, userPrompt, projectId, location, token, ct);
     }
@@ -530,8 +531,8 @@ public class GeminiScriptService
     {
         var apiKey = ApiKey;
         var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
-            ? new[] { "gemini-2.0-flash", "gemini-1.5-flash" }
-            : new[] { "gemini-1.5-flash-002", "gemini-1.5-flash-001", "gemini-2.0-flash-001", "gemini-1.5-flash", "gemini-2.0-flash" };
+            ? new[] { "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash" }
+            : new[] { "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-001", "gemini-2.0-flash-001" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
@@ -629,6 +630,11 @@ public class GeminiScriptService
             {
                 request.Dispose();
             }
+        }
+
+        if (lastError != null && lastError.Contains("prepayment credits are depleted"))
+        {
+            throw new Exception("Key Gemini của bạn đang gắn với một dự án Google Cloud đã hết hạn mức trả trước (prepayment credits are depleted).\n\n👉 Cách lấy Key Miễn Phí (Free Tier): Vào aistudio.google.com/app/apikey > Bấm 'Create API key' > Chọn 'Create API key in new project' để nhận Key Miễn Phí không cần credit hay thẻ!");
         }
 
         if (lastError != null && (lastError.Contains("BILLING_DISABLED") || lastError.Contains("billing to be enabled")))

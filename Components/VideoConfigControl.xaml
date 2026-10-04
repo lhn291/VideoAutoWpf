@@ -70,6 +70,104 @@
                     </StackPanel>
                 </Border>
 
+                <!-- TỰ ĐỘNG TẢI LÊN GOOGLE DRIVE (AUTO UPLOAD DRIVE) -->
+                <Border Background="#1e1e2e" CornerRadius="8" Padding="10" BorderBrush="#4285F4" BorderThickness="1.2" Margin="0,0,0,14">
+                    <StackPanel>
+                        <!-- Header & Checkbox Bật/Tắt -->
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="☁️ Google Drive Sync" FontSize="12" FontWeight="Bold" Foreground="#4285F4"/>
+                                <Border Background="#1b2a47" CornerRadius="4" Padding="5,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="Auto Upload" FontSize="9" FontWeight="Bold" Foreground="#8ab4f8"/>
+                                </Border>
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Content="Tự động tải lên" IsChecked="{Binding AutoUploadToDrive}"
+                                      Foreground="{StaticResource TextPrimary}" FontSize="11" FontWeight="SemiBold" Cursor="Hand" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <TextBlock Text="Sau khi render xong, video sẽ tự động được tải lên Drive và cấp link chia sẻ trực tiếp."
+                                   FontSize="10" Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                        <!-- ID Thư Mục Đích -->
+                        <TextBlock Text="ID Thư mục Drive đích (tùy chọn):" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="0,0,0,2"/>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Text="{Binding DriveFolderId, UpdateSourceTrigger=PropertyChanged}" FontSize="11"
+                                     Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderDark}"
+                                     Padding="6,4" VerticalContentAlignment="Center" ToolTip="Dán ID thư mục từ link Google Drive (chuỗi ký tự sau /folders/...)">
+                                <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                            </TextBox>
+                            <Button Grid.Column="1" Content="💾 Lưu" Command="{Binding SaveDriveFolderIdCommand}"
+                                    Padding="8,4" Margin="6,0,0,0" FontSize="11" ToolTip="Lưu lại ID thư mục này để dùng cho tất cả video sau"/>
+                        </Grid>
+
+                        <!-- Service Account Email & Copy Button -->
+                        <Border Background="#161726" CornerRadius="5" Padding="8,6" Margin="0,0,0,8" BorderBrush="#313244" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Email Service Account cần cấp quyền:" FontSize="9.5" Foreground="{StaticResource TextMuted}"/>
+                                    <TextBlock Text="{Binding DriveServiceAccountEmail}" FontSize="10" FontWeight="SemiBold" Foreground="#a6e3a1"
+                                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0" ToolTip="{Binding DriveServiceAccountEmail}"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="📋 Copy Email" Command="{Binding CopyDriveServiceAccountEmailCommand}"
+                                        Padding="6,3" Margin="6,0,0,0" FontSize="10" VerticalAlignment="Center"
+                                        ToolTip="Sao chép email này rồi bấm 'Chia sẻ' thư mục trên Drive của bạn cho email này"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Nút Kiểm tra kết nối & Mở link video gần nhất -->
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="🔌 Kiểm Tra Kết Nối" Command="{Binding TestDriveConnectionCommand}"
+                                    Padding="6,4" Margin="0,0,3,0" FontSize="10.5" Background="#2a2b3d" Foreground="#89b4fa" BorderThickness="0"
+                                    ToolTip="Kiểm tra kết nối và quyền ghi vào thư mục Google Drive"/>
+                            <Button Grid.Column="1" Content="☁️ Tải Lên Thủ Công" Command="{Binding ManualUploadCurrentVideoToDriveCommand}"
+                                    IsEnabled="{Binding HasGeneratedVideo}"
+                                    Padding="6,4" Margin="3,0,0,0" FontSize="10.5" Background="#2a2b3d" Foreground="#a6e3a1" BorderThickness="0"
+                                    ToolTip="Tải video vừa render lên Google Drive ngay bây giờ"/>
+                        </Grid>
+
+                        <!-- Trạng thái Upload & Link xem -->
+                        <StackPanel Visibility="{Binding IsUploadingToDrive, Converter={StaticResource BoolToVisConverter}}" Margin="0,4,0,4">
+                            <ProgressBar Value="{Binding DriveUploadProgress}" Maximum="100" Height="6" Margin="0,0,0,3"/>
+                            <TextBlock Text="{Binding DriveStatusText}" FontSize="10" Foreground="#f9e2af" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <!-- Link Google Drive đã tạo gần nhất -->
+                        <Border Visibility="{Binding HasLastDriveLink, Converter={StaticResource BoolToVisConverter}}"
+                                Background="#18233c" CornerRadius="5" Padding="8,5" Margin="0,4,0,0" BorderBrush="#4285F4" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="🎬 Link xem video trên Google Drive:" FontSize="9.5" Foreground="#8ab4f8"/>
+                                    <TextBlock Text="{Binding LastDriveVideoLink}" FontSize="10" FontWeight="SemiBold" Foreground="White"
+                                               TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="🔗 Mở Link" Command="{Binding OpenLastDriveLinkCommand}"
+                                        Padding="8,3" Margin="6,0,0,0" FontSize="10" FontWeight="Bold" Background="#4285F4" Foreground="White" BorderThickness="0"
+                                        VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
 
                 <!-- ƯỚC TÍNH CHI PHÍ API (GOOGLE CLOUD) -->
                 <Border Background="#1b1c2e" CornerRadius="8" Padding="10" BorderBrush="#363854" BorderThickness="1" Margin="0,0,0,12"
