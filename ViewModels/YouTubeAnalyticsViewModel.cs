@@ -109,7 +109,87 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasVideoAiAnalysis;
 
-    public bool IsBusy => IsLoadingChannel || IsLoadingVideo || IsLoadingComparison || IsLoadingSearch || IsLoadingAiAnalysis;
+    // ══════════════════════════════════
+    // TAB: TOP KÊNH THEO CHỦ ĐỀ
+    // ══════════════════════════════════
+    [ObservableProperty]
+    private string _topicKeyword = string.Empty;
+
+    [ObservableProperty]
+    private string _topicRegionCode = "VN";
+
+    [ObservableProperty]
+    private string _topicSortBy = "views"; // views, subs, avg, videos
+
+    public bool IsSortByViews
+    {
+        get => TopicSortBy == "views";
+        set { if (value && TopicSortBy != "views") TopicSortBy = "views"; }
+    }
+
+    public bool IsSortBySubs
+    {
+        get => TopicSortBy == "subs";
+        set { if (value && TopicSortBy != "subs") TopicSortBy = "subs"; }
+    }
+
+    public bool IsSortByAvg
+    {
+        get => TopicSortBy == "avg";
+        set { if (value && TopicSortBy != "avg") TopicSortBy = "avg"; }
+    }
+
+    partial void OnTopicSortByChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsSortByViews));
+        OnPropertyChanged(nameof(IsSortBySubs));
+        OnPropertyChanged(nameof(IsSortByAvg));
+
+        if (TopicChannels.Count > 1)
+        {
+            ReSortTopicChannels();
+        }
+    }
+
+    private void ReSortTopicChannels()
+    {
+        var list = TopicChannels.ToList();
+        IEnumerable<YouTubeChannelInfo> sorted = TopicSortBy switch
+        {
+            "subs" => list.OrderByDescending(c => c.SubscriberCount),
+            "avg" => list.OrderByDescending(c => c.AvgViewsPerVideo),
+            "videos" => list.OrderByDescending(c => c.VideoCount),
+            _ => list.OrderByDescending(c => c.ViewCount)
+        };
+
+        TopicChannels.Clear();
+        int rank = 1;
+        foreach (var ch in sorted)
+        {
+            ch.Rank = rank++;
+            TopicChannels.Add(ch);
+        }
+    }
+
+    [ObservableProperty]
+    private int _topicMaxResults = 20;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBusy))]
+    private bool _isLoadingTopicChannels;
+
+    [ObservableProperty]
+    private bool _hasTopicChannelsResult;
+
+    [ObservableProperty]
+    private string _topicSearchSummary = string.Empty;
+
+    [ObservableProperty]
+    private string _totalTopicViewsDisplay = string.Empty;
+
+    public ObservableCollection<YouTubeChannelInfo> TopicChannels { get; } = new();
+
+    public bool IsBusy => IsLoadingChannel || IsLoadingVideo || IsLoadingComparison || IsLoadingSearch || IsLoadingAiAnalysis || IsLoadingTopicChannels;
 
     public ObservableCollection<YouTubeSearchResult> SearchResults { get; } = new();
     public ObservableCollection<YouTubeVideoInfo> TrendingVideos { get; } = new();
@@ -348,6 +428,133 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
     }
 
     // ══════════════════════════════════
+    //  COMMANDS: TAB TOP KÊNH THEO CHỦ ĐỀ
+    // ══════════════════════════════════
+
+    [RelayCommand]
+    private async Task SearchTopChannelsByTopicAsync()
+    {
+        if (string.IsNullOrWhiteSpace(TopicKeyword))
+        {
+            ShowError("Vui lòng nhập chủ đề kênh cần tìm (VD: review phim, kể chuyện kinh dị, kiến thức khoa học...)");
+            return;
+        }
+
+        IsLoadingTopicChannels = true;
+        ClearError();
+        StatusMessage = $"🔍 Đang tìm kiếm các kênh có lượt view cao nhất cho chủ đề '{TopicKeyword.Trim()}'...";
+
+        try
+        {
+            TopicChannels.Clear();
+            var channels = await _ytService.GetTopChannelsByTopicAsync(
+                TopicKeyword.Trim(), 
+                TopicMaxResults, 
+                string.IsNullOrWhiteSpace(TopicRegionCode) ? null : TopicRegionCode.Trim(), 
+                TopicSortBy
+            );
+
+            long totalViews = 0;
+            foreach (var ch in channels)
+            {
+                TopicChannels.Add(ch);
+                totalViews += ch.ViewCount;
+            }
+
+            HasTopicChannelsResult = TopicChannels.Count > 0;
+            TotalTopicViewsDisplay = YouTubeChannelInfo.FormatNumber(totalViews);
+            TopicSearchSummary = $"Tìm thấy {TopicChannels.Count} kênh hàng đầu về '{TopicKeyword}' — Tổng cộng: {TotalTopicViewsDisplay} lượt xem";
+
+            if (TopicChannels.Count > 0)
+            {
+                StatusMessage = $"✅ Đã tìm thấy {TopicChannels.Count} kênh có lượt view cao nhất về '{TopicKeyword}' (Tổng {TotalTopicViewsDisplay} lượt xem)!";
+            }
+            else
+            {
+                StatusMessage = $"⚠️ Không tìm thấy kênh nào cho chủ đề '{TopicKeyword}'. Vui lòng thử từ khóa khác.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowException("Lỗi tìm kiếm kênh theo chủ đề", ex);
+        }
+        finally
+        {
+            IsLoadingTopicChannels = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ApplyQuickTopicAsync(string? topic)
+    {
+        if (string.IsNullOrWhiteSpace(topic)) return;
+        TopicKeyword = topic;
+        RequestSwitchTab?.Invoke(1);
+        await SearchTopChannelsByTopicAsync();
+    }
+
+    [RelayCommand]
+    private async Task AnalyzeSelectedChannelAsync(YouTubeChannelInfo? channel)
+    {
+        if (channel == null) return;
+        ChannelInput = !string.IsNullOrEmpty(channel.CustomUrl) ? channel.CustomUrl : channel.ChannelId;
+        RequestSwitchTab?.Invoke(0);
+        await AnalyzeChannelAsync();
+    }
+
+    [RelayCommand]
+    private void SwitchToTopicChannelsTab()
+    {
+        RequestSwitchTab?.Invoke(1);
+    }
+
+    [RelayCommand]
+    private void CreateVideoFromChannel(YouTubeChannelInfo? channel)
+    {
+        if (channel == null) return;
+        var req = BuildRequestFromChannel(channel);
+        PromptCreationChoice(req);
+    }
+
+    [RelayCommand]
+    private void CreateSingleVideoFromChannel(YouTubeChannelInfo? channel)
+    {
+        if (channel == null) return;
+        var req = BuildRequestFromChannel(channel);
+        req.TargetMode = VideoCreationTargetMode.SingleEpisode;
+        PendingVideoRequest = req;
+        RequestCloseWithAction?.Invoke();
+    }
+
+    [RelayCommand]
+    private void CreateSeriesFromChannel(YouTubeChannelInfo? channel)
+    {
+        if (channel == null) return;
+        var req = BuildRequestFromChannel(channel);
+        req.TargetMode = VideoCreationTargetMode.Series;
+        PendingVideoRequest = req;
+        RequestCloseWithAction?.Invoke();
+    }
+
+    public CreateVideoFromAnalyticsRequest BuildRequestFromChannel(YouTubeChannelInfo channel)
+    {
+        var (style, tone, bgm) = DetectStyleAndTone(channel.Title, channel.Description);
+        var topicName = !string.IsNullOrWhiteSpace(TopicKeyword) ? TopicKeyword : channel.Title;
+        return new CreateVideoFromAnalyticsRequest
+        {
+            Title = $"[CHỦ ĐỀ TRIỆU VIEW] Lấy cảm hứng từ {channel.Title}",
+            HookOpening = "Bạn có biết bí mật đằng sau những video hàng triệu người xem của chủ đề này là gì không?",
+            HookStrategy = "Tập trung giữ chân người xem ngay từ 5s đầu bằng một tình huống tò mò",
+            TargetEmotion = "Kích thích tò mò và hứng thú",
+            TargetAudience = $"Khán giả quan tâm chủ đề {topicName}",
+            SuggestedStyle = style,
+            SuggestedTone = tone,
+            SuggestedBgm = bgm,
+            SourceInfo = channel.Title
+        };
+    }
+
+    // ══════════════════════════════════
     //  COMMANDS: AI BÓC TÁCH TITLE & HOOK
     // ══════════════════════════════════
 
@@ -427,6 +634,7 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
     // ── Cầu Nối Tạo Video Trực Tiếp (1 Tập hoặc Series Nhiều Tập) ──
     public CreateVideoFromAnalyticsRequest? PendingVideoRequest { get; set; }
     public Action? RequestCloseWithAction { get; set; }
+    public Action<int>? RequestSwitchTab { get; set; }
 
     [ObservableProperty]
     private bool _isCreationChoicePopupOpen;

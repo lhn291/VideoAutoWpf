@@ -25,6 +25,18 @@ public class YouTubeChannelInfo
     public double AvgViewsPerVideo => VideoCount > 0 ? (double)ViewCount / VideoCount : 0;
     public string AvgViewsPerVideoDisplay => FormatNumber((long)AvgViewsPerVideo);
 
+    public int Rank { get; set; }
+    public string RankBadge => Rank switch
+    {
+        1 => "🥇",
+        2 => "🥈",
+        3 => "🥉",
+        _ => $"#{Rank}"
+    };
+    public string Url => !string.IsNullOrEmpty(CustomUrl) 
+        ? $"https://www.youtube.com/{CustomUrl}" 
+        : $"https://www.youtube.com/channel/{ChannelId}";
+
     public static string FormatNumber(long number)
     {
         return number switch

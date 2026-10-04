@@ -308,6 +308,125 @@ public class YouTubeAnalyticsService
         return result;
     }
 
+    /// <summary>
+    /// Tìm kiếm các kênh YouTube theo chủ đề và lấy ra những kênh có lượt xem (views) cao nhất
+    /// </summary>
+    public async Task<ObservableCollection<YouTubeChannelInfo>> GetTopChannelsByTopicAsync(
+        string topic, 
+        int maxResults = 20, 
+        string? regionCode = null, 
+        string sortBy = "views")
+    {
+        var service = GetService();
+        var channelIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. Tìm kiếm kênh trực tiếp theo chủ đề
+        try
+        {
+            var channelSearch = service.Search.List("snippet");
+            channelSearch.Q = topic;
+            channelSearch.Type = "channel";
+            channelSearch.MaxResults = 50;
+            if (!string.IsNullOrEmpty(regionCode))
+                channelSearch.RegionCode = regionCode;
+
+            var channelSearchResp = await channelSearch.ExecuteAsync();
+            if (channelSearchResp.Items != null)
+            {
+                foreach (var item in channelSearchResp.Items)
+                {
+                    var cid = item.Snippet?.ChannelId ?? item.Id?.ChannelId;
+                    if (!string.IsNullOrEmpty(cid))
+                        channelIds.Add(cid);
+                }
+            }
+        }
+        catch
+        {
+            // Bỏ qua lỗi tìm kiếm kênh nếu có
+        }
+
+        // 2. Tìm kiếm thêm các video có lượt view cao nhất theo chủ đề để phát hiện các kênh 'ông trùm' ngách đó
+        try
+        {
+            var videoSearch = service.Search.List("snippet");
+            videoSearch.Q = topic;
+            videoSearch.Type = "video";
+            videoSearch.Order = SearchResource.ListRequest.OrderEnum.ViewCount;
+            videoSearch.MaxResults = 30;
+            if (!string.IsNullOrEmpty(regionCode))
+                videoSearch.RegionCode = regionCode;
+
+            var videoSearchResp = await videoSearch.ExecuteAsync();
+            if (videoSearchResp.Items != null)
+            {
+                foreach (var item in videoSearchResp.Items)
+                {
+                    if (!string.IsNullOrEmpty(item.Snippet?.ChannelId))
+                        channelIds.Add(item.Snippet.ChannelId);
+                }
+            }
+        }
+        catch
+        {
+            // Bỏ qua lỗi video search nếu có
+        }
+
+        if (channelIds.Count == 0)
+            return new ObservableCollection<YouTubeChannelInfo>();
+
+        // 3. Lấy thông tin thống kê chi tiết cho tất cả kênh tìm được (tối đa 50 kênh trong 1 API call)
+        var targetIds = channelIds.Take(50).ToList();
+        var channelListReq = service.Channels.List("snippet,statistics,brandingSettings");
+        channelListReq.Id = string.Join(",", targetIds);
+        var channelListResp = await channelListReq.ExecuteAsync();
+
+        var channelList = new List<YouTubeChannelInfo>();
+        if (channelListResp.Items != null)
+        {
+            foreach (var ch in channelListResp.Items)
+            {
+                var viewCount = (long)(ch.Statistics?.ViewCount ?? 0);
+                var subCount = (long)(ch.Statistics?.SubscriberCount ?? 0);
+                var videoCount = (long)(ch.Statistics?.VideoCount ?? 0);
+
+                var info = new YouTubeChannelInfo
+                {
+                    ChannelId = ch.Id,
+                    Title = ch.Snippet?.Title ?? string.Empty,
+                    Description = ch.Snippet?.Description ?? string.Empty,
+                    ThumbnailUrl = ch.Snippet?.Thumbnails?.Medium?.Url ?? ch.Snippet?.Thumbnails?.Default__?.Url ?? string.Empty,
+                    CustomUrl = ch.Snippet?.CustomUrl ?? string.Empty,
+                    PublishedAt = ch.Snippet?.PublishedAtDateTimeOffset?.UtcDateTime ?? DateTime.MinValue,
+                    SubscriberCount = subCount,
+                    ViewCount = viewCount,
+                    VideoCount = videoCount,
+                    Country = ch.Snippet?.Country ?? "N/A"
+                };
+                channelList.Add(info);
+            }
+        }
+
+        // 4. Sắp xếp theo tiêu chí: Mặc định là Lượt View Cao Nhất (ViewCount)
+        IEnumerable<YouTubeChannelInfo> sorted = sortBy switch
+        {
+            "subs" => channelList.OrderByDescending(c => c.SubscriberCount),
+            "avg" => channelList.OrderByDescending(c => c.AvgViewsPerVideo),
+            "videos" => channelList.OrderByDescending(c => c.VideoCount),
+            _ => channelList.OrderByDescending(c => c.ViewCount)
+        };
+
+        var result = new ObservableCollection<YouTubeChannelInfo>();
+        int rank = 1;
+        foreach (var ch in sorted.Take(maxResults))
+        {
+            ch.Rank = rank++;
+            result.Add(ch);
+        }
+
+        return result;
+    }
+
     // ── Helpers ──
 
     private static YouTubeVideoInfo MapVideoToInfo(Google.Apis.YouTube.v3.Data.Video v, int rank)

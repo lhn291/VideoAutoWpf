@@ -102,6 +102,67 @@
                 </Style>
             </Style.Resources>
         </Style>
+
+        <!-- Tag Pill Button Style -->
+        <Style x:Key="TagPillBtn" TargetType="Button">
+            <Setter Property="Background" Value="#221e3c"/>
+            <Setter Property="Foreground" Value="#cba6f7"/>
+            <Setter Property="BorderBrush" Value="#44396b"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="14" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3a2f64"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Sort Option RadioButton Style -->
+        <Style x:Key="SortRadioBtn" TargetType="RadioButton">
+            <Setter Property="Background" Value="#1a192e"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondary}"/>
+            <Setter Property="BorderBrush" Value="#322d4f"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#322552"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#8964d6"/>
+                                <Setter Property="Foreground" Value="#cba6f7"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#292042"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="18">
@@ -154,9 +215,10 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal">
                         <RadioButton x:Name="Tab0" Style="{StaticResource TabBtn}" Content="📊 Phân Tích Kênh" IsChecked="True" Checked="Tab_Checked" Tag="0" GroupName="YtAnalyticsTabs"/>
-                        <RadioButton x:Name="Tab1" Style="{StaticResource TabBtn}" Content="🎬 Phân Tích Video" Checked="Tab_Checked" Tag="1" GroupName="YtAnalyticsTabs"/>
-                        <RadioButton x:Name="Tab2" Style="{StaticResource TabBtn}" Content="🆚 So Sánh Đối Thủ" Checked="Tab_Checked" Tag="2" GroupName="YtAnalyticsTabs"/>
-                        <RadioButton x:Name="Tab3" Style="{StaticResource TabBtn}" Content="🔥 Trending &amp; Từ Khóa" Checked="Tab_Checked" Tag="3" GroupName="YtAnalyticsTabs"/>
+                        <RadioButton x:Name="TabTopic" Style="{StaticResource TabBtn}" Content="🏆 Top Kênh Theo Chủ Đề" Checked="Tab_Checked" Tag="1" GroupName="YtAnalyticsTabs"/>
+                        <RadioButton x:Name="Tab1" Style="{StaticResource TabBtn}" Content="🎬 Phân Tích Video" Checked="Tab_Checked" Tag="2" GroupName="YtAnalyticsTabs"/>
+                        <RadioButton x:Name="Tab2" Style="{StaticResource TabBtn}" Content="🆚 So Sánh Đối Thủ" Checked="Tab_Checked" Tag="3" GroupName="YtAnalyticsTabs"/>
+                        <RadioButton x:Name="Tab3" Style="{StaticResource TabBtn}" Content="🔥 Trending &amp; Từ Khóa" Checked="Tab_Checked" Tag="4" GroupName="YtAnalyticsTabs"/>
                     </StackPanel>
                     <Button Grid.Column="1" Command="{Binding ToggleApiKeyConfigCommand}" Padding="10,5" Background="#261e38" BorderBrush="#724cb8" BorderThickness="1" Foreground="#cba6f7"
                             ToolTip="Cấu hình Gemini API Key miễn phí (Google AI Studio)">
@@ -213,6 +275,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBox Text="{Binding ChannelInput, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource SearchBox}"
                                      x:Name="ChannelSearchBox"
+                                     KeyDown="ChannelSearchBox_KeyDown"
                                      Tag="Nhập URL kênh, @handle hoặc tên kênh YouTube..." Margin="0,0,10,0"/>
                             <Button Grid.Column="1" Command="{Binding AnalyzeChannelCommand}" Style="{StaticResource YtBtn}" Padding="18,8"
                                     IsEnabled="{Binding IsLoadingChannel, Converter={StaticResource InverseBoolConverter}}">
@@ -598,6 +661,267 @@
                                             <Button Grid.Column="5" Content="↗" FontSize="14" VerticalAlignment="Center"
                                                     Command="{Binding DataContext.OpenVideoUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding Url}" Width="30" Height="30" Padding="0"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Placeholder / Empty State khi chưa phân tích kênh: Gợi ý tìm top kênh theo chủ đề -->
+                    <Border Background="#16152a" CornerRadius="12" Padding="28,24" Margin="0,4,0,0" BorderBrush="#2e2b4f" BorderThickness="1.5"
+                            Visibility="{Binding HasChannelResult, Converter={StaticResource InverseBoolToVisConverter}}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,16">
+                                <TextBlock Text="🏆" FontSize="44" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBlock Text="BẠN CHƯA CÓ KÊNH CỤ THỂ? HÃY TÌM TOP KÊNH THEO CHỦ ĐỀ!" FontSize="16" FontWeight="Bold" Foreground="#cba6f7" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Nhập bất kỳ chủ đề ngách nào (như review phim, kể chuyện kinh dị, kiến thức khoa học, tài chính cá nhân...) để hệ thống tự động quét và lọc ra những kênh sở hữu lượt xem (views) cao nhất!" 
+                                           FontSize="12" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="700" Margin="0,6,0,0" TextWrapping="Wrap" LineHeight="19"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
+                                <Button Command="{Binding SwitchToTopicChannelsTabCommand}" Background="#724cb8" Foreground="White" FontWeight="Bold" Padding="20,10" FontSize="13" Cursor="Hand">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🚀" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Mở Tính Năng Tìm Top Kênh Theo Chủ Đề" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock Text=" ➔" FontSize="14" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <WrapPanel Grid.Row="2" HorizontalAlignment="Center">
+                                <TextBlock Text="💡 Bấm chọn nhanh chủ đề:" FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,8,6"/>
+                                <Button Content="🎬 Review Phim" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="review phim" Style="{StaticResource TagPillBtn}"/>
+                                <Button Content="👻 Kể Chuyện Kinh Dị" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="kể chuyện kinh dị" Style="{StaticResource TagPillBtn}"/>
+                                <Button Content="🏛️ Lịch Sử Thế Giới" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="lịch sử thế giới" Style="{StaticResource TagPillBtn}"/>
+                                <Button Content="💰 Tài Chính &amp; Đầu Tư" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="tài chính làm giàu" Style="{StaticResource TagPillBtn}"/>
+                                <Button Content="🧠 Khoa Học &amp; Vũ Trụ" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="khoa học vũ trụ" Style="{StaticResource TagPillBtn}"/>
+                                <Button Content="🍳 Ẩm Thực &amp; Nấu Ăn" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="ẩm thực nấu ăn" Style="{StaticResource TagPillBtn}"/>
+                            </WrapPanel>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ═══ TAB: TOP KÊNH THEO CHỦ ĐỀ ═══ -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding ElementName=TabTopic, Path=IsChecked, Converter={StaticResource BoolToVisConverter}}">
+                <StackPanel Margin="0,0,0,10">
+                    <!-- Search Bar by Topic -->
+                    <Border Background="{StaticResource BgCard}" CornerRadius="12" Padding="16" BorderBrush="{StaticResource BorderDark}" BorderThickness="1" Margin="0,0,0,12">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Topic Input Box -->
+                                <TextBox Text="{Binding TopicKeyword, UpdateSourceTrigger=PropertyChanged}" 
+                                         Style="{StaticResource SearchBox}"
+                                         x:Name="TopicSearchBox"
+                                         KeyDown="TopicSearchBox_KeyDown"
+                                         Tag="Nhập chủ đề kênh cần tìm (VD: review phim, kể chuyện kinh dị, kiến thức khoa học, podcast, nấu ăn...)..." 
+                                         Margin="0,0,10,0"/>
+
+                                <!-- Country / Region -->
+                                <TextBox Grid.Column="1" Text="{Binding TopicRegionCode, UpdateSourceTrigger=PropertyChanged}" 
+                                         Style="{StaticResource SearchBox}" 
+                                         Width="55" Margin="0,0,10,0" TextAlignment="Center" 
+                                         ToolTip="Mã quốc gia (VN: Việt Nam, US: Hoa Kỳ, hoặc xóa trống để tìm Toàn cầu)"/>
+
+                                <!-- Search Button -->
+                                <Button Grid.Column="2" Command="{Binding SearchTopChannelsByTopicCommand}" Style="{StaticResource YtBtn}" Padding="20,9"
+                                        IsEnabled="{Binding IsLoadingTopicChannels, Converter={StaticResource InverseBoolConverter}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🚀" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Quét Top Kênh Nhiều View" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+
+                            <!-- Second Row: Sort Radio Buttons & Quick Tag Pills -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Sort Options -->
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
+                                    <TextBlock Text="Sắp xếp:" FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <RadioButton Content="👁️ Nhiều View Nhất" Style="{StaticResource SortRadioBtn}" IsChecked="{Binding IsSortByViews, Mode=TwoWay}" GroupName="TopicSortGroup"/>
+                                    <RadioButton Content="👥 Nhiều Subs Nhất" Style="{StaticResource SortRadioBtn}" IsChecked="{Binding IsSortBySubs, Mode=TwoWay}" GroupName="TopicSortGroup"/>
+                                    <RadioButton Content="📈 TB View/Video Cao" Style="{StaticResource SortRadioBtn}" IsChecked="{Binding IsSortByAvg, Mode=TwoWay}" GroupName="TopicSortGroup"/>
+                                </StackPanel>
+
+                                <!-- Quick Topic Tags -->
+                                <WrapPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                    <TextBlock Text="💡 Gợi ý:" FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,6,6"/>
+                                    <Button Content="🎬 Review Phim" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="review phim" Style="{StaticResource TagPillBtn}"/>
+                                    <Button Content="👻 Kể Chuyện Kinh Dị" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="kể chuyện kinh dị" Style="{StaticResource TagPillBtn}"/>
+                                    <Button Content="🏛️ Lịch Sử Thế Giới" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="lịch sử thế giới" Style="{StaticResource TagPillBtn}"/>
+                                    <Button Content="💰 Tài Chính Làm Giàu" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="tài chính làm giàu" Style="{StaticResource TagPillBtn}"/>
+                                    <Button Content="🧠 Khoa Học" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="khoa học vũ trụ" Style="{StaticResource TagPillBtn}"/>
+                                    <Button Content="🍳 Ẩm Thực" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="ẩm thực nấu ăn" Style="{StaticResource TagPillBtn}"/>
+                                    <Button Content="🎧 Podcast" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="podcast tâm sự" Style="{StaticResource TagPillBtn}"/>
+                                    <Button Content="🎮 Gaming" Command="{Binding ApplyQuickTopicCommand}" CommandParameter="gaming" Style="{StaticResource TagPillBtn}"/>
+                                </WrapPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Initial Placeholder State (When no search has been performed yet) -->
+                    <Border Background="#16152a" CornerRadius="12" Padding="28,24" BorderBrush="#2e2b4f" BorderThickness="1.5" Margin="0,0,0,12"
+                            Visibility="{Binding HasTopicChannelsResult, Converter={StaticResource InverseBoolToVisConverter}}">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="🏆" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            <TextBlock Text="TÌM RA NHỮNG ÔNG TRÙM TRIỆU VIEW THEO TỪNG CHỦ ĐỀ" FontSize="16" FontWeight="Bold" Foreground="#fab387" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Chỉ cần nhập chủ đề bất kỳ hoặc bấm vào các nút gợi ý phía trên. Thuật toán sẽ tự động phân tích hàng nghìn kênh trên YouTube, đo lường tổng lượt xem của từng kênh và xếp hạng những kênh có lượt view cao nhất để bạn nghiên cứu đối thủ &amp; lấy ý tưởng sản xuất video!" 
+                                       FontSize="12" Foreground="{StaticResource TextSecondary}" TextAlignment="Center" MaxWidth="720" Margin="0,8,0,0" LineHeight="19" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Results Section -->
+                    <StackPanel Visibility="{Binding HasTopicChannelsResult, Converter={StaticResource BoolToVisConverter}}">
+                        <!-- Results Summary Banner -->
+                        <Border Background="#1a1835" CornerRadius="10" Padding="14,10" BorderBrush="#4a3e7a" BorderThickness="1" Margin="0,0,0,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🏆" FontSize="16" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding TopicSearchSummary}" FontSize="13" FontWeight="Bold" Foreground="#a6e3a1" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border Background="#2a1e4a" CornerRadius="6" Padding="10,4">
+                                        <TextBlock Text="{Binding TotalTopicViewsDisplay, StringFormat='👁️ Tổng Views: {0}'}" FontSize="12" FontWeight="Bold" Foreground="#89b4fa"/>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Channel Cards List -->
+                        <ItemsControl ItemsSource="{Binding TopicChannels}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#141427" CornerRadius="10" Padding="14" Margin="0,0,0,8" BorderBrush="#2a2a45" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/> <!-- Rank -->
+                                                <ColumnDefinition Width="Auto"/> <!-- Avatar -->
+                                                <ColumnDefinition Width="*"/>    <!-- Info & Stats -->
+                                                <ColumnDefinition Width="Auto"/> <!-- Actions -->
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Rank Badge -->
+                                            <Border Grid.Column="0" Width="38" Height="38" CornerRadius="19" Background="#1e1c36" BorderBrush="#3f3868" BorderThickness="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding RankBadge}" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+
+                                            <!-- Avatar -->
+                                            <Border Grid.Column="1" Width="64" Height="64" CornerRadius="32" BorderBrush="{StaticResource YtRed}" BorderThickness="2" Margin="0,0,14,0" VerticalAlignment="Center">
+                                                <Border.Background>
+                                                    <ImageBrush ImageSource="{Binding ThumbnailUrl}" Stretch="UniformToFill"/>
+                                                </Border.Background>
+                                            </Border>
+
+                                            <!-- Info & Stats -->
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,14,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                    <Border Background="#2a1625" CornerRadius="4" Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding CustomUrl}" FontSize="10" Foreground="{StaticResource YtAccentPink}"/>
+                                                    </Border>
+                                                    <Border Background="#1a2520" CornerRadius="4" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Country}" FontSize="10" Foreground="{StaticResource AccentGreen}"/>
+                                                    </Border>
+                                                    <TextBlock Text="{Binding ChannelAge, StringFormat='Hoạt động: {0}'}" FontSize="10" Foreground="{StaticResource TextMuted}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                                </StackPanel>
+
+                                                <!-- Description -->
+                                                <TextBlock Text="{Binding Description}" FontSize="11" Foreground="{StaticResource TextSecondary}" 
+                                                           TextTrimming="CharacterEllipsis" MaxHeight="32" Margin="0,3,0,6"/>
+
+                                                <!-- 4 Stat Badges (Prominent Views Badge!) -->
+                                                <StackPanel Orientation="Horizontal">
+                                                    <!-- Total Views (Highlighted) -->
+                                                    <Border Background="#18253e" BorderBrush="#3665a8" BorderThickness="1" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="👁️" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding ViewCountDisplay, StringFormat='{}{0} views'}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- Subs -->
+                                                    <Border Background="#2e1922" BorderBrush="#7d283f" BorderThickness="1" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="👥" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding SubscriberDisplay, StringFormat='{}{0} subs'}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource YtRed}" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- Videos -->
+                                                    <Border Background="#192823" BorderBrush="#2e6d4c" BorderThickness="1" CornerRadius="6" Padding="10,4" Margin="0,0,8,0">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="🎬" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding VideoCountDisplay, StringFormat='{}{0} videos'}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentGreen}" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <!-- Avg Views per Video -->
+                                                    <Border Background="#2d2218" BorderBrush="#784e2a" BorderThickness="1" CornerRadius="6" Padding="10,4">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="📈" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                                            <TextBlock Text="{Binding AvgViewsPerVideoDisplay, StringFormat='TB {0}/video'}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource YtAccentOrange}" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Action Buttons -->
+                                            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <!-- Phân Tích Sâu Kênh -->
+                                                <Button Command="{Binding DataContext.AnalyzeSelectedChannelCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Padding="14,8" Margin="0,0,8,0" Background="#724cb8" Foreground="White" FontWeight="Bold" FontSize="11.5" Cursor="Hand"
+                                                        ToolTip="Chuyển sang tab Phân Tích Kênh để tải top video, video mới nhất và chạy Gemini AI bóc tách công thức hook">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="🔍" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="Phân Tích Kênh" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+
+                                                <!-- Tạo Video ▾ -->
+                                                <Button Content="🎬 Tạo Video ▾" FontSize="11" FontWeight="SemiBold"
+                                                        Background="#2d1d4f" Foreground="#cba6f7" BorderBrush="#724cb8" BorderThickness="1"
+                                                        Padding="10,7" Margin="0,0,8,0" VerticalAlignment="Center" Cursor="Hand"
+                                                        ToolTip="Click để chọn Tạo 1 Tập hoặc Tạo Series Nhiều Tập (Chuột phải để chọn nhanh)"
+                                                        Command="{Binding DataContext.CreateVideoFromChannelCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Button.ContextMenu>
+                                                        <ContextMenu Background="#1a182d" Foreground="White" BorderBrush="#3f3765">
+                                                            <MenuItem Header="🎬 Tạo Video Đơn (1 Tập)" 
+                                                                      Command="{Binding DataContext.CreateSingleVideoFromChannelCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                      CommandParameter="{Binding}"/>
+                                                            <MenuItem Header="📺 Tạo Chuỗi Series (Nhiều Tập)" 
+                                                                      Command="{Binding DataContext.CreateSeriesFromChannelCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                      CommandParameter="{Binding}"/>
+                                                        </ContextMenu>
+                                                    </Button.ContextMenu>
+                                                </Button>
+
+                                                <!-- Open URL -->
+                                                <Button Content="↗" FontSize="14" ToolTip="Mở kênh trên YouTube" VerticalAlignment="Center"
+                                                        Command="{Binding DataContext.OpenVideoUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Url}" Width="32" Height="32" Padding="0"/>
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
