@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Xml;
 using Google.Apis.Services;
@@ -129,7 +130,7 @@ public class YouTubeAnalyticsService
             Description = ch.Snippet.Description ?? string.Empty,
             ThumbnailUrl = ch.Snippet.Thumbnails?.Medium?.Url ?? ch.Snippet.Thumbnails?.Default__?.Url ?? string.Empty,
             CustomUrl = ch.Snippet.CustomUrl ?? string.Empty,
-            PublishedAt = ch.Snippet.PublishedAtDateTimeOffset?.UtcDateTime ?? DateTime.MinValue,
+            PublishedAt = SafeParsePublishedAt(ch.Snippet.PublishedAtRaw),
             SubscriberCount = (long)(ch.Statistics.SubscriberCount ?? 0),
             ViewCount = (long)(ch.Statistics.ViewCount ?? 0),
             VideoCount = (long)(ch.Statistics.VideoCount ?? 0),
@@ -195,7 +196,7 @@ public class YouTubeAnalyticsService
 
         var result = new ObservableCollection<YouTubeVideoInfo>();
         int rank = 1;
-        foreach (var v in videoResponse.Items.OrderByDescending(v => v.Snippet.PublishedAtDateTimeOffset))
+        foreach (var v in videoResponse.Items.OrderByDescending(v => SafeParsePublishedAt(v.Snippet?.PublishedAtRaw)))
         {
             result.Add(MapVideoToInfo(v, rank++));
         }
@@ -266,7 +267,7 @@ public class YouTubeAnalyticsService
                 Title = item.Snippet.Title ?? string.Empty,
                 ChannelTitle = item.Snippet.ChannelTitle ?? string.Empty,
                 ThumbnailUrl = item.Snippet.Thumbnails?.Medium?.Url ?? item.Snippet.Thumbnails?.Default__?.Url ?? string.Empty,
-                PublishedAt = item.Snippet.PublishedAtDateTimeOffset?.UtcDateTime ?? DateTime.MinValue,
+                PublishedAt = SafeParsePublishedAt(item.Snippet.PublishedAtRaw),
             };
 
             if (statsMap.TryGetValue(item.Id.VideoId, out var stats))
@@ -397,7 +398,7 @@ public class YouTubeAnalyticsService
                     Description = ch.Snippet?.Description ?? string.Empty,
                     ThumbnailUrl = ch.Snippet?.Thumbnails?.Medium?.Url ?? ch.Snippet?.Thumbnails?.Default__?.Url ?? string.Empty,
                     CustomUrl = ch.Snippet?.CustomUrl ?? string.Empty,
-                    PublishedAt = ch.Snippet?.PublishedAtDateTimeOffset?.UtcDateTime ?? DateTime.MinValue,
+                    PublishedAt = SafeParsePublishedAt(ch.Snippet?.PublishedAtRaw),
                     SubscriberCount = subCount,
                     ViewCount = viewCount,
                     VideoCount = videoCount,
@@ -439,7 +440,7 @@ public class YouTubeAnalyticsService
             ThumbnailUrl = v.Snippet.Thumbnails?.Medium?.Url ?? v.Snippet.Thumbnails?.Default__?.Url ?? string.Empty,
             ChannelTitle = v.Snippet.ChannelTitle ?? string.Empty,
             ChannelId = v.Snippet.ChannelId ?? string.Empty,
-            PublishedAt = v.Snippet.PublishedAtDateTimeOffset?.UtcDateTime ?? DateTime.MinValue,
+            PublishedAt = SafeParsePublishedAt(v.Snippet?.PublishedAtRaw),
             Duration = ParseIsoDuration(v.ContentDetails?.Duration),
             ViewCount = (long)(v.Statistics?.ViewCount ?? 0),
             LikeCount = (long)(v.Statistics?.LikeCount ?? 0),
@@ -461,6 +462,19 @@ public class YouTubeAnalyticsService
         {
             return TimeSpan.Zero;
         }
+    }
+
+    /// <summary>
+    /// Parse ngày xuất bản từ YouTube API an toàn tuyệt đối, tránh lỗi FormatException do định dạng microseconds hoặc ISO variants
+    /// </summary>
+    public static DateTime SafeParsePublishedAt(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return DateTime.MinValue;
+        if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
+            return dto.UtcDateTime;
+        if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
+            return dt.ToUniversalTime();
+        return DateTime.MinValue;
     }
 
     private static string? ExtractVideoId(string input)

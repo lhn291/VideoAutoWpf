@@ -21,7 +21,9 @@ public class YouTubeChannelInfo
     public string SubscriberDisplay => FormatNumber(SubscriberCount);
     public string ViewCountDisplay => FormatNumber(ViewCount);
     public string VideoCountDisplay => FormatNumber(VideoCount);
-    public string ChannelAge => $"{(DateTime.UtcNow - PublishedAt).Days / 365} năm {(DateTime.UtcNow - PublishedAt).Days % 365 / 30} tháng";
+    public string ChannelAge => PublishedAt == DateTime.MinValue 
+        ? "Chưa xác định" 
+        : $"{(DateTime.UtcNow - PublishedAt).Days / 365} năm {(DateTime.UtcNow - PublishedAt).Days % 365 / 30} tháng";
     public double AvgViewsPerVideo => VideoCount > 0 ? (double)ViewCount / VideoCount : 0;
     public string AvgViewsPerVideoDisplay => FormatNumber((long)AvgViewsPerVideo);
 
@@ -105,6 +107,7 @@ public class YouTubeVideoInfo
 
     private static string FormatTimeAgo(DateTime dt)
     {
+        if (dt == DateTime.MinValue) return "N/A";
         var ts = DateTime.UtcNow - dt;
         if (ts.TotalDays >= 365) return $"{(int)(ts.TotalDays / 365)} năm trước";
         if (ts.TotalDays >= 30) return $"{(int)(ts.TotalDays / 30)} tháng trước";
@@ -145,6 +148,7 @@ public class YouTubeSearchResult
 
     public static string FormatTimeAgoStatic(DateTime dt)
     {
+        if (dt == DateTime.MinValue) return "N/A";
         var ts = DateTime.UtcNow - dt;
         if (ts.TotalDays >= 365) return $"{(int)(ts.TotalDays / 365)} năm trước";
         if (ts.TotalDays >= 30) return $"{(int)(ts.TotalDays / 30)} tháng trước";
