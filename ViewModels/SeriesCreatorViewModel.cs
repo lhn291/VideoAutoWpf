@@ -13,11 +13,28 @@ namespace VideoAutoWpf.ViewModels;
 public partial class SeriesCreatorViewModel : ObservableObject
 {
     private readonly GeminiScriptService _geminiService;
+    private readonly YouTubeAnalyticsService? _youtubeService;
 
     public Action<bool>? RequestClose { get; set; }
 
     [ObservableProperty]
     private string _topicOrStory = string.Empty;
+
+    // ── Nguồn tham khảo & Tra cứu tư liệu thực tế ──
+    [ObservableProperty]
+    private bool _isResearchingCase;
+
+    [ObservableProperty]
+    private bool _hasSourceVideo;
+
+    [ObservableProperty]
+    private string _sourceVideoId = string.Empty;
+
+    [ObservableProperty]
+    private string _sourceTitle = string.Empty;
+
+    [ObservableProperty]
+    private string _sourceDescription = string.Empty;
 
     // ── Cấu hình Gemini API Key (Google AI Studio - Miễn phí) ──
     [ObservableProperty]
@@ -157,9 +174,10 @@ public partial class SeriesCreatorViewModel : ObservableObject
     [ObservableProperty]
     private SeriesProject? _resultSeriesProject;
 
-    public SeriesCreatorViewModel(GeminiScriptService geminiService)
+    public SeriesCreatorViewModel(GeminiScriptService geminiService, YouTubeAnalyticsService? youtubeService = null)
     {
         _geminiService = geminiService;
+        _youtubeService = youtubeService;
         _selectedStyleCard = StyleCards.FirstOrDefault(s => s.Key == "dark-anime") ?? StyleCards.FirstOrDefault();
         _selectedVoiceCard = VoiceCards.FirstOrDefault(v => v.Key == "vi-VN-Wavenet-B") ?? VoiceCards.FirstOrDefault();
         _geminiApiKey = _geminiService.ApiKey ?? string.Empty;
@@ -172,6 +190,11 @@ public partial class SeriesCreatorViewModel : ObservableObject
     /// </summary>
     public void InitFromAnalyticsRequest(CreateVideoFromAnalyticsRequest req)
     {
+        SourceVideoId = req.VideoId ?? string.Empty;
+        SourceTitle = req.Title ?? string.Empty;
+        SourceDescription = req.Description ?? string.Empty;
+        HasSourceVideo = !string.IsNullOrWhiteSpace(SourceVideoId) || !string.IsNullOrWhiteSpace(SourceDescription);
+
         var sb = new System.Text.StringBuilder();
         if (!string.IsNullOrWhiteSpace(req.Title))
             sb.AppendLine($"Chủ đề: {req.Title}");
@@ -186,6 +209,13 @@ public partial class SeriesCreatorViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(req.SourceInfo))
             sb.AppendLine($"Nguồn cảm hứng / Tham khảo: {req.SourceInfo}");
 
+        if (!string.IsNullOrWhiteSpace(req.Description))
+        {
+            sb.AppendLine();
+            sb.AppendLine("--- TÓM TẮT & TƯ LIỆU GỐC TỪ MÔ TẢ VIDEO ---");
+            sb.AppendLine(req.Description.Trim());
+        }
+
         TopicOrStory = sb.ToString().Trim();
 
         if (!string.IsNullOrWhiteSpace(req.SuggestedStyle))
@@ -198,7 +228,91 @@ public partial class SeriesCreatorViewModel : ObservableObject
             }
         }
 
-        BatchStatusText = $"🎯 Đã nạp ý tưởng từ YouTube Analytics ({req.SourceInfo}). Sẵn sàng lập kế hoạch chuỗi nhiều tập!";
+        BatchStatusText = $"🎯 Đã nạp ý tưởng từ YouTube Analytics ({req.SourceInfo}). Bạn có thể bấm 'Tra Cứu Vụ Án Thật' hoặc chỉnh sửa trước khi lập dàn ý!";
+    }
+
+    /// <summary>
+    /// AI Tra cứu các tình tiết có thật của vụ án từ hồ sơ thực tế, không bịa chuyện
+    /// </summary>
+    [RelayCommand]
+    private async Task ResearchCaseFactsAsync()
+    {
+        if (string.IsNullOrWhiteSpace(TopicOrStory) && string.IsNullOrWhiteSpace(SourceTitle))
+        {
+            MessageBox.Show("Vui lòng nhập chủ đề hoặc tiêu đề vụ án cần tra cứu hồ sơ!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        IsResearchingCase = true;
+        BatchStatusText = "🔍 AI đang tra cứu & phục dựng các tình tiết CÓ THẬT của vụ án từ hồ sơ thực tế...";
+
+        try
+        {
+            var title = !string.IsNullOrWhiteSpace(SourceTitle) ? SourceTitle : TopicOrStory;
+            var facts = await _geminiService.ResearchCaseFactsAsync(title, SourceDescription);
+
+            if (!string.IsNullOrWhiteSpace(facts))
+            {
+                TopicOrStory = facts.Trim();
+                BatchStatusText = "✅ Đã phục dựng thành công hồ sơ tình tiết có thật của vụ án! Sẵn sàng bấm 'Lập Dàn Ý Chuỗi Video'.";
+                MessageBox.Show("Đã tra cứu và cập nhật toàn bộ hồ sơ tình tiết có thật của vụ án vào ô cốt truyện!\n\nBạn có thể đọc lại hoặc tinh chỉnh rồi bấm 'AI Phân Tích & Lập Dàn Ý Chuỗi Video'.", "Tra Cứu Thành Công", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            BatchStatusText = $"❌ Lỗi tra cứu vụ án: {ex.Message}";
+            MessageBox.Show($"Không thể tra cứu hồ sơ vụ án: {ex.Message}", "Lỗi Tra Cứu", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsResearchingCase = false;
+        }
+    }
+
+    /// <summary>
+    /// Tự động tải phụ đề / lời thoại gốc của video YouTube
+    /// </summary>
+    [RelayCommand]
+    private async Task FetchTranscriptAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SourceVideoId) || _youtubeService == null)
+        {
+            MessageBox.Show("Không có thông tin Video ID YouTube để tải phụ đề/lời thoại.", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        IsResearchingCase = true;
+        BatchStatusText = "📜 Đang cào phụ đề / lời thoại gốc từ YouTube...";
+
+        try
+        {
+            var transcript = await _youtubeService.GetVideoTranscriptAsync(SourceVideoId);
+            if (!string.IsNullOrWhiteSpace(transcript))
+            {
+                var sb = new System.Text.StringBuilder();
+                if (!string.IsNullOrWhiteSpace(SourceTitle))
+                    sb.AppendLine($"Chủ đề: {SourceTitle}\n");
+                sb.AppendLine("--- LỜI THOẠI / PHỤ ĐỀ GỐC CỦA VIDEO TRÊN YOUTUBE ---");
+                sb.AppendLine(transcript.Trim());
+                TopicOrStory = sb.ToString();
+                BatchStatusText = $"✅ Đã tải thành công {transcript.Length:N0} ký tự lời thoại của video YouTube gốc!";
+                MessageBox.Show($"Đã tải thành công {transcript.Length:N0} ký tự phụ đề/lời thoại từ YouTube và nạp vào cốt truyện!", "Tải Thành Công", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show("Video này không có phụ đề (captions/transcript) công khai trên YouTube.\n\n👉 Bạn hãy bấm nút '🔍 Tra Cứu Vụ Án Thật (AI Fact-Check)' để AI tự đối chiếu hồ sơ vụ án thực tế!", "Không có phụ đề", MessageBoxButton.OK, MessageBoxImage.Warning);
+                BatchStatusText = "⚠️ Video không có phụ đề công khai. Hãy dùng 'Tra Cứu Vụ Án Thật'.";
+            }
+        }
+        catch (Exception ex)
+        {
+            BatchStatusText = $"❌ Lỗi tải phụ đề: {ex.Message}";
+            MessageBox.Show($"Lỗi khi tải phụ đề: {ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsResearchingCase = false;
+        }
     }
 
     /// <summary>

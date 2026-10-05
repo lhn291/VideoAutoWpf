@@ -829,6 +829,8 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
 
         return new CreateVideoFromAnalyticsRequest
         {
+            VideoId = video.VideoId,
+            Description = video.Description,
             Title = $"[BÍ MẬT CHƯA KỂ] Sự Thật Đằng Sau: {video.Title}",
             HookOpening = "Bạn có biết đằng sau câu chuyện này còn một chi tiết kinh ngạc mà rất ít người nhận ra?",
             HookStrategy = hookDesc,
@@ -847,6 +849,7 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
         var (style, tone, bgm) = DetectStyleAndTone(item.Title, item.ChannelTitle);
         return new CreateVideoFromAnalyticsRequest
         {
+            VideoId = item.VideoId,
             Title = $"[XU HƯỚNG MỚI] {item.Title}",
             HookOpening = "Điều gì đang khiến hàng triệu người bất ngờ về chủ đề này?",
             HookStrategy = "Tập trung vào hiệu ứng xu hướng (Trending Hook) ngay từ 5s đầu",

@@ -10,11 +10,11 @@ public partial class SeriesCreatorWindow : Window
     public SeriesCreatorViewModel ViewModel { get; }
     public SeriesProject? ResultSeriesProject => ViewModel.ResultSeriesProject;
 
-    public SeriesCreatorWindow(GeminiScriptService geminiService, CreateVideoFromAnalyticsRequest? analyticsRequest = null)
+    public SeriesCreatorWindow(GeminiScriptService geminiService, YouTubeAnalyticsService? ytService, CreateVideoFromAnalyticsRequest? analyticsRequest = null)
     {
         InitializeComponent();
         WindowState = WindowState.Maximized;
-        ViewModel = new SeriesCreatorViewModel(geminiService);
+        ViewModel = new SeriesCreatorViewModel(geminiService, ytService);
         ViewModel.RequestClose = (dialogResult) =>
         {
             DialogResult = dialogResult;
@@ -27,6 +27,11 @@ public partial class SeriesCreatorWindow : Window
         }
 
         DataContext = ViewModel;
+    }
+
+    public SeriesCreatorWindow(GeminiScriptService geminiService, CreateVideoFromAnalyticsRequest? analyticsRequest = null)
+        : this(geminiService, null, analyticsRequest)
+    {
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)

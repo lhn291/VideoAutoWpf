@@ -531,8 +531,8 @@ public class GeminiScriptService
     {
         var apiKey = ApiKey;
         var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
-            ? new[] { "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash" }
-            : new[] { "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-001", "gemini-2.0-flash-001" };
+            ? new[] { "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-flash-latest" }
+            : new[] { "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-002" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
@@ -645,6 +645,137 @@ public class GeminiScriptService
         if (string.IsNullOrWhiteSpace(apiKey) && lastError != null && (lastError.Contains("PERMISSION_DENIED") || lastError.Contains("aiplatform.endpoints.predict") || lastError.Contains("was not found or your project does not have access to it")))
         {
             throw new Exception($"Service Account trong file google_credentials.json (project: {projectId}) chưa được cấp quyền Vertex AI trên Google Cloud.\n\n👉 Cách cấp quyền: Vào Google Cloud Console > IAM > Gán quyền 'Vertex AI User' (roles/aiplatform.user) cho service account 'tts-app@{projectId}.iam.gserviceaccount.com'.\nHoặc lấy Gemini API Key miễn phí từ aistudio.google.com.");
+        }
+
+        throw new Exception($"Không thể gọi Gemini AI: {lastError}");
+    }
+
+    /// <summary>
+    /// AI Tra cứu và phục dựng hồ sơ vụ án thực tế, các tình tiết có thật để không bịa chuyện
+    /// </summary>
+    public async Task<string> ResearchCaseFactsAsync(
+        string topicOrTitle,
+        string description = "",
+        string location = "us-central1",
+        CancellationToken ct = default)
+    {
+        var token = await _authService.GetAccessTokenAsync();
+        var projectId = _authService.ProjectId;
+
+        var systemInstruction =
+            "Bạn là chuyên gia điều tra tội phạm học và nghiên cứu hồ sơ kỳ án thực tế. " +
+            "Nhiệm vụ tối thượng: Tra cứu và phục dựng lại toàn bộ các TÌNH TIẾT CÓ THẬT của vụ án hoặc sự kiện được nhắc tới. " +
+            "TUYỆT ĐỐI KHÔNG HƯ CẤU HAY BỊA ĐẶT CỐT TRUYỆN GIẢ TƯỞNG! Nếu chi tiết nào chưa rõ hoặc cơ quan điều tra chưa công bố thì phải ghi nhận trung thực. " +
+            "Trình bày chi tiết, mạch lạc, hấp dẫn để làm tư liệu kịch bản video nhiều tập.";
+
+        var userPrompt =
+            $"Chủ đề / Tiêu đề vụ án:\n'{topicOrTitle}'\n\n" +
+            (!string.IsNullOrWhiteSpace(description) ? $"Mô tả / Tóm tắt ban đầu từ nguồn tham khảo:\n'{description}'\n\n" : "") +
+            "Hãy tra cứu và cung cấp bản tóm tắt hồ sơ vụ án thật theo cấu trúc chuẩn xác sau:\n" +
+            "1. 📌 TÊN VỤ ÁN & BỐI CẢNH THỰC TẾ: Thời gian, địa điểm cụ thể, các nhân vật chính liên quan (nạn nhân, nghi phạm/hung thủ, mối quan hệ thực tế).\n" +
+            "2. 🔍 KHỞI ĐẦU BẤT THƯỜNG: Dấu hiệu đầu tiên phát hiện sự việc hoặc chuyến công tác/sự kiện thực tế bắt đầu thế nào.\n" +
+            "3. ⚠️ TÌNH TIẾT TỘI ÁC & HIỆN TRƯỜNG THỰC TẾ: Diễn biến có thật đã diễn ra, hiện trường cảnh sát ghi nhận.\n" +
+            "4. 🕵️ QUÁ TRÌNH PHÁ ÁN CỦA CẢNH SÁT: Manh mối mấu chốt nào đã lật tẩy hung thủ, lời khai và động cơ thực tế.\n" +
+            "5. ⚖️ KẾT QUẢ ĐIỀU TRA & BẢN ÁN CUỐI CÙNG: Bản án của tòa án, số phận các nhân vật và bài học cảnh tỉnh xã hội.";
+
+        return await CallGeminiForRawText(systemInstruction, userPrompt, projectId, location, token, ct);
+    }
+
+    /// <summary>
+    /// Generic helper gọi Gemini API và lấy raw text trả về (dùng cho Research, Tra cứu tư liệu vụ án)
+    /// </summary>
+    public async Task<string> CallGeminiForRawText(
+        string systemInstruction,
+        string userPrompt,
+        string projectId,
+        string location,
+        string token,
+        CancellationToken ct)
+    {
+        var apiKey = ApiKey;
+        var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
+            ? new[] { "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-flash-latest" }
+            : new[] { "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-002" };
+        string? lastError = null;
+
+        foreach (var modelName in modelsToTry)
+        {
+            string endpoint;
+            HttpRequestMessage request;
+
+            var requestBody = new
+            {
+                system_instruction = new
+                {
+                    parts = new[] { new { text = systemInstruction } }
+                },
+                contents = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        parts = new[] { new { text = userPrompt } }
+                    }
+                },
+                generationConfig = new
+                {
+                    maxOutputTokens = 8192,
+                    temperature = 0.3
+                }
+            };
+
+            var jsonContent = JsonSerializer.Serialize(requestBody);
+
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent?key={apiKey}";
+                request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            }
+            else
+            {
+                endpoint = $"https://{location}-aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{modelName}:generateContent";
+                request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            }
+
+            try
+            {
+                using var response = await _httpClient.SendAsync(request, ct);
+                var responseStr = await response.Content.ReadAsStringAsync(ct);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    using var doc = JsonDocument.Parse(responseStr);
+                    var candidates = doc.RootElement.GetProperty("candidates");
+                    if (candidates.GetArrayLength() > 0)
+                    {
+                        var text = candidates[0]
+                            .GetProperty("content")
+                            .GetProperty("parts")[0]
+                            .GetProperty("text")
+                            .GetString();
+
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            return text.Trim();
+                        }
+                    }
+                }
+                else
+                {
+                    lastError = $"Model {modelName} returned {response.StatusCode}: {responseStr}";
+                }
+            }
+            catch (Exception ex)
+            {
+                lastError = ex.Message;
+            }
+            finally
+            {
+                request.Dispose();
+            }
         }
 
         throw new Exception($"Không thể gọi Gemini AI: {lastError}");

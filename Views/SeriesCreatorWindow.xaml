@@ -149,9 +149,55 @@
                         </StackPanel>
                     </Border>
 
-                    <TextBlock Text="1. Nhập Ý Tưởng / Cốt Truyện Dài Của Series" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4"/>
-                    <TextBlock Text="Bạn có thể dán toàn bộ một câu chuyện, tóm tắt tiểu thuyết, vụ án kỳ bí, hoặc tóm tắt chủ đề mà bạn muốn làm chuỗi video:" 
-                               FontSize="11" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                    <!-- Header + Action Buttons -->
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="1. Nhập Ý Tưởng / Cốt Truyện Dài Của Series" FontSize="13" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,2"/>
+                            <TextBlock Text="Dán cốt truyện, tóm tắt vụ án, hoặc bấm nút Tra Cứu để AI phục dựng tình tiết thật từ hồ sơ:" 
+                                       FontSize="11" Foreground="{StaticResource TextMuted}"/>
+                        </StackPanel>
+
+                        <!-- Action Toolbar -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Nút Tra Cứu Tình Tiết Vụ Án Thật -->
+                            <Button Command="{Binding ResearchCaseFactsCommand}"
+                                    IsEnabled="{Binding IsPlanningSeries, Converter={StaticResource InverseBoolConverter}}"
+                                    Padding="10,5" Margin="0,0,8,0"
+                                    Background="#313244" BorderBrush="#f9e2af" BorderThickness="1"
+                                    ToolTip="AI đối chiếu kho hồ sơ để phục dựng tình tiết CÓ THẬT của vụ án (nhân vật thật, động cơ, quá trình phá án, bản án)">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🔍 Tra Cứu Vụ Án Thật (AI Fact-Check)" FontWeight="Bold" FontSize="11" Foreground="#f9e2af"/>
+                                </StackPanel>
+                            </Button>
+
+                            <!-- Nút Cào Lời Thoại / Transcript từ YouTube Video -->
+                            <Button Command="{Binding FetchTranscriptCommand}"
+                                    Visibility="{Binding HasSourceVideo, Converter={StaticResource BoolToVisConverter}}"
+                                    IsEnabled="{Binding IsPlanningSeries, Converter={StaticResource InverseBoolConverter}}"
+                                    Padding="10,5" Margin="0,0,0,0"
+                                    Background="#313244" BorderBrush="#89dceb" BorderThickness="1"
+                                    ToolTip="Tự động cào phụ đề / lời thoại gốc của video YouTube này làm cốt truyện đầu vào">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="📜 Lấy Transcript Video" FontWeight="Bold" FontSize="11" Foreground="#89dceb"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Loading Indicator khi đang research hoặc tải transcript -->
+                    <Border Visibility="{Binding IsResearchingCase, Converter={StaticResource BoolToVisConverter}}"
+                            Background="#1e1e2e" BorderBrush="#f9e2af" BorderThickness="1" CornerRadius="6"
+                            Padding="10,6" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="⏳ " FontSize="12"/>
+                            <TextBlock Text="Đang xử lý dữ liệu hồ sơ thực tế &amp; phụ đề video..." FontSize="11" Foreground="#f9e2af" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
                     
                     <TextBox Text="{Binding TopicOrStory, UpdateSourceTrigger=PropertyChanged}"
                              AcceptsReturn="True" TextWrapping="Wrap" MinHeight="160" MaxHeight="240"

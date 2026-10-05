@@ -1,5 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml;
 using Google.Apis.Services;
@@ -498,5 +502,69 @@ public class YouTubeAnalyticsService
         if (match.Success) return match.Groups[1].Value;
 
         return null;
+    }
+
+    /// <summary>
+    /// Tự động cào toàn bộ phụ đề / lời thoại (transcript) của video YouTube (nếu có phụ đề tiếng Việt hoặc auto-captions)
+    /// </summary>
+    public async Task<string?> GetVideoTranscriptAsync(string videoId)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) return null;
+
+        try
+        {
+            using var http = new HttpClient();
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+            http.DefaultRequestHeaders.Add("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7");
+            var url = $"https://www.youtube.com/watch?v={videoId.Trim()}";
+            var html = await http.GetStringAsync(url);
+
+            var match = Regex.Match(html, @"""captionTracks"":\s*(\[.*?\])");
+            if (!match.Success) return null;
+
+            using var doc = JsonDocument.Parse(match.Groups[1].Value);
+            string? targetUrl = null;
+
+            // Ưu tiên phụ đề tiếng Việt (vi), nếu không có thì lấy phụ đề đầu tiên có sẵn
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                var lang = el.TryGetProperty("languageCode", out var l) ? l.GetString() : null;
+                var bUrl = el.TryGetProperty("baseUrl", out var b) ? b.GetString() : null;
+                if (!string.IsNullOrEmpty(bUrl))
+                {
+                    if (lang != null && lang.StartsWith("vi", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetUrl = bUrl;
+                        break;
+                    }
+                    targetUrl ??= bUrl;
+                }
+            }
+
+            if (string.IsNullOrEmpty(targetUrl)) return null;
+
+            var xml = await http.GetStringAsync(targetUrl);
+            if (string.IsNullOrWhiteSpace(xml)) return null;
+
+            var xmlDoc = new XmlDocument();
+            xmlDoc.LoadXml(xml);
+            var nodes = xmlDoc.SelectNodes("//text");
+            if (nodes == null || nodes.Count == 0) return null;
+
+            var sb = new StringBuilder();
+            foreach (XmlNode n in nodes)
+            {
+                var t = WebUtility.HtmlDecode(n.InnerText?.Trim());
+                if (!string.IsNullOrWhiteSpace(t))
+                {
+                    sb.Append(t).Append(" ");
+                }
+            }
+            return sb.ToString().Trim();
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

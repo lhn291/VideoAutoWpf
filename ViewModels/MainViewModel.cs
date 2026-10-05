@@ -619,7 +619,7 @@ public partial class MainViewModel : ObservableObject
     private void OpenSeriesCreator()
     {
         var mainWin = Application.Current.MainWindow;
-        var win = new SeriesCreatorWindow(_geminiService)
+        var win = new SeriesCreatorWindow(_geminiService, _youtubeService)
         {
             WindowState = WindowState.Maximized
         };
@@ -2251,7 +2251,7 @@ public partial class MainViewModel : ObservableObject
     private void OpenSeriesCreatorWithRequest(CreateVideoFromAnalyticsRequest request)
     {
         var mainWin = Application.Current.MainWindow;
-        var win = new SeriesCreatorWindow(_geminiService, request)
+        var win = new SeriesCreatorWindow(_geminiService, _youtubeService, request)
         {
             WindowState = WindowState.Maximized
         };

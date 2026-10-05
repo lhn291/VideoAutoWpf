@@ -225,6 +225,9 @@ public class CreateVideoFromAnalyticsRequest
     public string SuggestedTone { get; set; } = string.Empty;
     public string SuggestedBgm { get; set; } = string.Empty;
     public string SourceInfo { get; set; } = string.Empty;
+    public string VideoId { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string RawTranscript { get; set; } = string.Empty;
     public string Tags { get; set; } = string.Empty;
     public VideoCreationTargetMode TargetMode { get; set; } = VideoCreationTargetMode.SingleEpisode;
 }
