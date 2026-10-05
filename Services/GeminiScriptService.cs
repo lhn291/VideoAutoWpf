@@ -535,12 +535,14 @@ public class GeminiScriptService
     {
         var apiKey = ApiKey;
         var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
-            ? new[] { "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-flash-latest" }
-            : new[] { "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-002" };
+            ? new[] { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash" }
+            : new[] { "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
         {
+            if (ct.IsCancellationRequested) break;
+
             string endpoint;
             HttpRequestMessage request;
 
@@ -586,7 +588,10 @@ public class GeminiScriptService
 
             try
             {
-                using var response = await _httpClient.SendAsync(request, ct);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(25));
+
+                using var response = await _httpClient.SendAsync(request, cts.Token);
                 var responseStr = await response.Content.ReadAsStringAsync(ct);
 
                 if (response.IsSuccessStatusCode)
@@ -624,7 +629,15 @@ public class GeminiScriptService
                 else
                 {
                     lastError = $"Model {modelName} returned {response.StatusCode}: {responseStr}";
+                    if ((int)response.StatusCode == 503 || (int)response.StatusCode == 429)
+                    {
+                        await Task.Delay(800, ct);
+                    }
                 }
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                lastError = $"Model {modelName} phản hồi chậm quá 25s.";
             }
             catch (Exception ex)
             {
@@ -698,12 +711,14 @@ public class GeminiScriptService
     {
         var apiKey = ApiKey;
         var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
-            ? new[] { "gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-flash-latest" }
-            : new[] { "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-002" };
+            ? new[] { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash" }
+            : new[] { "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
         {
+            if (ct.IsCancellationRequested) break;
+
             string endpoint;
             HttpRequestMessage request;
 
@@ -746,7 +761,10 @@ public class GeminiScriptService
 
             try
             {
-                using var response = await _httpClient.SendAsync(request, ct);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(25));
+
+                using var response = await _httpClient.SendAsync(request, cts.Token);
                 var responseStr = await response.Content.ReadAsStringAsync(ct);
 
                 if (response.IsSuccessStatusCode)
@@ -770,7 +788,15 @@ public class GeminiScriptService
                 else
                 {
                     lastError = $"Model {modelName} returned {response.StatusCode}: {responseStr}";
+                    if ((int)response.StatusCode == 503 || (int)response.StatusCode == 429)
+                    {
+                        await Task.Delay(800, ct);
+                    }
                 }
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                lastError = $"Model {modelName} phản hồi chậm quá 25s.";
             }
             catch (Exception ex)
             {

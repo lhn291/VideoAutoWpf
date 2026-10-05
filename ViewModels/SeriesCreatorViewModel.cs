@@ -430,14 +430,31 @@ public partial class SeriesCreatorViewModel : ObservableObject
             var styleKey = SelectedStyleCard?.Key ?? "dark-anime";
             var voiceKey = SelectedVoiceCard?.Key ?? "vi-VN-Wavenet-B";
 
-            var plan = await _geminiService.GenerateSeriesPlanAsync(
-                TopicOrStory.Trim(),
-                SelectedEpisodeCount,
-                SelectedScenesPerEpisode,
-                styleKey,
-                voiceKey,
-                SelectedSeriesTone,
-                ActualAspectRatio);
+            SeriesPlan? plan = null;
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                try
+                {
+                    plan = await _geminiService.GenerateSeriesPlanAsync(
+                        TopicOrStory.Trim(),
+                        SelectedEpisodeCount,
+                        SelectedScenesPerEpisode,
+                        styleKey,
+                        voiceKey,
+                        SelectedSeriesTone,
+                        ActualAspectRatio);
+                    if (plan != null && plan.Episodes.Count > 0)
+                        break;
+                }
+                catch
+                {
+                    if (attempt == 3) throw;
+                    BatchStatusText = $"⏳ Đang thử lại lập dàn ý (Lần {attempt + 1}/3 do máy chủ AI tải nặng)...";
+                    await Task.Delay(2500);
+                }
+            }
+
+            if (plan == null) throw new Exception("Không nhận được dữ liệu dàn ý từ AI.");
 
             // 1. Luôn chuẩn hóa số tập và tiêu đề theo đúng thứ tự 1, 2, 3, 4, 5...
             for (int i = 0; i < plan.Episodes.Count; i++)
@@ -649,7 +666,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
 
                 // Gọi sinh kịch bản chi tiết với cơ chế thử lại (retry) nếu gặp gián đoạn kết nối
                 ScriptWorkspace? ws = null;
-                for (int attempt = 1; attempt <= 2; attempt++)
+                for (int attempt = 1; attempt <= 3; attempt++)
                 {
                     try
                     {
@@ -666,8 +683,9 @@ public partial class SeriesCreatorViewModel : ObservableObject
                     }
                     catch
                     {
-                        if (attempt == 2) throw;
-                        await Task.Delay(1800);
+                        if (attempt == 3) throw;
+                        BatchStatusText = $"⏳ Đang thử lại Tập {epNum}/{total} (Lần {attempt + 1}/3 do máy chủ AI đang tải nặng)...";
+                        await Task.Delay(2500);
                     }
                 }
 
