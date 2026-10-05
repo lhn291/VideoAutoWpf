@@ -818,7 +818,11 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
             SuggestedStyle = style,
             SuggestedTone = tone,
             SuggestedBgm = bgm,
-            SourceInfo = source
+            SourceInfo = source,
+            VideoId = VideoInfo?.VideoId ?? string.Empty,
+            VideoDuration = VideoInfo?.Duration ?? TimeSpan.Zero,
+            Description = VideoInfo?.Description ?? string.Empty,
+            Tags = VideoInfo?.Tags ?? string.Empty
         };
     }
 
@@ -830,6 +834,7 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
         return new CreateVideoFromAnalyticsRequest
         {
             VideoId = video.VideoId,
+            VideoDuration = video.Duration,
             Description = video.Description,
             Title = $"[BÍ MẬT CHƯA KỂ] Sự Thật Đằng Sau: {video.Title}",
             HookOpening = "Bạn có biết đằng sau câu chuyện này còn một chi tiết kinh ngạc mà rất ít người nhận ra?",

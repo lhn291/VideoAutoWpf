@@ -288,12 +288,13 @@ public class GeminiScriptService
         var projectId = _authService.ProjectId;
 
         var systemInstruction =
-            "You are an acclaimed showrunner and executive producer for viral short episodic video series on TikTok, YouTube Shorts, and Reels. " +
-            $"Your task is to take a premise, long story, or topic and divide it into a gripping MULTI-EPISODE series with EXACTLY {totalEpisodes} EPISODES. " +
+            "You are an acclaimed showrunner, executive producer, and investigative crime documentary director. " +
+            $"Your task is to take a premise, long story, or factual case investigation and divide it into a gripping, comprehensive MULTI-EPISODE series with EXACTLY {totalEpisodes} EPISODES. " +
+            "The source content may be adapted from a detailed 30-minute to 1-hour documentary or investigation, so ensure every episode deeply develops a specific phase (initial mystery, clues, suspect interrogations, twists, forensic breakthrough, and trial) without rushing or skipping crucial facts. " +
             $"The desired pacing and tone is: '{toneOrPacing}'. Video format ratio is '{aspectRatio}'. " +
             $"CRITICAL MANDATORY REQUIREMENT: The 'episodes' array MUST CONTAIN EXACTLY {totalEpisodes} EPISODE OBJECTS (from episode_number = 1 to episode_number = {totalEpisodes}). " +
             $"DO NOT return only 1 episode. You must outline ALL {totalEpisodes} episodes sequentially! Each episode MUST have 'suggested_scene_count' set to {defaultScenesPerEpisode}. " +
-            "Every episode must have a strong hook, rising action, and an INTENSE CLIFFHANGER at the end (except the final episode which resolves the series). " +
+            "Every episode must have a captivating opening hook, substantive investigative progression, rising tension, and an INTENSE CLIFFHANGER at the end (except the final episode which resolves the verdict). " +
             "You MUST also formulate a detailed 'character_bible' in English describing the protagonist and key characters' exact visual features (hair, eyes, face, outfit, colors, accessories) so Imagen 3 can render them identically in every scene of every episode. " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
             "The JSON structure must exactly match this schema:\n" +
@@ -332,6 +333,7 @@ public class GeminiScriptService
         string previousEpisodeEndingContext = "",
         string aspectRatio = "9:16",
         string toneOrPacing = "",
+        string sourceStoryContext = "",
         string location = "us-central1",
         CancellationToken ct = default)
     {
@@ -345,7 +347,7 @@ public class GeminiScriptService
         var ratio = string.IsNullOrWhiteSpace(aspectRatio) ? "9:16" : aspectRatio;
 
         var systemInstruction =
-            "You are an expert short video screenwriter writing a specific episode of a viral video series. " +
+            "You are an expert investigative documentary screenwriter writing a specific episode of a high-production video series. " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
             $"CRITICAL REQUIREMENT: You MUST generate EXACTLY {numScenes} scenes inside the 'scenes' array. Do NOT generate fewer than {numScenes} scenes! " +
             "The JSON structure must exactly match this schema:\n" +
@@ -364,10 +366,10 @@ public class GeminiScriptService
             "    \"subtitle_font\": \"Segoe UI Bold\"\n" +
             "  },\n" +
             "  \"publish_info\": {\n" +
-            $"    \"title\": \"🔥 {seriesPlan.SeriesTitle} - [TẬP {epNum}]: {episodePlan.EpisodeTitle} | #shorts\",\n" +
+            $"    \"title\": \"🔥 {seriesPlan.SeriesTitle} - [TẬP {epNum}]: {episodePlan.EpisodeTitle}\",\n" +
             "    \"alternative_titles\": \"- Gợi ý tiêu đề 2\\n- Gợi ý tiêu đề 3\",\n" +
-            $"    \"description\": \"Tóm tắt tập {epNum}. " + (isLastEp ? "Đại kết cục của series!" : $"Đón xem TẬP {epNum + 1} vào ngày mai! Hãy bấm Follow kênh ngay nhé!") + "\",\n" +
-            $"    \"hashtags\": \"#series #tap{epNum} #shorts #tiktok #reels #viral #xuhuong\"\n" +
+            $"    \"description\": \"Tóm tắt tập {epNum}. " + (isLastEp ? "Đại kết cục của series!" : $"Đón xem TẬP {epNum + 1} tiếp theo! Hãy bấm Đăng ký kênh ngay nhé!") + "\",\n" +
+            $"    \"hashtags\": \"#series #tap{epNum} #tailieu #khampha #xuhuong #youtube\"\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
             "    { \"text\": \"Vietnamese voiceover scene 1...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" },\n" +
@@ -377,18 +379,20 @@ public class GeminiScriptService
             "}\n\n" +
             "Guidelines:\n" +
             $"1. Video ratio {ratio}. Voice is '{seriesPlan.SuggestedVoice}'. {(string.IsNullOrWhiteSpace(toneOrPacing) ? "" : $"Tone: '{toneOrPacing}'.")}\n" +
-            $"2. MANDATORY SCENE COUNT: Generate EXACTLY {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'. The 'scenes' array MUST have length == {numScenes}. Each scene represents 4-8s of video narration.\n" +
+            $"2. MANDATORY SCENE COUNT: Generate EXACTLY {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'. The 'scenes' array MUST have length == {numScenes}. Each scene represents a cinematic beat (5-9s narration). For long-form episodes (20-50+ scenes), provide detailed, immersive, atmospheric storytelling (25-45 words of natural, dramatic Vietnamese per scene). Faithfully utilize real facts, dates, clues, suspect statements, and forensics from the provided source dossier without inventing fictitious filler.\n" +
             $"3. Scene 1 hook: {episodePlan.EpisodeHook}. (If Episode > 1, start with a quick 1-sentence recap or immediate escalation).\n" +
             $"4. Final scene (Scene {numScenes}) MUST end on this cliffhanger: {episodePlan.Cliffhanger}\n" +
             $"5. CRITICAL: The 'image_prompt' MUST start with this exact style prefix: '{chosenStyle}' AND include the character description: '{seriesPlan.CharacterBible}' in every scene where characters appear.\n";
 
         var userPrompt = $"Series: '{seriesPlan.SeriesTitle}' (Total {totalEpisodes} episodes)\n" +
                          $"Overall Plot: {seriesPlan.OverallPremise}\n" +
+                         (!string.IsNullOrWhiteSpace(sourceStoryContext) ? $"\n--- TƯ LIỆU GỐC / HỒ SƠ VỤ ÁN THỰC TẾ (Nguồn chi tiết từ video gốc 1 tiếng) ---\n{sourceStoryContext}\n--------------------------------------------------------------------------------\n\n" : "") +
                          $"Currently writing Episode {epNum}/{totalEpisodes}: '{episodePlan.EpisodeTitle}'\n" +
                          $"Episode Plot Beat: {episodePlan.PlotBeat}\n" +
                          (string.IsNullOrWhiteSpace(previousEpisodeEndingContext) ? "" : $"Context from previous episode ending: {previousEpisodeEndingContext}\n") +
                          $"Episode Cliffhanger ending: {episodePlan.Cliffhanger}\n\n" +
                          $"BẮT BUỘC: Hãy viết kịch bản chi tiết gồm ĐÚNG {numScenes} PHÂN CẢNH (scenes) cho Tập {epNum}. " +
+                         $"Hãy bám sát các tình tiết có thật, nhân vật thật, hiện trường và manh mối trong tư liệu hồ sơ gốc ở trên để kể chi tiết từng diễn biến, không lược bỏ hay rút ngắn qua loa. " +
                          $"Mảng 'scenes' trong JSON PHẢI có đủ đúng {numScenes} phần tử, tuyệt đối không được dừng lại ở ít cảnh hơn!";
 
         return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);

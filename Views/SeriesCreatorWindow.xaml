@@ -206,6 +206,48 @@
                         <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></TextBox.Resources>
                     </TextBox>
 
+                    <!-- Thanh chọn nhanh thời lượng & Tổng thời lượng Series -->
+                    <Border Background="#161726" CornerRadius="8" Padding="12,8" Margin="0,0,0,12" BorderBrush="#313244" BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="⏱️ Mẫu thời lượng:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <Button Command="{Binding SetDurationPresetCommand}" CommandParameter="shorts"
+                                        Padding="8,4" Margin="0,0,6,0" Background="#313244" BorderBrush="#585b70" BorderThickness="1"
+                                        ToolTip="Mỗi tập ~45s - 1 phút (6 cảnh) - Video dọc 9:16 cho Shorts/TikTok/Reels">
+                                    <TextBlock Text="⚡ Shorts (1p)" FontSize="10.5" Foreground="#cdd6f4"/>
+                                </Button>
+                                <Button Command="{Binding SetDurationPresetCommand}" CommandParameter="short_3m"
+                                        Padding="8,4" Margin="0,0,6,0" Background="#313244" BorderBrush="#585b70" BorderThickness="1"
+                                        ToolTip="Mỗi tập ~2 - 3 phút (20 cảnh) - Video tóm lược nhanh">
+                                    <TextBlock Text="🎬 Ngắn (3p)" FontSize="10.5" Foreground="#cdd6f4"/>
+                                </Button>
+                                <Button Command="{Binding SetDurationPresetCommand}" CommandParameter="standard_5m"
+                                        Padding="8,4" Margin="0,0,6,0" Background="#1e3a5f" BorderBrush="#89b4fa" BorderThickness="1"
+                                        ToolTip="Mỗi tập ~4.5 - 5.5 phút (35 cảnh) - Chuẩn video YouTube dài 16:9, kể chi tiết từng tình tiết vụ án">
+                                    <TextBlock Text="⭐ Chuẩn (5p)" FontSize="10.5" FontWeight="Bold" Foreground="#89b4fa"/>
+                                </Button>
+                                <Button Command="{Binding SetDurationPresetCommand}" CommandParameter="long_8m"
+                                        Padding="8,4" Background="#313244" BorderBrush="#585b70" BorderThickness="1"
+                                        ToolTip="Mỗi tập ~8 - 10 phút (55 cảnh) - Phim tài liệu chuyên sâu 16:9">
+                                    <TextBlock Text="🎥 Dài (8-10p)" FontSize="10.5" Foreground="#cdd6f4"/>
+                                </Button>
+                            </StackPanel>
+
+                            <!-- Hiển thị tổng ước tính toàn bộ Series -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="📊 " FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding TotalSeriesEstimatedDurationDisplay}" 
+                                           FontSize="11" FontWeight="Bold" Foreground="#a6e3a1" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
                     <!-- Cấu hình Series: 2 Hàng thông số chuyên sâu -->
                     <!-- HÀNG 1: Số tập, Số cảnh mỗi tập, Tỷ lệ khung hình -->
                     <Grid Margin="0,0,0,12">
@@ -372,6 +414,12 @@
                             <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                                 <TextBlock Text="👤 Character Bible (Đồng nhất nhân vật): " FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource AccentCyan}"/>
                                 <TextBlock Text="{Binding CurrentSeriesPlan.CharacterBible}" FontSize="10.5" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" MaxWidth="500"/>
+                            </StackPanel>
+
+                            <!-- Tổng thời lượng Series dự kiến -->
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="⏱️ Ước tính tổng thời lượng Series: " FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource AccentYellow}"/>
+                                <TextBlock Text="{Binding TotalSeriesEstimatedDurationDisplay}" FontSize="10.5" FontWeight="SemiBold" Foreground="#a6e3a1"/>
                             </StackPanel>
                         </StackPanel>
 

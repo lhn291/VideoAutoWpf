@@ -52,13 +52,14 @@ public partial class SeriesCreatorViewModel : ObservableObject
     public string ApiKeyToggleText => ShowApiKeyInput ? "▲ Thu gọn" : (HasGeminiApiKey ? "✏️ Đổi Key" : "➕ Nhập Key");
 
     // ── Cấu hình số tập mở rộng ──
-    public List<int> EpisodeCountOptions { get; } = new() { 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 40, 50 };
+    public List<int> EpisodeCountOptions { get; } = new() { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 25, 30, 40, 50 };
 
     [ObservableProperty]
-    private int _selectedEpisodeCount = 3;
+    [NotifyPropertyChangedFor(nameof(TotalSeriesEstimatedDurationDisplay))]
+    private int _selectedEpisodeCount = 5;
 
     [ObservableProperty]
-    private string _episodeCountText = "3";
+    private string _episodeCountText = "5";
 
     partial void OnSelectedEpisodeCountChanged(int value)
     {
@@ -66,6 +67,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
         {
             EpisodeCountText = value.ToString();
         }
+        OnPropertyChanged(nameof(TotalSeriesEstimatedDurationDisplay));
     }
 
     partial void OnEpisodeCountTextChanged(string value)
@@ -77,15 +79,16 @@ public partial class SeriesCreatorViewModel : ObservableObject
         }
     }
 
-    // ── Cấu hình số cảnh mỗi tập ──
-    public List<int> ScenesPerEpisodeOptions { get; } = new() { 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 25, 30 };
+    // ── Cấu hình số cảnh mỗi tập (Hỗ trợ từ Shorts đến video dài 5-15 phút/tập) ──
+    public List<int> ScenesPerEpisodeOptions { get; } = new() { 6, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90, 100 };
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(EstimatedDurationPerEpisode))]
-    private int _selectedScenesPerEpisode = 6;
+    [NotifyPropertyChangedFor(nameof(TotalSeriesEstimatedDurationDisplay))]
+    private int _selectedScenesPerEpisode = 35; // Mặc định chuẩn ~5 phút/tập (theo yêu cầu)
 
     [ObservableProperty]
-    private string _scenesPerEpisodeText = "6";
+    private string _scenesPerEpisodeText = "35";
 
     partial void OnSelectedScenesPerEpisodeChanged(int value)
     {
@@ -93,6 +96,8 @@ public partial class SeriesCreatorViewModel : ObservableObject
         {
             ScenesPerEpisodeText = value.ToString();
         }
+        OnPropertyChanged(nameof(EstimatedDurationPerEpisode));
+        OnPropertyChanged(nameof(TotalSeriesEstimatedDurationDisplay));
     }
 
     partial void OnScenesPerEpisodeTextChanged(string value)
@@ -111,12 +116,66 @@ public partial class SeriesCreatorViewModel : ObservableObject
             int secMin = SelectedScenesPerEpisode * 6;
             int secMax = SelectedScenesPerEpisode * 9;
             if (secMax < 60)
-                return $"~{secMin}-{secMax}s / tập (Shorts/TikTok)";
+                return $"~{secMin}-{secMax}s / tập (Shorts)";
             int minMin = secMin / 60;
             int sMin = secMin % 60;
             int minMax = secMax / 60;
             int sMax = secMax % 60;
             return $"~{minMin}p{sMin:D2}s - {minMax}p{sMax:D2}s / tập";
+        }
+    }
+
+    public string TotalSeriesEstimatedDurationDisplay
+    {
+        get
+        {
+            int totalEpisodes = CurrentSeriesPlan != null && CurrentSeriesPlan.Episodes.Count > 0
+                ? CurrentSeriesPlan.Episodes.Count
+                : SelectedEpisodeCount;
+
+            int totalScenes = CurrentSeriesPlan != null && CurrentSeriesPlan.Episodes.Count > 0
+                ? CurrentSeriesPlan.Episodes.Sum(e => e.SuggestedSceneCount > 0 ? e.SuggestedSceneCount : SelectedScenesPerEpisode)
+                : SelectedEpisodeCount * SelectedScenesPerEpisode;
+
+            int totalSecMin = totalScenes * 6;
+            int totalSecMax = totalScenes * 9;
+            int minMin = totalSecMin / 60;
+            int minMax = totalSecMax / 60;
+            if (minMax < 60)
+                return $"Tổng {totalEpisodes} tập: ~{minMin}-{minMax} phút ({totalScenes} cảnh)";
+            int hMin = minMin / 60;
+            int mMin = minMin % 60;
+            int hMax = minMax / 60;
+            int mMax = minMax % 60;
+            return $"Tổng {totalEpisodes} tập: ~{hMin}h{mMin:D2}p - {hMax}h{mMax:D2}p ({totalScenes} cảnh)";
+        }
+    }
+
+    [RelayCommand]
+    private void SetDurationPreset(string preset)
+    {
+        switch (preset.ToLowerInvariant())
+        {
+            case "shorts": // ~45s - 1 phút
+                SelectedScenesPerEpisode = 6;
+                SelectedAspectRatioDisplay = "9:16 (Dọc - Shorts/TikTok)";
+                break;
+            case "short_3m": // ~2 - 3 phút
+                SelectedScenesPerEpisode = 20;
+                SelectedAspectRatioDisplay = "9:16 (Dọc - Shorts/TikTok)";
+                break;
+            case "standard_5m": // ~5 phút (Chuẩn video YouTube)
+                SelectedScenesPerEpisode = 35;
+                SelectedAspectRatioDisplay = "16:9 (Ngang - YouTube)";
+                break;
+            case "long_8m": // ~8 - 10 phút
+                SelectedScenesPerEpisode = 55;
+                SelectedAspectRatioDisplay = "16:9 (Ngang - YouTube)";
+                break;
+            case "feature_15m": // ~12 - 15 phút
+                SelectedScenesPerEpisode = 90;
+                SelectedAspectRatioDisplay = "16:9 (Ngang - YouTube)";
+                break;
         }
     }
 
@@ -228,7 +287,34 @@ public partial class SeriesCreatorViewModel : ObservableObject
             }
         }
 
-        BatchStatusText = $"🎯 Đã nạp ý tưởng từ YouTube Analytics ({req.SourceInfo}). Bạn có thể bấm 'Tra Cứu Vụ Án Thật' hoặc chỉnh sửa trước khi lập dàn ý!";
+        if (req.VideoDuration.TotalMinutes >= 5)
+        {
+            // Tự động tính toán số tập và số cảnh phù hợp với video gốc (mỗi tập ~5 phút)
+            int targetEp = (int)Math.Round(req.VideoDuration.TotalMinutes / 5.0);
+            if (targetEp < 2) targetEp = 2;
+            if (targetEp > 25) targetEp = 25;
+
+            if (!EpisodeCountOptions.Contains(targetEp))
+            {
+                EpisodeCountOptions.Add(targetEp);
+                EpisodeCountOptions.Sort();
+            }
+
+            SelectedEpisodeCount = targetEp;
+            SelectedScenesPerEpisode = 35; // Chuẩn ~5 phút/tập
+            SelectedAspectRatioDisplay = "16:9 (Ngang - YouTube)"; // Video dài YouTube chuẩn 16:9
+
+            var durStr = (int)req.VideoDuration.TotalHours > 0 
+                ? $"{(int)req.VideoDuration.TotalHours}h{req.VideoDuration.Minutes}p" 
+                : $"{req.VideoDuration.Minutes}p";
+
+            BatchStatusText = $"💡 Video gốc dài {durStr}: Đã tự động đề xuất {targetEp} tập (~5 phút/tập, 35 cảnh, tỷ lệ 16:9) để truyền tải trọn vẹn toàn bộ vụ án!";
+        }
+        else
+        {
+            SelectedScenesPerEpisode = 35; // Mặc định chuẩn ~5 phút/tập
+            BatchStatusText = $"🎯 Đã nạp ý tưởng từ YouTube Analytics ({req.SourceInfo}). Mỗi tập được đặt chuẩn ~5 phút ({SelectedScenesPerEpisode} cảnh/tập)!";
+        }
     }
 
     /// <summary>
@@ -573,7 +659,8 @@ public partial class SeriesCreatorViewModel : ObservableObject
                             total,
                             previousEnding,
                             ActualAspectRatio,
-                            SelectedSeriesTone);
+                            SelectedSeriesTone,
+                            TopicOrStory);
                         if (ws != null && ws.Scenes.Count > 0)
                             break;
                     }
