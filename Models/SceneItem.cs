@@ -33,6 +33,9 @@ public partial class SceneItem : ObservableObject
     private string _status = "Chờ xử lý";
 
     [ObservableProperty]
+    private string _charactersPresentText = string.Empty;
+
+    [ObservableProperty]
     private string _motionEffect = "zoom_in";
 
     public string MotionEffectDisplayText

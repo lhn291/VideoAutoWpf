@@ -10,12 +10,12 @@ public class GoogleTtsService
 
     public static readonly IReadOnlyList<string> AvailableVoices = new[]
     {
-        "vi-VN-Wavenet-B", // Nam (Mặc định)
-        "vi-VN-Wavenet-A", // Nữ
-        "vi-VN-Wavenet-C", // Nữ
-        "vi-VN-Wavenet-D", // Nam
-        "vi-VN-Neural2-A", // Nữ cao cấp
-        "vi-VN-Neural2-D"  // Nam cao cấp
+        "vi-VN-Neural2-D", // Nam cao cấp (Mặc định - Truyền cảm, trầm ấm)
+        "vi-VN-Neural2-A", // Nữ cao cấp (Truyền cảm, tự nhiên)
+        "vi-VN-Wavenet-B", // Nam (Trầm)
+        "vi-VN-Wavenet-A", // Nữ (Nhẹ nhàng)
+        "vi-VN-Wavenet-C", // Nữ (Sáng)
+        "vi-VN-Wavenet-D"  // Nam (Năng động)
     };
 
     public GoogleTtsService(GoogleAuthService authService)
@@ -42,8 +42,10 @@ public class GoogleTtsService
     public async Task<string> SynthesizeSpeechAsync(
         string text, 
         string outputPath, 
-        string voiceName = "vi-VN-Wavenet-B", 
+        string voiceName = "vi-VN-Neural2-D", 
         string languageCode = "vi-VN",
+        double speakingRate = 0.90,
+        double pitch = 0.0,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -61,7 +63,9 @@ public class GoogleTtsService
 
         var audioConfig = new AudioConfig
         {
-            AudioEncoding = AudioEncoding.Mp3
+            AudioEncoding = AudioEncoding.Mp3,
+            SpeakingRate = Math.Clamp(speakingRate, 0.25, 2.0),
+            Pitch = Math.Clamp(pitch, -20.0, 20.0)
         };
 
         var response = await client.SynthesizeSpeechAsync(input, voice, audioConfig, ct);

@@ -8,6 +8,7 @@
         <converters:InverseBooleanConverter x:Key="InverseBoolConverter" />
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisConverter" />
         <converters:RatioMatchConverter x:Key="RatioMatchConverter" />
+        <converters:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisConverter" />
 
         <!-- Base Colors -->
         <SolidColorBrush x:Key="BgDark" Color="#181825" />

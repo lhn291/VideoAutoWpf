@@ -649,6 +649,9 @@ public partial class ScriptGeneratorViewModel : ObservableObject
                     Text = sc.Text,
                     ImagePrompt = sc.ImagePrompt,
                     MotionEffect = string.IsNullOrEmpty(sc.MotionEffect) ? "zoom_in" : sc.MotionEffect,
+                    CharactersPresentText = sc.CharactersPresent != null && sc.CharactersPresent.Count > 0
+                        ? string.Join(", ", sc.CharactersPresent)
+                        : "🏙️ Ngoại cảnh / Hiện trường",
                     Status = "Đã sinh kịch bản"
                 });
             }

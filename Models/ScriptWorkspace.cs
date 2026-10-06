@@ -10,6 +10,9 @@ public class ScriptWorkspace
     [JsonPropertyName("scenes")]
     public List<ScriptScene> Scenes { get; set; } = new();
 
+    [JsonPropertyName("characters")]
+    public List<CharacterProfile> Characters { get; set; } = new();
+
     [JsonPropertyName("publish_info")]
     public VideoPublishInfo? PublishInfo { get; set; }
 }
@@ -20,7 +23,10 @@ public class ScriptMetadata
     public string Ratio { get; set; } = "9:16";
 
     [JsonPropertyName("voice")]
-    public string Voice { get; set; } = "vi-VN-Wavenet-B";
+    public string Voice { get; set; } = "vi-VN-Neural2-D";
+
+    [JsonPropertyName("speaking_rate")]
+    public double SpeakingRate { get; set; } = 0.90;
 
     [JsonPropertyName("music")]
     public string? Music { get; set; }
@@ -63,6 +69,9 @@ public class ScriptScene
 
     [JsonPropertyName("motion_effect")]
     public string? MotionEffect { get; set; }
+
+    [JsonPropertyName("characters_present")]
+    public List<string> CharactersPresent { get; set; } = new();
 
     [JsonPropertyName("engine")]
     public string? Engine { get; set; } = "imagen";

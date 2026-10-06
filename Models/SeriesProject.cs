@@ -37,7 +37,7 @@ public partial class SeriesProject : ObservableObject
 
     [ObservableProperty]
     [JsonPropertyName("global_voice")]
-    private string _globalVoice = "vi-VN-Wavenet-B";
+    private string _globalVoice = "vi-VN-Neural2-D";
 
     [ObservableProperty]
     [JsonPropertyName("aspect_ratio")]

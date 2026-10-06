@@ -26,7 +26,17 @@
                     <Border Background="#313244" CornerRadius="6" Width="28" Height="24" Margin="0,0,8,0">
                         <TextBlock Text="{Binding Index, StringFormat='#{0}'}" FontWeight="Bold" FontSize="11" Foreground="{StaticResource AccentBlue}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
-                    <TextBlock Text="Phân Cảnh" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                    <TextBlock Text="Phân Cảnh" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                    <!-- Tuyến nhân vật xuất hiện trong phân cảnh -->
+                    <Border Background="#1e1e2e" BorderBrush="#3d4066" BorderThickness="1" CornerRadius="4" Padding="6,2" VerticalAlignment="Center"
+                            Visibility="{Binding CharactersPresentText, Converter={StaticResource StringNotEmptyToVisConverter}}"
+                            ToolTip="Tuyến nhân vật được AI chỉ định cho phân cảnh này">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🎭 " FontSize="10" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CharactersPresentText}" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- Trạng thái phân cảnh & Hiệu ứng camera -->

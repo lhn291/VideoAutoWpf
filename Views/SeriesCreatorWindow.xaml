@@ -412,9 +412,33 @@
                             
                             <!-- Character Bible preview -->
                             <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                <TextBlock Text="👤 Character Bible (Đồng nhất nhân vật): " FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource AccentCyan}"/>
+                                <TextBlock Text="👤 Tuyến nhân vật Series: " FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource AccentCyan}"/>
                                 <TextBlock Text="{Binding CurrentSeriesPlan.CharacterBible}" FontSize="10.5" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" MaxWidth="500"/>
                             </StackPanel>
+
+                            <!-- Danh sách thẻ nhân vật chi tiết của Series -->
+                            <ItemsControl ItemsSource="{Binding CurrentSeriesPlan.Characters}" Margin="0,4,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:CharacterProfile}">
+                                        <Border Background="#212234" CornerRadius="6" Padding="8,4" Margin="0,0,6,4" BorderBrush="#313244" BorderThickness="1"
+                                                ToolTip="{Binding DistinguishingMarker}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="👤 " FontSize="10" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="10.5" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center"/>
+                                                <Border Background="#2a2b45" CornerRadius="3" Padding="4,1" Margin="5,0,0,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Role}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}"/>
+                                                </Border>
+                                                <TextBlock Text="{Binding GenderAge, StringFormat=' ({0})'}" FontSize="9" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
 
                             <!-- Tổng thời lượng Series dự kiến -->
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">

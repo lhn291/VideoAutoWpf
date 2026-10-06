@@ -18,12 +18,32 @@ public class VoiceCard
     {
         new VoiceCard
         {
+            Key = "vi-VN-Neural2-D",
+            Icon = "✨",
+            Title = "Nam Neural2 D (Chuẩn kể chuyện)",
+            Gender = "Nam",
+            Quality = "Neural2 ⭐",
+            Description = "Giọng nam cao cấp, trầm ấm, truyền cảm tự nhiên, hoàn hảo cho trinh thám, vụ án, tài liệu",
+            SampleText = "Không có dấu hiệu của sự giằng co, chứng tỏ sự việc diễn ra hoàn toàn trong im lặng."
+        },
+        new VoiceCard
+        {
+            Key = "vi-VN-Neural2-A",
+            Icon = "✨",
+            Title = "Nữ Neural2 A (Truyền cảm)",
+            Gender = "Nữ",
+            Quality = "Neural2 ⭐",
+            Description = "Giọng nữ cao cấp, ấm áp, truyền cảm và tự nhiên nhất",
+            SampleText = "Đây là giọng nữ chất lượng cao nhất, nghe rất tự nhiên, truyền cảm và lôi cuốn."
+        },
+        new VoiceCard
+        {
             Key = "vi-VN-Wavenet-B",
             Icon = "🎙️",
             Title = "Nam Wavenet B",
             Gender = "Nam",
             Quality = "Wavenet",
-            Description = "Giọng nam trầm ấm, phù hợp kinh dị, bí ẩn, kể chuyện",
+            Description = "Giọng nam trầm, tông đều",
             SampleText = "Trong bóng tối, một tiếng thì thầm vang lên từ phía xa..."
         },
         new VoiceCard
@@ -33,7 +53,7 @@ public class VoiceCard
             Title = "Nữ Wavenet A",
             Gender = "Nữ",
             Quality = "Wavenet",
-            Description = "Giọng nữ nhẹ nhàng, phù hợp tình cảm, cổ tích, du lịch",
+            Description = "Giọng nữ nhẹ nhàng, phù hợp tình cảm, cổ tích",
             SampleText = "Hãy cùng khám phá những điều kỳ diệu đang chờ đợi phía trước..."
         },
         new VoiceCard
@@ -43,7 +63,7 @@ public class VoiceCard
             Title = "Nữ Wavenet C",
             Gender = "Nữ",
             Quality = "Wavenet",
-            Description = "Giọng nữ sáng, trẻ trung, phù hợp giáo dục, ẩm thực",
+            Description = "Giọng nữ sáng, trẻ trung",
             SampleText = "Bạn có biết rằng bộ não con người có thể lưu trữ hàng triệu thông tin?"
         },
         new VoiceCard
@@ -53,28 +73,8 @@ public class VoiceCard
             Title = "Nam Wavenet D",
             Gender = "Nam",
             Quality = "Wavenet",
-            Description = "Giọng nam năng động, phù hợp hài hước, gaming, công nghệ",
+            Description = "Giọng nam năng động, phù hợp hài hước, gaming",
             SampleText = "Chào mừng các bạn đến với video mới nhất hôm nay!"
-        },
-        new VoiceCard
-        {
-            Key = "vi-VN-Neural2-A",
-            Icon = "✨",
-            Title = "Nữ Neural2 A",
-            Gender = "Nữ",
-            Quality = "Neural2 ⭐",
-            Description = "Giọng nữ cao cấp, tự nhiên nhất, phù hợp mọi thể loại",
-            SampleText = "Đây là giọng nữ chất lượng cao nhất, nghe rất tự nhiên và truyền cảm."
-        },
-        new VoiceCard
-        {
-            Key = "vi-VN-Neural2-D",
-            Icon = "✨",
-            Title = "Nam Neural2 D",
-            Gender = "Nam",
-            Quality = "Neural2 ⭐",
-            Description = "Giọng nam cao cấp, tự nhiên nhất, phù hợp mọi thể loại",
-            SampleText = "Đây là giọng nam chất lượng cao nhất, rõ ràng và chuyên nghiệp."
         }
     };
 }

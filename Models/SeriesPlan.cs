@@ -18,13 +18,16 @@ public partial class SeriesPlan : ObservableObject
     [JsonPropertyName("character_bible")]
     private string _characterBible = string.Empty;
 
+    [JsonPropertyName("characters")]
+    public ObservableCollection<CharacterProfile> Characters { get; set; } = new();
+
     [ObservableProperty]
     [JsonPropertyName("suggested_style")]
     private string _suggestedStyle = "dark-anime";
 
     [ObservableProperty]
     [JsonPropertyName("suggested_voice")]
-    private string _suggestedVoice = "vi-VN-Wavenet-B";
+    private string _suggestedVoice = "vi-VN-Neural2-D";
 
     [JsonPropertyName("episodes")]
     public ObservableCollection<EpisodePlanItem> Episodes { get; set; } = new();

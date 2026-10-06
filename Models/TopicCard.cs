@@ -17,20 +17,20 @@ public class TopicCard
     public string SuggestedTone { get; set; } = string.Empty;
 
     /// <summary>
-    /// Voice gợi ý (mặc định vi-VN-Wavenet-B)
+    /// Voice gợi ý (mặc định vi-VN-Neural2-D)
     /// </summary>
-    public string SuggestedVoice { get; set; } = "vi-VN-Wavenet-B";
+    public string SuggestedVoice { get; set; } = "vi-VN-Neural2-D";
 
     public static List<TopicCard> GetDefaultTopics() => new()
     {
         new TopicCard
         {
             Icon = "👻",
-            Title = "Kinh dị / Horror",
-            Description = "Câu chuyện rùng rợn, ma quái, ám ảnh",
+            Title = "Kinh dị / Kỳ án",
+            Description = "Câu chuyện rùng rợn, kỳ án, bí ẩn điều tra",
             SuggestedStyleKey = "dark-anime",
-            SuggestedTone = "Rùng rợn, ám ảnh",
-            SuggestedVoice = "vi-VN-Wavenet-B"
+            SuggestedTone = "Rùng rợn, kịch tính, lắng đọng",
+            SuggestedVoice = "vi-VN-Neural2-D"
         },
         new TopicCard
         {
@@ -66,7 +66,7 @@ public class TopicCard
             Description = "Huyền bí, siêu nhiên, tâm linh",
             SuggestedStyleKey = "cinematic-horror",
             SuggestedTone = "Bí ẩn, hồi hộp",
-            SuggestedVoice = "vi-VN-Wavenet-B"
+            SuggestedVoice = "vi-VN-Neural2-D"
         },
         new TopicCard
         {

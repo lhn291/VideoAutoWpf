@@ -32,7 +32,20 @@ public partial class MainViewModel : ObservableObject
     public IReadOnlyList<string> AvailableVoices => GoogleTtsService.AvailableVoices;
 
     [ObservableProperty]
-    private string _selectedVoice = "vi-VN-Wavenet-B";
+    private string _selectedVoice = "vi-VN-Neural2-D";
+
+    public record SpeakingRateOption(double Value, string DisplayName);
+    public IReadOnlyList<SpeakingRateOption> AvailableSpeakingRates { get; } = new List<SpeakingRateOption>
+    {
+        new(0.80, "0.80x (Bí ẩn, chậm)"),
+        new(0.85, "0.85x (Chậm, truyền cảm)"),
+        new(0.90, "0.90x (Kể chuyện chuẩn ⭐)"),
+        new(0.95, "0.95x (Tự nhiên)"),
+        new(1.00, "1.00x (Gốc)")
+    };
+
+    [ObservableProperty]
+    private double _speakingRate = 0.90;
 
     [ObservableProperty]
     private SceneItem? _selectedScene;
@@ -504,6 +517,9 @@ public partial class MainViewModel : ObservableObject
         if (!string.IsNullOrEmpty(workspace.Metadata?.Voice) && AvailableVoices.Contains(workspace.Metadata.Voice))
             SelectedVoice = workspace.Metadata.Voice;
 
+        if (workspace.Metadata?.SpeakingRate > 0)
+            SpeakingRate = workspace.Metadata.SpeakingRate;
+
         if (workspace.Metadata != null)
         {
             if (!string.IsNullOrEmpty(workspace.Metadata.MotionEffect))
@@ -573,6 +589,9 @@ public partial class MainViewModel : ObservableObject
                 Index = idx++,
                 Text = sc.Text,
                 ImagePrompt = sc.ImagePrompt,
+                CharactersPresentText = sc.CharactersPresent != null && sc.CharactersPresent.Count > 0
+                    ? string.Join(", ", sc.CharactersPresent)
+                    : "🏙️ Ngoại cảnh / Hiện trường",
                 MotionEffect = string.IsNullOrEmpty(sc.MotionEffect) ? "zoom_in" : sc.MotionEffect,
                 Status = "Kịch bản mới"
             });
@@ -1022,7 +1041,7 @@ public partial class MainViewModel : ObservableObject
             Directory.CreateDirectory(tempDir);
             var audioPath = Path.Combine(tempDir, $"voice_scene_{target.Index:D3}_{DateTime.Now:HHmmss}.mp3");
 
-            await _ttsService.SynthesizeSpeechAsync(target.Text, audioPath, SelectedVoice);
+            await _ttsService.SynthesizeSpeechAsync(target.Text, audioPath, SelectedVoice, speakingRate: SpeakingRate);
             target.AudioPath = audioPath;
 
             var duration = await _ffmpegService.GetAudioDurationAsync(audioPath);
@@ -1320,7 +1339,7 @@ public partial class MainViewModel : ObservableObject
                     AppendLog($"[Tự động] Cảnh #{sNum}: Đang gọi Google TTS tạo lời thoại...");
                     s.IsGeneratingAudio = true;
                     var audioOut = Path.Combine(assetsDir, $"voice_scene_{sNum:D3}_{DateTime.Now:HHmmss}.mp3");
-                    await _ttsService.SynthesizeSpeechAsync(s.Text, audioOut, SelectedVoice, ct: ct);
+                    await _ttsService.SynthesizeSpeechAsync(s.Text, audioOut, SelectedVoice, speakingRate: SpeakingRate, ct: ct);
                     s.AudioPath = audioOut;
                     s.DurationSeconds = await _ffmpegService.GetAudioDurationAsync(audioOut, ct: ct);
                     s.IsGeneratingAudio = false;
@@ -1413,6 +1432,7 @@ public partial class MainViewModel : ObservableObject
                 SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
                 SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
                 Voice = SelectedVoice,
+                SpeakingRate = SpeakingRate,
                 OutputDirectory = OutputDirectory,
                 OutputFileName = string.IsNullOrWhiteSpace(OutputFileName) ? $"video_{DateTime.Now:yyyyMMdd_HHmmss}.mp4" : OutputFileName,
                 PublishInfo = CurrentPublishInfo

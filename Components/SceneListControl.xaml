@@ -181,8 +181,15 @@
 
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="🎙️ Giọng đọc TTS:" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox ItemsSource="{Binding AvailableVoices}" SelectedItem="{Binding SelectedVoice}" Width="160"
+                        <ComboBox ItemsSource="{Binding AvailableVoices}" SelectedItem="{Binding SelectedVoice}" Width="150"
                                   Padding="8,5" VerticalContentAlignment="Center"/>
+
+                        <TextBlock Text="⚡ Tốc độ:" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" Margin="12,0,8,0"/>
+                        <ComboBox ItemsSource="{Binding AvailableSpeakingRates}"
+                                  SelectedValue="{Binding SpeakingRate}"
+                                  SelectedValuePath="Value"
+                                  DisplayMemberPath="DisplayName"
+                                  Width="180" Padding="8,5" VerticalContentAlignment="Center"/>
                     </StackPanel>
 
                     <TextBlock Grid.Column="1" Text="📺 Đang làm việc trong Chế độ Chuỗi Series. Chuyển đổi giữa các tập ở thanh công cụ phía trên!" 

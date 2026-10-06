@@ -33,7 +33,9 @@ public class VideoConfig
     /// </summary>
     public string KaraokeHighlightColor { get; set; } = "#ffd43b";
 
-    public string Voice { get; set; } = "vi-VN-Wavenet-B";
+    public string Voice { get; set; } = "vi-VN-Neural2-D";
+    public double SpeakingRate { get; set; } = 0.90;
+    public double Pitch { get; set; } = 0.0;
     public VideoPublishInfo? PublishInfo { get; set; }
 
     public (int width, int height) GetDimensions()

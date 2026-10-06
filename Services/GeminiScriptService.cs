@@ -14,8 +14,8 @@ public class GeminiScriptService
 
     public static readonly Dictionary<string, string> StylePrompts = new()
     {
-        ["dark-anime"] = "In a 2D dark anime cartoon style, hand-drawn 2D animation style, flat cel shading, classic Japanese anime line art, eerie abandoned atmosphere, high contrast, cinematic moody lighting, no photorealism, no 3D elements, no realistic textures. Colors strictly unified: deep sepia, swamp green, and pale ghostly teal. Clean line art, portrait aspect ratio 9:16. ",
-        ["cinematic-horror"] = "In a cinematic dark fantasy movie style, highly realistic 3D photography, photorealistic textures, cinematic shot, creepy and chilling atmosphere, dramatic shadows, volumetric fog, realistic skin and hair, no cartoon, no 2D anime illustration. Colors unified: charcoal black, dark ash, and eerie glowing violet. Portrait aspect ratio 9:16. ",
+        ["dark-anime"] = "In a modern dark anime comic illustration style, high-end 2D graphic novel art, clean sharp line art, flat dramatic cel shading, intense cinematic moody lighting, deep shadows, high contrast, mature crime detective aesthetic, no childish cartoons, no random fantasy elements, portrait aspect ratio 9:16. ",
+        ["cinematic-horror"] = "In a cinematic crime thriller movie style, gritty realism, atmospheric cinematic film still, moody and suspenseful shadows, volumetric lighting, dramatic tension, photorealistic textures, no childish elements, portrait aspect ratio 9:16. ",
         ["cartoon-3d"] = "In a cute 3D cartoon style, Pixar and Disney animated film render style, vibrant colors, soft volumetric lighting, glossy surfaces, round friendly character designs, highly detailed 3D digital art, cheerful atmosphere, no 2D drawings, no photorealism. Portrait aspect ratio 9:16. ",
         ["cyberpunk"] = "In a futuristic 2D cyberpunk anime style, 2D digital anime art, vibrant neon light highlights, flat cel shading, clean line art, dark shadows, high contrast, cinematic lighting, no realistic skin texture, no 3D render quality. Colors unified: dark indigo, bright magenta, and neon cyan. Clean line art, portrait aspect ratio 9:16. ",
         ["horror-cartoon"] = "In an eerie dark 2D cartoon style, Tim Burton aesthetic, creepy hand-drawn illustration style, sketchy lines, whimsical but macabre atmosphere, high contrast, dramatic shadows, no photorealism, no 3D elements, no realistic textures. Colors strictly unified: charcoal black, venom green, deep violet, and dark red. Clean line art, portrait aspect ratio 9:16. ",
@@ -118,7 +118,7 @@ public class GeminiScriptService
             "  \"style_description\": \"Mô tả ngắn gọn bằng tiếng Việt về phong cách được chọn\",\n" +
             "  \"tone\": \"Tone giọng đọc phù hợp (Rùng rợn / Vui nhộn / Trang nghiêm / Nhẹ nhàng / Hào hùng / Bí ẩn / Cảm xúc...)\",\n" +
             "  \"ratio\": \"9:16\",\n" +
-            "  \"voice\": \"vi-VN-Wavenet-B\",\n" +
+            "  \"voice\": \"vi-VN-Neural2-D\",\n" +
             "  \"motion_effect\": \"auto\",\n" +
             "  \"enable_fade\": true,\n" +
             "  \"enable_vignette\": false,\n" +
@@ -128,12 +128,24 @@ public class GeminiScriptService
             "  \"subtitle_font\": \"Segoe UI Bold\",\n" +
             "  \"subtitle_reason\": \"Lý do ngắn gọn bằng tiếng Việt chọn kiểu chữ chạy/phụ đề này\",\n" +
             "  \"summary\": \"Tóm tắt kế hoạch video bằng tiếng Việt (3-5 câu): nội dung chính, cách kể chuyện, điểm nhấn\",\n" +
-            "  \"character_hint\": \"Mô tả gợi ý nhân vật chính (ngoại hình, trang phục, đặc điểm) bằng tiếng Việt\"\n" +
+            "  \"character_hint\": \"Tóm tắt nhanh tuyến nhân vật chính bằng tiếng Việt\",\n" +
+            "  \"characters\": [\n" +
+            "    {\n" +
+            "      \"id\": \"victim\",\n" +
+            "      \"name\": \"Lan (Nạn nhân)\",\n" +
+            "      \"role\": \"Nạn nhân\",\n" +
+            "      \"gender_age\": \"Nữ, 22 tuổi\",\n" +
+            "      \"appearance_vn\": \"Dáng người gầy, tóc đen thẳng ngang vai, mắt to hoang mang\",\n" +
+            "      \"outfit_vn\": \"Áo len vàng nhạt pastel, quần jeans xanh nhạt, đeo túi tote vải be\",\n" +
+            "      \"visual_prompt\": \"A 22-year-old Vietnamese woman, slender build, shoulder-length straight black hair, anxious expressive eyes, wearing a pastel yellow knitted sweater and carrying a beige canvas tote bag\",\n" +
+            "      \"distinguishing_marker\": \"Áo len vàng nhạt pastel, túi vải be (Dấu hiệu nhận diện cố định)\"\n" +
+            "    }\n" +
+            "  ]\n" +
             "}\n\n" +
             "Rules:\n" +
-            "1. 'suggested_scenes' should be between 3 and 12, based on complexity and depth needed for the topic.\n" +
+            "1. 'suggested_scenes': For short videos, recommend between 4 and 8 scenes. Each scene should represent a substantial narrative beat of 8-15 seconds. DO NOT create too many rapid-fire fragmented scenes that cause visual fatigue and unnecessary image generation.\n" +
             $"2. 'suggested_style' MUST be one of these exact keys: [{AvailableStyleKeys}]. Choose the BEST style that matches the topic's mood and theme.\n" +
-            "3. 'voice' must be one of: 'vi-VN-Wavenet-B' (nam trầm), 'vi-VN-Wavenet-A' (nữ), 'vi-VN-Wavenet-D' (nam), 'vi-VN-Neural2-A' (nữ cao cấp), 'vi-VN-Neural2-D' (nam cao cấp). Choose based on tone.\n" +
+            "3. 'voice' should default to 'vi-VN-Neural2-D' (nam cao cấp - trầm ấm, truyền cảm, tự nhiên) or 'vi-VN-Neural2-A' (nữ cao cấp - truyền cảm). Highly recommended over older robotic voices.\n" +
             "4. 'ratio' is always '9:16' for short video.\n" +
             "5. 'motion_effect' default is 'auto' (AI analyzes and assigns the best camera movement to each individual scene).\n" +
             "6. 'enable_vignette': set to true for dark fantasy, horror, noir, historical drama; false for bright anime, cartoon, commercial.\n" +
@@ -143,7 +155,14 @@ public class GeminiScriptService
             "10. 'subtitle_font': choose from ['Segoe UI Bold', 'Arial Bold', 'Impact', 'Tahoma Bold', 'Consolas', 'Times New Roman'].\n" +
             "11. 'subtitle_reason': Giải thích ngắn gọn bằng tiếng Việt lý do đề xuất kiểu phụ đề này.\n" +
             "12. All Vietnamese text must be natural and compelling.\n" +
-            "13. 'character_hint': Mô tả chi tiết nhân vật chính (nếu có) bao gồm: giới tính, tuổi, kiểu tóc, trang phục, đặc điểm nổi bật. Nếu không có nhân vật cụ thể, để trống.\n";
+            "13. 'characters' (RÀ SOÁT VÀ THIẾT KẾ TOÀN BỘ TUYẾN NHÂN VẬT ĐỘC NHẤT TRƯỚC KHI TẠO CẢNH):\n" +
+            "    - Quét toàn bộ nội dung chủ đề và bóc tách đầy đủ tất cả các nhân vật xuất hiện: Nạn nhân, Nghi phạm/Kẻ tình nghi, Điều tra viên/Thám tử, Nhân chứng, v.v.\n" +
+            "    - TUYỆT ĐỐI KHÔNG để các nhân vật nhìn giống nhau! Mỗi nhân vật PHẢI có tạo hình và trang phục HOÀN TOÀN TÁCH BIỆT:\n" +
+            "      * Khác biệt rõ rệt về độ tuổi, giới tính, vóc dáng, kiểu tóc.\n" +
+            "      * Trang phục và màu sắc tương phản mạnh (ví dụ: Nạn nhân áo len vàng nhạt; Thám tử áo măng tô xám; Kẻ lạ mặt áo khoác đen trùm đầu) để người xem nhận biết tức thì.\n" +
+            "      * Viết 'visual_prompt' tiếng Anh cực kỳ chi tiết cho từng nhân vật để Imagen 3 vẽ nhất quán.\n" +
+            "    - Nếu nội dung không có nhân vật người (chủ đề thiên nhiên, vũ trụ), để mảng 'characters' rỗng [].\n" +
+            "14. 'character_hint': Tóm tắt ngắn gọn các nhân vật chính bằng tiếng Việt.\n";
 
         var userPrompt = $"Hãy lên kế hoạch chi tiết cho video về chủ đề sau:\n'{topic}'\n\n" +
                          "Phân tích chủ đề và đề xuất số cảnh, phong cách hình ảnh, tone giọng đọc, hiệu ứng camera phù hợp nhất.";
@@ -195,16 +214,28 @@ public class GeminiScriptService
             "    \"hashtags\": \"#chude #bian #kienthuc #xuhuong #fyp #shorts #tiktok #viral\"\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
-            "    { \"text\": \"Vietnamese voiceover text...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" }\n" +
+            "    { \"text\": \"Vietnamese voiceover text...\", \"characters_present\": [\"Tên nhân vật có mặt (hoặc để trống nếu là cảnh hiện trường/vật chứng)\"], \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" }\n" +
             "  ]\n" +
             "}\n\n" +
             "Guidelines:\n" +
             $"1. The video ratio is {plan.Ratio} (vertical). Voice is '{plan.Voice}'.\n" +
             $"2. Generate exactly {numScenes} scenes.\n" +
             $"3. The tone of voice should be: {plan.Tone}.\n" +
-            "4. The 'text' must be natural, engaging, and compelling Vietnamese voiceover. Start with a strong hook in Scene 1.\n" +
-            $"5. The 'image_prompt' must be a detailed, highly descriptive prompt in English. You MUST prepend this exact style prefix to the beginning of EVERY single 'image_prompt': '{chosenStyle}'\n" +
-            "6. To maintain character consistency across scenes, repeat the exact detailed description of the character(s) verbatim in every scene's image prompt where they appear.\n" +
+            "4. NARRATION PACING & WORD COUNT:\n" +
+            "   - The 'text' must be natural, engaging, and compelling Vietnamese voiceover. Start with a strong hook in Scene 1.\n" +
+            "   - Each scene's 'text' should be a complete, coherent narrative beat with 18-35 words (approx. 8-14 seconds of speech). DO NOT split into tiny 3-word fragments that force jarring, rapid image switching!\n" +
+            $"5. CRITICAL VISUAL RELEVANCE (ĂN KHỚP 100% VỚI NỘI DUNG TỪNG PHÂN CẢNH):\n" +
+            "   - The 'image_prompt' MUST strictly illustrate the exact situation, setting, objects, or actions described in that scene's 'text'.\n" +
+            "   - REAL-WORLD GROUNDING: If the story/case is about real life, crime investigation, urban mystery, or history, ALL visual elements (buildings, streets, cars, police tape, clothes) MUST strictly reflect the real modern world. NEVER generate fantasy elements (cloaked wizards, magic staffs, glowing orbs, swamp ruins, ancient shrines/torii gates) unless the topic explicitly demands fantasy!\n" +
+            "   - For example, if narration mentions 'không có dấu hiệu giằng co trên đường phố' (no struggle on the street), the prompt MUST illustrate a quiet, dimly lit modern asphalt street at night with streetlights and pavement — NOT a fantasy shaman or mysterious pagoda!\n" +
+            "   - ENVIRONMENT / CLUE SHOTS: When a scene discusses an environment, crime scene, or evidence (e.g. empty street, vehicle, phone, window, footprints), focus the visual strictly on that environment or clue. Set 'characters_present': []. DO NOT force characters into the shot if they are not actively present in that moment.\n" +
+            $"   - You MUST prepend this exact style prefix to the beginning of EVERY single 'image_prompt': '{chosenStyle}'\n" +
+            "6. CHARACTER ROSTER & SCENE MAPPING (TUÂN THỦ TUYẾN NHÂN VẬT ĐÃ THIẾT KẾ):\n" +
+            "   - For each scene, specify 'characters_present': ['Tên nhân vật'] if any character is actively on screen, or [] if it is an environment/clue scene.\n" +
+            "   - IF 'characters_present' is empty: DO NOT draw any human characters! Focus entirely on the location, props, clues, or atmosphere.\n" +
+            "   - IF 'characters_present' has a character: Insert ONLY that specific character's exact Visual Prompt Snippet from the established roster into 'image_prompt'.\n" +
+            "   - NEVER mix up characters (e.g. NEVER draw the detective when the scene is talking about the victim)!\n" +
+            "   - NEVER reuse the same generic character template for different people; adhere strictly to their distinct established outfits, hair, and age.\n" +
             "7. 'motion_effect': For each scene, analyze its dramatic action, emotional beat, and visual composition. Assign the most fitting camera movement:\n" +
             "   - 'zoom_in': intense moments, emotional climax, dialogue, dramatic realization, focusing on face or clue\n" +
             "   - 'zoom_out': establishing shots, revealing expansive world/landscape, pulling back to show full scene\n" +
@@ -217,6 +248,19 @@ public class GeminiScriptService
             "8. 'publish_info': Provide an outstanding social media publishing kit for TikTok, YouTube Shorts, and Reels in Vietnamese: catchiest hook 'title', 2 'alternative_titles', engaging 'description' with call-to-action, and 10-15 trending 'hashtags'.\n";
 
         var userPrompt = $"Topic/Raw content to transform into a {numScenes}-scene video script:\n'{topic}'\n\n";
+
+        // Nạp tuyến nhân vật đã thiết kế trước vào User Prompt
+        if (plan.Characters != null && plan.Characters.Count > 0)
+        {
+            userPrompt += "--- ESTABLISHED CHARACTER ROSTER (TUYẾN NHÂN VẬT ĐÃ THIẾT KẾ SẴN) ---\n";
+            foreach (var ch in plan.Characters)
+            {
+                userPrompt += $"- [{ch.Id}] {ch.Name} ({ch.Role}, {ch.GenderAge}):\n" +
+                              $"  + Tạo hình & Trang phục: {ch.AppearanceVn} | {ch.OutfitVn}\n" +
+                              $"  + Visual Prompt Snippet (English): \"{ch.VisualPrompt}\"\n";
+            }
+            userPrompt += "--------------------------------------------------------------------\n\n";
+        }
 
         // Thêm character rules từ plan hint + user rules
         var allCharacterRules = "";
@@ -266,16 +310,14 @@ public class GeminiScriptService
     }
 
     /// <summary>
-    /// AI Lập kế hoạch Series nhiều tập: Phân chia các hồi, xác định cliffhangers và Character Bible
-    /// <summary>
-    /// AI Lập kế hoạch Series nhiều tập: Phân chia các hồi, xác định cliffhangers và Character Bible
+    /// AI Lập kế hoạch Series nhiều tập: Phân chia các hồi, xác định cliffhangers và Tuyến nhân vật (Character Roster)
     /// </summary>
     public async Task<SeriesPlan> GenerateSeriesPlanAsync(
         string topicOrPremise,
         int totalEpisodes = 3,
         int defaultScenesPerEpisode = 6,
         string styleKey = "dark-anime",
-        string voiceKey = "vi-VN-Wavenet-B",
+        string voiceKey = "vi-VN-Neural2-D",
         string toneOrPacing = "Kịch tính, dồn dập, giật gân (Dramatic / Thriller)",
         string aspectRatio = "9:16",
         string location = "us-central1",
@@ -295,13 +337,25 @@ public class GeminiScriptService
             $"CRITICAL MANDATORY REQUIREMENT: The 'episodes' array MUST CONTAIN EXACTLY {totalEpisodes} EPISODE OBJECTS (from episode_number = 1 to episode_number = {totalEpisodes}). " +
             $"DO NOT return only 1 episode. You must outline ALL {totalEpisodes} episodes sequentially! Each episode MUST have 'suggested_scene_count' set to {defaultScenesPerEpisode}. " +
             "Every episode must have a captivating opening hook, substantive investigative progression, rising tension, and an INTENSE CLIFFHANGER at the end (except the final episode which resolves the verdict). " +
-            "You MUST also formulate a detailed 'character_bible' in English describing the protagonist and key characters' exact visual features (hair, eyes, face, outfit, colors, accessories) so Imagen 3 can render them identically in every scene of every episode. " +
+            "You MUST also formulate a comprehensive 'characters' array (RÀ SOÁT VÀ THIẾT KẾ TOÀN BỘ TUYẾN NHÂN VẬT CỦA SERIES) describing every key person (Victims, Suspects, Investigators, Key Witnesses). Every character MUST have a completely distinct visual appearance, age, hairstyle, and signature outfit with high-contrast colors so they NEVER look the same or generic across episodes! " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
             "The JSON structure must exactly match this schema:\n" +
             "{\n" +
             "  \"series_title\": \"Tên Series giật gân, cuốn hút bằng tiếng Việt\",\n" +
             "  \"overall_premise\": \"Tóm tắt tổng quan mạch truyện toàn bộ series bằng tiếng Việt (3-4 câu)\",\n" +
-            "  \"character_bible\": \"Extremely detailed English visual character description for Imagen 3 consistency (e.g. 'A 28-year-old Vietnamese detective named Minh, short messy black hair, sharp jawline, wearing a charcoal grey trench coat over a white collared shirt, silver wristwatch on left wrist, intense focused dark eyes'). If no character, describe the unified recurring environment.\",\n" +
+            "  \"character_bible\": \"Extremely detailed English visual character description summary for Imagen 3 consistency.\",\n" +
+            "  \"characters\": [\n" +
+            "    {\n" +
+            "      \"id\": \"victim\",\n" +
+            "      \"name\": \"Lan (Nạn nhân)\",\n" +
+            "      \"role\": \"Nạn nhân\",\n" +
+            "      \"gender_age\": \"Nữ, 22 tuổi\",\n" +
+            "      \"appearance_vn\": \"Dáng người gầy, tóc đen thẳng ngang vai, mắt to hoang mang\",\n" +
+            "      \"outfit_vn\": \"Áo len vàng nhạt pastel, quần jeans xanh nhạt, đeo túi vải canvas be\",\n" +
+            "      \"visual_prompt\": \"A 22-year-old Vietnamese woman, slender build, shoulder-length straight black hair, wearing a pastel yellow knit sweater and beige canvas tote bag\",\n" +
+            "      \"distinguishing_marker\": \"Áo len vàng nhạt, túi canvas be (Dấu hiệu nhận diện cố định)\"\n" +
+            "    }\n" +
+            "  ],\n" +
             $"  \"suggested_style\": \"{styleKey}\",\n" +
             $"  \"suggested_voice\": \"{voiceKey}\",\n" +
             "  \"episodes\": [\n" +
@@ -372,28 +426,50 @@ public class GeminiScriptService
             $"    \"hashtags\": \"#series #tap{epNum} #tailieu #khampha #xuhuong #youtube\"\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
-            "    { \"text\": \"Vietnamese voiceover scene 1...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" },\n" +
-            "    { \"text\": \"Vietnamese voiceover scene 2...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"pan_left_right\" }\n" +
+            "    { \"text\": \"Vietnamese voiceover scene 1...\", \"characters_present\": [\"Tên nhân vật có mặt (hoặc để trống nếu là cảnh hiện trường/vật chứng)\"], \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" },\n" +
+            "    { \"text\": \"Vietnamese voiceover scene 2...\", \"characters_present\": [], \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"pan_left_right\" }\n" +
             $"    // ... MUST continue until EXACTLY {numScenes} scenes are generated\n" +
             "  ]\n" +
             "}\n\n" +
             "Guidelines:\n" +
             $"1. Video ratio {ratio}. Voice is '{seriesPlan.SuggestedVoice}'. {(string.IsNullOrWhiteSpace(toneOrPacing) ? "" : $"Tone: '{toneOrPacing}'.")}\n" +
-            $"2. MANDATORY SCENE COUNT: Generate EXACTLY {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'. The 'scenes' array MUST have length == {numScenes}. Each scene represents a cinematic beat (5-9s narration). For long-form episodes (20-50+ scenes), provide detailed, immersive, atmospheric storytelling (25-45 words of natural, dramatic Vietnamese per scene). Faithfully utilize real facts, dates, clues, suspect statements, and forensics from the provided source dossier without inventing fictitious filler.\n" +
+            $"2. MANDATORY SCENE COUNT: Generate EXACTLY {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'. The 'scenes' array MUST have length == {numScenes}. Each scene represents a cinematic beat (8-14s narration). Provide detailed, immersive, atmospheric storytelling (22-38 words of natural, dramatic Vietnamese per scene). Faithfully utilize real facts, dates, clues, suspect statements, and forensics from the provided source dossier without inventing fictitious filler.\n" +
             $"3. Scene 1 hook: {episodePlan.EpisodeHook}. (If Episode > 1, start with a quick 1-sentence recap or immediate escalation).\n" +
             $"4. Final scene (Scene {numScenes}) MUST end on this cliffhanger: {episodePlan.Cliffhanger}\n" +
-            $"5. CRITICAL: The 'image_prompt' MUST start with this exact style prefix: '{chosenStyle}' AND include the character description: '{seriesPlan.CharacterBible}' in every scene where characters appear.\n";
+            $"5. CRITICAL VISUAL RELEVANCE (ĂN KHỚP 100% VỚI NỘI DUNG TỪNG PHÂN CẢNH):\n" +
+            "   - The 'image_prompt' MUST strictly depict the exact situation, setting, objects, or actions described in that scene's 'text'.\n" +
+            "   - REAL-WORLD GROUNDING: All visual elements (streets, rooms, cars, evidence, clothing) MUST strictly reflect the real modern investigative setting. NEVER generate fantasy elements (cloaked shamans, magic staffs, glowing orbs, swamp ruins, ancient shrines/torii gates) unless the topic explicitly demands fantasy!\n" +
+            "   - For example, if narration mentions 'không có dấu hiệu giằng co trên đường phố' (no struggle on the street), the prompt MUST illustrate a quiet, dimly lit modern asphalt city street at night under streetlights — NOT a fantasy shaman in a swamp!\n" +
+            "   - ENVIRONMENT / CLUE SHOTS: When a scene discusses an environment, crime scene, or evidence, focus the visual strictly on that setting or object. Set 'characters_present': []. DO NOT force characters into the shot if they are not actively present.\n" +
+            $"   - You MUST prepend this exact style prefix to the beginning of EVERY single 'image_prompt': '{chosenStyle}'\n" +
+            "6. CHARACTER ROSTER & SCENE MAPPING (TUÂN THỦ TUYẾN NHÂN VẬT SERIES):\n" +
+            "   - For each scene, declare 'characters_present': ['Tên nhân vật'] if any character actively appears, or [] if it is an environment/clue scene.\n" +
+            "   - IF 'characters_present' is empty: DO NOT draw any human characters! Focus 100% on the setting or clue.\n" +
+            "   - IF 'characters_present' has a character: Insert ONLY that specific character's exact Visual Prompt Snippet from the established series roster into 'image_prompt'. NEVER draw the wrong character or mix them up!\n";
 
         var userPrompt = $"Series: '{seriesPlan.SeriesTitle}' (Total {totalEpisodes} episodes)\n" +
                          $"Overall Plot: {seriesPlan.OverallPremise}\n" +
-                         (!string.IsNullOrWhiteSpace(sourceStoryContext) ? $"\n--- TƯ LIỆU GỐC / HỒ SƠ VỤ ÁN THỰC TẾ (Nguồn chi tiết từ video gốc 1 tiếng) ---\n{sourceStoryContext}\n--------------------------------------------------------------------------------\n\n" : "") +
-                         $"Currently writing Episode {epNum}/{totalEpisodes}: '{episodePlan.EpisodeTitle}'\n" +
-                         $"Episode Plot Beat: {episodePlan.PlotBeat}\n" +
-                         (string.IsNullOrWhiteSpace(previousEpisodeEndingContext) ? "" : $"Context from previous episode ending: {previousEpisodeEndingContext}\n") +
-                         $"Episode Cliffhanger ending: {episodePlan.Cliffhanger}\n\n" +
-                         $"BẮT BUỘC: Hãy viết kịch bản chi tiết gồm ĐÚNG {numScenes} PHÂN CẢNH (scenes) cho Tập {epNum}. " +
-                         $"Hãy bám sát các tình tiết có thật, nhân vật thật, hiện trường và manh mối trong tư liệu hồ sơ gốc ở trên để kể chi tiết từng diễn biến, không lược bỏ hay rút ngắn qua loa. " +
-                         $"Mảng 'scenes' trong JSON PHẢI có đủ đúng {numScenes} phần tử, tuyệt đối không được dừng lại ở ít cảnh hơn!";
+                         (!string.IsNullOrWhiteSpace(sourceStoryContext) ? $"\n--- TƯ LIỆU GỐC / HỒ SƠ VỤ ÁN THỰC TẾ (Nguồn chi tiết từ video gốc 1 tiếng) ---\n{sourceStoryContext}\n--------------------------------------------------------------------------------\n\n" : "");
+
+        if (seriesPlan.Characters != null && seriesPlan.Characters.Count > 0)
+        {
+            userPrompt += "--- ESTABLISHED CHARACTER ROSTER CHO TOÀN BỘ SERIES (BẮT BUỘC DÙNG ĐÚNG) ---\n";
+            foreach (var ch in seriesPlan.Characters)
+            {
+                userPrompt += $"- [{ch.Id}] {ch.Name} ({ch.Role}, {ch.GenderAge}):\n" +
+                              $"  + Tạo hình & Trang phục: {ch.AppearanceVn} | {ch.OutfitVn}\n" +
+                              $"  + Visual Prompt Snippet (English): \"{ch.VisualPrompt}\"\n";
+            }
+            userPrompt += "-----------------------------------------------------------------------------\n\n";
+        }
+
+        userPrompt += $"Currently writing Episode {epNum}/{totalEpisodes}: '{episodePlan.EpisodeTitle}'\n" +
+                      $"Episode Plot Beat: {episodePlan.PlotBeat}\n" +
+                      (string.IsNullOrWhiteSpace(previousEpisodeEndingContext) ? "" : $"Context from previous episode ending: {previousEpisodeEndingContext}\n") +
+                      $"Episode Cliffhanger ending: {episodePlan.Cliffhanger}\n\n" +
+                      $"BẮT BUỘC: Hãy viết kịch bản chi tiết gồm ĐÚNG {numScenes} PHÂN CẢNH (scenes) cho Tập {epNum}. " +
+                      $"Hãy bám sát các tình tiết có thật, nhân vật thật, hiện trường và manh mối trong tư liệu hồ sơ gốc ở trên để kể chi tiết từng diễn biến, không lược bỏ hay rút ngắn qua loa. " +
+                      $"Mảng 'scenes' trong JSON PHẢI có đủ đúng {numScenes} phần tử, tuyệt đối không được dừng lại ở ít cảnh hơn!";
 
         return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);
     }

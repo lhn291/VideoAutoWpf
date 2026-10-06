@@ -238,7 +238,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
         _geminiService = geminiService;
         _youtubeService = youtubeService;
         _selectedStyleCard = StyleCards.FirstOrDefault(s => s.Key == "dark-anime") ?? StyleCards.FirstOrDefault();
-        _selectedVoiceCard = VoiceCards.FirstOrDefault(v => v.Key == "vi-VN-Wavenet-B") ?? VoiceCards.FirstOrDefault();
+        _selectedVoiceCard = VoiceCards.FirstOrDefault(v => v.Key == "vi-VN-Neural2-D") ?? VoiceCards.FirstOrDefault();
         _geminiApiKey = _geminiService.ApiKey ?? string.Empty;
         _hasGeminiApiKey = !string.IsNullOrWhiteSpace(_geminiApiKey);
         _showApiKeyInput = !_hasGeminiApiKey;
@@ -428,7 +428,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
         try
         {
             var styleKey = SelectedStyleCard?.Key ?? "dark-anime";
-            var voiceKey = SelectedVoiceCard?.Key ?? "vi-VN-Wavenet-B";
+            var voiceKey = SelectedVoiceCard?.Key ?? "vi-VN-Neural2-D";
 
             SeriesPlan? plan = null;
             for (int attempt = 1; attempt <= 3; attempt++)
@@ -716,6 +716,9 @@ public partial class SeriesCreatorViewModel : ObservableObject
                         Text = sc.Text,
                         ImagePrompt = sc.ImagePrompt,
                         MotionEffect = string.IsNullOrEmpty(sc.MotionEffect) ? "zoom_in" : sc.MotionEffect,
+                        CharactersPresentText = sc.CharactersPresent != null && sc.CharactersPresent.Count > 0
+                            ? string.Join(", ", sc.CharactersPresent)
+                            : "🏙️ Ngoại cảnh / Hiện trường",
                         Status = "Đã sinh kịch bản"
                     });
                 }

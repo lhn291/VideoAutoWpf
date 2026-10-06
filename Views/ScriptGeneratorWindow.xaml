@@ -975,11 +975,75 @@
                                                 </CheckBox>
                                             </Grid>
 
+                                            <!-- DANH SÁCH TUYẾN NHÂN VẬT ĐƯỢC AI THIẾT KẾ TRƯỚC -->
+                                            <Border Background="#161622" CornerRadius="6" Padding="8,6" BorderBrush="#3d4066" BorderThickness="1" Margin="0,4,0,8">
+                                                <StackPanel>
+                                                    <Grid Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="👥 TUYẾN NHÂN VẬT ĐÃ RÀ SOÁT:" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentYellow}"/>
+                                                            <Border Background="#26273b" CornerRadius="4" Padding="5,1" Margin="6,0,0,0">
+                                                                <TextBlock Text="{Binding CurrentPlan.Characters.Count, StringFormat='{}{0} nhân vật'}" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource AccentBlue}"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1" Text="AI tạo riêng từng người" FontSize="9" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                                                    </Grid>
+
+                                                    <!-- Danh sách nhân vật chi tiết -->
+                                                    <ItemsControl ItemsSource="{Binding CurrentPlan.Characters}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate DataType="{x:Type models:CharacterProfile}">
+                                                                <Border Background="#212234" CornerRadius="6" Padding="8,6" Margin="0,0,0,5" BorderBrush="#313244" BorderThickness="1">
+                                                                    <Grid>
+                                                                        <Grid.RowDefinitions>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                            <RowDefinition Height="Auto"/>
+                                                                        </Grid.RowDefinitions>
+
+                                                                        <!-- Hàng 1: Tên & Vai trò + Tuổi/Giới tính -->
+                                                                        <Grid Grid.Row="0" Margin="0,0,0,3">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                                <TextBlock Text="👤 " FontSize="11"/>
+                                                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextPrimary}"/>
+                                                                                <Border Background="#2a2b45" CornerRadius="3" Padding="5,1" Margin="6,0,0,0">
+                                                                                    <TextBlock Text="{Binding Role}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}"/>
+                                                                                </Border>
+                                                                            </StackPanel>
+                                                                            <TextBlock Grid.Column="1" Text="{Binding GenderAge}" FontSize="9.5" Foreground="{StaticResource AccentCyan}" VerticalAlignment="Center"/>
+                                                                        </Grid>
+
+                                                                        <!-- Hàng 2: Ngoại hình & Trang phục -->
+                                                                        <TextBlock Grid.Row="1" FontSize="10" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,2">
+                                                                            <Run Text="👗 Trang phục &amp; Diện mạo: " FontWeight="SemiBold" Foreground="#a6adc8"/>
+                                                                            <Run Text="{Binding OutfitVn}"/>
+                                                                        </TextBlock>
+
+                                                                        <!-- Hàng 3: Dấu hiệu nhận diện cốt lõi -->
+                                                                        <TextBlock Grid.Row="2" FontSize="9.5" Foreground="#f9e2af" TextWrapping="Wrap">
+                                                                            <Run Text="🔑 Dấu hiệu nhận diện: " FontWeight="SemiBold"/>
+                                                                            <Run Text="{Binding DistinguishingMarker}"/>
+                                                                        </TextBlock>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </Border>
+
                                             <!-- Gợi ý nhân vật -->
-                                            <TextBlock Text="👤 Gợi ý nhân vật:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,2,0,4"/>
+                                            <TextBlock Text="👤 Gợi ý nhân vật chung:" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" Margin="0,2,0,4"/>
                                             <TextBox Text="{Binding CurrentPlan.CharacterHint, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True"
                                                      Background="#26273b" Foreground="{StaticResource TextSecondary}" BorderBrush="#313244"
-                                                     FontSize="11" Padding="6" Height="50" VerticalScrollBarVisibility="Auto">
+                                                     FontSize="11" Padding="6" Height="45" VerticalScrollBarVisibility="Auto">
                                                 <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
                                             </TextBox>
                                         </StackPanel>

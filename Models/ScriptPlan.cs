@@ -27,7 +27,7 @@ public partial class ScriptPlan : ObservableObject
 
     [ObservableProperty]
     [JsonPropertyName("voice")]
-    private string _voice = "vi-VN-Wavenet-B";
+    private string _voice = "vi-VN-Neural2-D";
 
     [ObservableProperty]
     [JsonPropertyName("summary")]
@@ -36,6 +36,9 @@ public partial class ScriptPlan : ObservableObject
     [ObservableProperty]
     [JsonPropertyName("character_hint")]
     private string _characterHint = string.Empty;
+
+    [JsonPropertyName("characters")]
+    public System.Collections.ObjectModel.ObservableCollection<CharacterProfile> Characters { get; set; } = new();
 
     [ObservableProperty]
     [JsonPropertyName("motion_effect")]
