@@ -509,6 +509,15 @@ public class YouTubeAnalyticsService
     /// </summary>
     public async Task<string?> GetVideoTranscriptAsync(string videoId)
     {
+        var result = await GetDetailedVideoTranscriptAsync(videoId);
+        return result?.FullText;
+    }
+
+    /// <summary>
+    /// Cào phụ đề chi tiết của video YouTube kèm mốc thời gian bắt đầu (start) và độ dài (duration) của từng đoạn.
+    /// </summary>
+    public async Task<VideoTranscriptResult?> GetDetailedVideoTranscriptAsync(string videoId)
+    {
         if (string.IsNullOrWhiteSpace(videoId)) return null;
 
         try
@@ -551,20 +560,72 @@ public class YouTubeAnalyticsService
             var nodes = xmlDoc.SelectNodes("//text");
             if (nodes == null || nodes.Count == 0) return null;
 
+            var result = new VideoTranscriptResult();
             var sb = new StringBuilder();
+
             foreach (XmlNode n in nodes)
             {
                 var t = WebUtility.HtmlDecode(n.InnerText?.Trim());
                 if (!string.IsNullOrWhiteSpace(t))
                 {
+                    double startSec = 0;
+                    double durSec = 0;
+
+                    if (n.Attributes?["start"] != null && double.TryParse(n.Attributes["start"]!.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsedStart))
+                    {
+                        startSec = parsedStart;
+                    }
+
+                    if (n.Attributes?["dur"] != null && double.TryParse(n.Attributes["dur"]!.Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsedDur))
+                    {
+                        durSec = parsedDur;
+                    }
+
+                    result.Lines.Add(new TranscriptLine
+                    {
+                        StartSeconds = startSec,
+                        DurationSeconds = durSec,
+                        Text = t
+                    });
+
                     sb.Append(t).Append(" ");
                 }
             }
-            return sb.ToString().Trim();
+
+            result.FullText = sb.ToString().Trim();
+            return result;
         }
         catch
         {
             return null;
         }
     }
+}
+
+/// <summary>
+/// Đại diện cho một câu/đoạn phụ đề kèm mốc thời gian từ YouTube.
+/// </summary>
+public class TranscriptLine
+{
+    public double StartSeconds { get; set; }
+    public double DurationSeconds { get; set; }
+    public string Text { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Kết quả cào phụ đề YouTube bao gồm toàn văn và chi tiết mốc thời gian.
+/// </summary>
+public class VideoTranscriptResult
+{
+    public string FullText { get; set; } = string.Empty;
+    public List<TranscriptLine> Lines { get; set; } = new();
+    public bool HasTimestamps => Lines.Count > 0;
+
+    public TimeSpan TotalDuration => Lines.Count > 0
+        ? TimeSpan.FromSeconds(Lines.Max(l => l.StartSeconds + l.DurationSeconds))
+        : TimeSpan.Zero;
+
+    public int WordCount => string.IsNullOrWhiteSpace(FullText)
+        ? 0
+        : FullText.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Length;
 }

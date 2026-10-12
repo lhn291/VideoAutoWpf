@@ -41,6 +41,39 @@ public partial class CharacterProfile : ObservableObject
     [JsonPropertyName("distinguishing_marker")]
     private string _distinguishingMarker = string.Empty; // Đặc điểm nhận diện cốt lõi (áo màu gì, phụ kiện gì...)
 
+    // ── Mở rộng V2: Đặc tả nhận diện chi tiết (Character Bible V2) ──
+    [ObservableProperty]
+    [JsonPropertyName("face_description")]
+    private string _faceDescription = string.Empty; // e.g. "Oval face, high cheekbones, delicate jawline"
+
+    [ObservableProperty]
+    [JsonPropertyName("hair")]
+    private string _hair = string.Empty; // e.g. "Shoulder-length straight jet-black hair with wispy bangs"
+
+    [ObservableProperty]
+    [JsonPropertyName("skin")]
+    private string _skin = string.Empty; // e.g. "Fair pale complexion"
+
+    [ObservableProperty]
+    [JsonPropertyName("body")]
+    private string _body = string.Empty; // e.g. "Slender petite build, 160cm tall"
+
+    [ObservableProperty]
+    [JsonPropertyName("accessories")]
+    private string _accessories = string.Empty; // e.g. "Thin silver necklace, beige canvas tote bag"
+
+    [ObservableProperty]
+    [JsonPropertyName("default_expressions")]
+    private string _defaultExpressions = string.Empty; // e.g. "Anxious, vigilant, guarded glance"
+
+    [ObservableProperty]
+    [JsonPropertyName("default_poses")]
+    private string _defaultPoses = string.Empty;
+
+    [ObservableProperty]
+    [JsonPropertyName("reference_image_path")]
+    private string? _referenceImagePath;
+
     public string DisplayTitle => string.IsNullOrWhiteSpace(Role) ? Name : $"{Name} • {Role}";
 
     public string DisplaySummary => $"{GenderAge} • {OutfitVn}";

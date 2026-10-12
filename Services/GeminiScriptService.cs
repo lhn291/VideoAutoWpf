@@ -3,7 +3,9 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using VideoAutoWpf.Models;
+using VideoAutoWpf.Models.V2;
 
 namespace VideoAutoWpf.Services;
 
@@ -91,6 +93,168 @@ public class GeminiScriptService
     public GeminiScriptService(GoogleAuthService authService)
     {
         _authService = authService;
+    }
+
+    /// <summary>
+    /// Project ID Google Cloud từ google_credentials.json.
+    /// Dùng bởi các service phụ thuộc như VisualDirectorService để tránh hardcode.
+    /// </summary>
+    public string ProjectId => _authService.ProjectId ?? string.Empty;
+
+    /// <summary>
+    /// Bước 0 V2: Phân tích nội dung nguồn (YouTube/Transcript/Cốt truyện) thành ContentAnalysis và StoryBlueprint.
+    /// Giúp định hình cấu trúc sự kiện, tuyến nhân vật (Character Bible), hồ sơ bối cảnh (Location Bible),
+    /// và phân chia ranh giới các tập tự nhiên trước khi tạo kịch bản chi tiết.
+    /// </summary>
+    public async Task<(ContentAnalysis Analysis, StoryBlueprint Blueprint)> AnalyzeContentAndCreateBlueprintAsync(
+        string topicOrContent,
+        VideoTranscriptResult? transcript = null,
+        string location = "us-central1",
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(topicOrContent))
+            throw new ArgumentException("Nội dung hoặc chủ đề không được để trống.", nameof(topicOrContent));
+
+        var token = await _authService.GetAccessTokenAsync();
+        var projectId = _authService.ProjectId;
+
+        var systemInstruction =
+            "You are a master investigative documentary director, narrative architect, and screenplay consultant. " +
+            "Your task is to analyze raw content / YouTube transcript, extract verified factual events, " +
+            "and build a unified STORY BLUEPRINT and CONTENT ANALYSIS for a high-production video series.\n" +
+            "CRITICAL RULES:\n" +
+            "1. NO FICTIONAL FILLER: Do not invent events, suspects, or dates that contradict the source or have no basis. Mark unverified claims clearly.\n" +
+            "2. CHRONOLOGICAL TIMELINE: Order key events strictly by time sequence. If timestamps exist in transcript, retain them.\n" +
+            "3. CHARACTER BIBLE: Define distinct character profiles with permanent facial, hair, and clothing features to prevent character confusion.\n" +
+            "4. LOCATION BIBLE: Define distinct location profiles with permanent architectural style, spatial layout, interior/exterior details, lighting, and palette anchors.\n" +
+            "5. DYNAMIC EPISODE OUTLINES: Break into natural narrative episodes based on emotional hooks, turning points, and cliffhangers (DO NOT simply divide minutes evenly).\n" +
+            "6. You MUST return ONLY the raw JSON block matching this exact schema:\n" +
+            "{\n" +
+            "  \"content_analysis\": {\n" +
+            "    \"main_topic\": \"...\",\n" +
+            "    \"core_message\": \"...\",\n" +
+            "    \"summary\": \"...\",\n" +
+            "    \"events\": [\n" +
+            "      { \"order\": 1, \"time_marker\": \"...\", \"timestamp_seconds\": 12.5, \"title\": \"...\", \"description\": \"...\", \"cause\": \"...\", \"effect\": \"...\", \"is_verified\": true, \"source_quote\": \"...\" }\n" +
+            "    ],\n" +
+            "    \"detected_characters\": [\n" +
+            "      { \"name\": \"...\", \"role_or_function\": \"...\", \"description\": \"...\" }\n" +
+            "    ],\n" +
+            "    \"detected_locations\": [\n" +
+            "      { \"name\": \"...\", \"role_or_function\": \"...\", \"description\": \"...\" }\n" +
+            "    ],\n" +
+            "    \"verified_facts\": [\"...\"],\n" +
+            "    \"unverified_claims\": [\"...\"]\n" +
+            "  },\n" +
+            "  \"story_blueprint\": {\n" +
+            "    \"title\": \"...\",\n" +
+            "    \"core_theme\": \"...\",\n" +
+            "    \"main_message\": \"...\",\n" +
+            "    \"narrative_arc\": \"...\",\n" +
+            "    \"characters\": [\n" +
+            "      {\n" +
+            "        \"id\": \"char_001\",\n" +
+            "        \"name\": \"...\",\n" +
+            "        \"role\": \"...\",\n" +
+            "        \"gender_age\": \"...\",\n" +
+            "        \"appearance_vn\": \"...\",\n" +
+            "        \"outfit_vn\": \"...\",\n" +
+            "        \"visual_prompt\": \"...\",\n" +
+            "        \"distinguishing_marker\": \"...\"\n" +
+            "      }\n" +
+            "    ],\n" +
+            "    \"locations\": [\n" +
+            "      {\n" +
+            "        \"id\": \"loc_001\",\n" +
+            "        \"name\": \"...\",\n" +
+            "        \"function_or_purpose\": \"...\",\n" +
+            "        \"architectural_style\": \"...\",\n" +
+            "        \"spatial_layout\": \"...\",\n" +
+            "        \"interior_details\": \"...\",\n" +
+            "        \"exterior_details\": \"...\",\n" +
+            "        \"signature_colors\": \"...\",\n" +
+            "        \"lighting_default\": \"...\",\n" +
+            "        \"visual_prompt_anchor\": \"...\"\n" +
+            "      }\n" +
+            "    ],\n" +
+            "    \"must_keep_details\": [\"...\"],\n" +
+            "    \"suggested_episodes\": [\n" +
+            "      {\n" +
+            "        \"episode_number\": 1,\n" +
+            "        \"title\": \"...\",\n" +
+            "        \"story_segment\": \"...\",\n" +
+            "        \"objective\": \"...\",\n" +
+            "        \"hook\": \"...\",\n" +
+            "        \"climax\": \"...\",\n" +
+            "        \"cliffhanger\": \"...\",\n" +
+            "        \"key_location_ids\": [\"loc_001\"],\n" +
+            "        \"key_character_ids\": [\"char_001\"]\n" +
+            "      }\n" +
+            "    ],\n" +
+            "    \"unresolved_points\": [\"...\"]\n" +
+            "  }\n" +
+            "}";
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Raw Content / Dossier to Analyze:\n'{topicOrContent}'\n");
+
+        if (transcript != null && transcript.Lines.Count > 0)
+        {
+            sb.AppendLine("Transcript Segments with Timestamps (sample):");
+            int sampleCount = Math.Min(60, transcript.Lines.Count);
+            for (int i = 0; i < sampleCount; i++)
+            {
+                var line = transcript.Lines[i];
+                sb.AppendLine($"[{line.StartSeconds:F1}s - {line.StartSeconds + line.DurationSeconds:F1}s]: {line.Text}");
+            }
+        }
+
+        var response = await CallGeminiForJson<ContentAndBlueprintResponse>(
+            systemInstruction, 
+            sb.ToString(), 
+            projectId, 
+            location, 
+            token, 
+            ct);
+
+        var analysis = new ContentAnalysis
+        {
+            MainTopic = response?.ContentAnalysis?.MainTopic ?? string.Empty,
+            CoreMessage = response?.ContentAnalysis?.CoreMessage ?? string.Empty,
+            Summary = response?.ContentAnalysis?.Summary ?? string.Empty,
+            Events = response?.ContentAnalysis?.Events ?? new(),
+            DetectedCharacters = response?.ContentAnalysis?.DetectedCharacters ?? new(),
+            DetectedLocations = response?.ContentAnalysis?.DetectedLocations ?? new(),
+            VerifiedFacts = response?.ContentAnalysis?.VerifiedFacts ?? new(),
+            UnverifiedClaims = response?.ContentAnalysis?.UnverifiedClaims ?? new(),
+            HasTranscriptTimestamps = transcript?.HasTimestamps ?? false
+        };
+
+        var blueprint = new StoryBlueprint
+        {
+            Title = response?.StoryBlueprint?.Title ?? "Untitled Story Blueprint",
+            CoreTheme = response?.StoryBlueprint?.CoreTheme ?? string.Empty,
+            MainMessage = response?.StoryBlueprint?.MainMessage ?? string.Empty,
+            NarrativeArc = response?.StoryBlueprint?.NarrativeArc ?? string.Empty,
+            EventsTimeline = analysis.Events,
+            MustKeepDetails = response?.StoryBlueprint?.MustKeepDetails ?? new(),
+            SuggestedEpisodes = response?.StoryBlueprint?.SuggestedEpisodes ?? new(),
+            UnresolvedPoints = response?.StoryBlueprint?.UnresolvedPoints ?? new()
+        };
+
+        if (response?.StoryBlueprint?.Characters != null)
+        {
+            foreach (var ch in response.StoryBlueprint.Characters)
+                blueprint.Characters.Add(ch);
+        }
+
+        if (response?.StoryBlueprint?.Locations != null)
+        {
+            foreach (var loc in response.StoryBlueprint.Locations)
+                blueprint.Locations.Add(loc);
+        }
+
+        return (analysis, blueprint);
     }
 
     /// <summary>
@@ -214,16 +378,17 @@ public class GeminiScriptService
             "    \"hashtags\": \"#chude #bian #kienthuc #xuhuong #fyp #shorts #tiktok #viral\"\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
-            "    { \"text\": \"Vietnamese voiceover text...\", \"characters_present\": [\"Tên nhân vật có mặt (hoặc để trống nếu là cảnh hiện trường/vật chứng)\"], \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" }\n" +
+            "    { \"text\": \"Vietnamese voiceover text...\", \"characters_present\": [\"Tên nhân vật\"], \"character_ids_present\": [\"char_001\"], \"image_prompt\": \"Detailed English prompt...\", \"motion_effect\": \"zoom_in\", \"story_beat\": \"Setup\", \"pacing_type\": \"Normal\", \"pacing_note\": \"Calm establishing tone\", \"estimated_duration_hint\": 10.0 }\n" +
             "  ]\n" +
             "}\n\n" +
             "Guidelines:\n" +
             $"1. The video ratio is {plan.Ratio} (vertical). Voice is '{plan.Voice}'.\n" +
-            $"2. Generate exactly {numScenes} scenes.\n" +
+            $"2. Generate exactly {numScenes} scenes. Their visual weight differs by 'story_beat' — NOT divided uniformly by time.\n" +
             $"3. The tone of voice should be: {plan.Tone}.\n" +
             "4. NARRATION PACING & WORD COUNT:\n" +
             "   - The 'text' must be natural, engaging, and compelling Vietnamese voiceover. Start with a strong hook in Scene 1.\n" +
-            "   - Each scene's 'text' should be a complete, coherent narrative beat with 18-35 words (approx. 8-14 seconds of speech). DO NOT split into tiny 3-word fragments that force jarring, rapid image switching!\n" +
+            "   - Each scene's 'text' should be a complete, coherent narrative beat with 18-35 words. DO NOT split into tiny 3-word fragments!\n" +
+            "   - 'estimated_duration_hint': estimate target seconds. Hook ~5-7s. Setup/Normal ~8-12s. Suspense/Climax ~12-18s. Leave 0 if unknown.\n" +
             $"5. CRITICAL VISUAL RELEVANCE (ĂN KHỚP 100% VỚI NỘI DUNG TỪNG PHÂN CẢNH):\n" +
             "   - The 'image_prompt' MUST strictly illustrate the exact situation, setting, objects, or actions described in that scene's 'text'.\n" +
             "   - REAL-WORLD GROUNDING: If the story/case is about real life, crime investigation, urban mystery, or history, ALL visual elements (buildings, streets, cars, police tape, clothes) MUST strictly reflect the real modern world. NEVER generate fantasy elements (cloaked wizards, magic staffs, glowing orbs, swamp ruins, ancient shrines/torii gates) unless the topic explicitly demands fantasy!\n" +
@@ -232,11 +397,17 @@ public class GeminiScriptService
             $"   - You MUST prepend this exact style prefix to the beginning of EVERY single 'image_prompt': '{chosenStyle}'\n" +
             "6. CHARACTER ROSTER & SCENE MAPPING (TUÂN THỦ TUYẾN NHÂN VẬT ĐÃ THIẾT KẾ):\n" +
             "   - For each scene, specify 'characters_present': ['Tên nhân vật'] if any character is actively on screen, or [] if it is an environment/clue scene.\n" +
+            "   - 'character_ids_present': array of character 'id' strings from the established roster (e.g. ['char_001']). Leave [] for environment/clue-only shots.\n" +
             "   - IF 'characters_present' is empty: DO NOT draw any human characters! Focus entirely on the location, props, clues, or atmosphere.\n" +
             "   - IF 'characters_present' has a character: Insert ONLY that specific character's exact Visual Prompt Snippet from the established roster into 'image_prompt'.\n" +
             "   - NEVER mix up characters (e.g. NEVER draw the detective when the scene is talking about the victim)!\n" +
             "   - NEVER reuse the same generic character template for different people; adhere strictly to their distinct established outfits, hair, and age.\n" +
-            "7. 'motion_effect': For each scene, analyze its dramatic action, emotional beat, and visual composition. Assign the most fitting camera movement:\n" +
+            "7. STORY BEAT ASSIGNMENT (CRITICAL FOR NON-UNIFORM PACING):\n" +
+            "   - Assign each scene a 'story_beat' from: Hook | Setup | Rising_Action | Clue_Reveal | Confrontation | Climax | Resolution | Cliffhanger.\n" +
+            "   - The beat drives shot allocation: Hook=1 fast shot, Setup=1-2, Rising_Action=2, Clue_Reveal=2-3, Climax/Confrontation=3-4 intense shots.\n" +
+            "   - 'pacing_type': Hook | Normal | Suspense | Climax.\n" +
+            "   - 'pacing_note': One short English sentence for the visual director (e.g. 'Slow dread-building; camera lingers on empty corridor').\n" +
+            "8. 'motion_effect': Assign the most fitting camera movement per scene:\n" +
             "   - 'zoom_in': intense moments, emotional climax, dialogue, dramatic realization, focusing on face or clue\n" +
             "   - 'zoom_out': establishing shots, revealing expansive world/landscape, pulling back to show full scene\n" +
             "   - 'pan_left_right': character walking/moving across, tracking action, sweeping landscape\n" +
@@ -245,7 +416,7 @@ public class GeminiScriptService
             "   - 'pan_down': looking down from above, descending, gravity, shock\n" +
             "   - 'zoom_pan_right': dynamic corner focus, building tension\n" +
             "   - 'zoom_pan_left': dynamic left focus\n" +
-            "8. 'publish_info': Provide an outstanding social media publishing kit for TikTok, YouTube Shorts, and Reels in Vietnamese: catchiest hook 'title', 2 'alternative_titles', engaging 'description' with call-to-action, and 10-15 trending 'hashtags'.\n";
+            "9. 'publish_info': Provide an outstanding social media publishing kit for TikTok, YouTube Shorts, and Reels in Vietnamese: catchiest hook 'title', 2 'alternative_titles', engaging 'description' with call-to-action, and 10-15 trending 'hashtags'.\n";
 
         var userPrompt = $"Topic/Raw content to transform into a {numScenes}-scene video script:\n'{topic}'\n\n";
 
@@ -338,6 +509,7 @@ public class GeminiScriptService
             $"DO NOT return only 1 episode. You must outline ALL {totalEpisodes} episodes sequentially! Each episode MUST have 'suggested_scene_count' set to {defaultScenesPerEpisode}. " +
             "Every episode must have a captivating opening hook, substantive investigative progression, rising tension, and an INTENSE CLIFFHANGER at the end (except the final episode which resolves the verdict). " +
             "You MUST also formulate a comprehensive 'characters' array (RÀ SOÁT VÀ THIẾT KẾ TOÀN BỘ TUYẾN NHÂN VẬT CỦA SERIES) describing every key person (Victims, Suspects, Investigators, Key Witnesses). Every character MUST have a completely distinct visual appearance, age, hairstyle, and signature outfit with high-contrast colors so they NEVER look the same or generic across episodes! " +
+            "You MUST also formulate a comprehensive 'locations' array (RÀ SOÁT VÀ THIẾT KẾ TOÀN BỘ BỐI CẢNH/HIỆN TRƯỜNG CHÍNH CỦA SERIES) describing key locations (Crime scenes, Interrogation rooms, Evidence labs, Streets, Residences). Each location MUST have an id, name, architectural_style, interior_or_exterior, lighting_default, and visual_prompt for consistent spatial geography across episodes! " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
             "The JSON structure must exactly match this schema:\n" +
             "{\n" +
@@ -356,6 +528,18 @@ public class GeminiScriptService
             "      \"distinguishing_marker\": \"Áo len vàng nhạt, túi canvas be (Dấu hiệu nhận diện cố định)\"\n" +
             "    }\n" +
             "  ],\n" +
+            "  \"locations\": [\n" +
+            "    {\n" +
+            "      \"id\": \"crime_scene_alley\",\n" +
+            "      \"name\": \"Hiện trường con hẻm\",\n" +
+            "      \"description\": \"Con hẻm nhỏ ngoại ô nơi phát hiện manh mối\",\n" +
+            "      \"architectural_style\": \"Narrow dark suburban asphalt alley, damp brick walls, cracked pavement\",\n" +
+            "      \"interior_or_exterior\": \"Exterior\",\n" +
+            "      \"lighting_default\": \"Dim flickering yellow sodium streetlight with deep ominous shadows\",\n" +
+            "      \"fixed_elements\": [\"damp brick wall\", \"flickering streetlight\", \"rusted chain-link fence\"],\n" +
+            "      \"visual_prompt\": \"A narrow dark asphalt alley at night, damp brick walls, dim flickering yellow streetlight, cinematic shadows\"\n" +
+            "    }\n" +
+            "  ],\n" +
             $"  \"suggested_style\": \"{styleKey}\",\n" +
             $"  \"suggested_voice\": \"{voiceKey}\",\n" +
             "  \"episodes\": [\n" +
@@ -367,12 +551,13 @@ public class GeminiScriptService
             "}";
 
         var userPrompt = $"BẮT BUỘC: Bạn PHẢI tạo dàn ý ĐÚNG {totalEpisodes} TẬP cho chuỗi video này, đánh số tuần tự từ 1 đến {totalEpisodes}.\n" +
-                         $"Mỗi tập đặt mục tiêu chính xác {defaultScenesPerEpisode} phân cảnh.\n\n" +
+                         $"Mỗi tập đặt mục tiêu khoảng {defaultScenesPerEpisode} phân cảnh phù hợp với nhịp truyện.\n\n" +
                          $"Chủ đề / Cốt truyện:\n'{topicOrPremise}'\n\n" +
                          $"Thể loại & Nhịp điệu: {toneOrPacing}\n" +
                          $"Định dạng: {aspectRatio}\n" +
                          $"Yêu cầu định dạng tiêu đề: Mảng 'episodes' BẮT BUỘC gồm {totalEpisodes} phần tử, đánh số episode_number lần lượt là 1, 2, 3, 4, 5... " +
-                         $"Tiêu đề mỗi tập PHẢI đặt theo mẫu: 'Tập 1: [Tên tập]', 'Tập 2: [Tên tập]', ..., 'Tập {totalEpisodes}: [Tên tập]'.";
+                         $"Tiêu đề mỗi tập PHẢI đặt theo mẫu: 'Tập 1: [Tên tập]', 'Tập 2: [Tên tập]', ..., 'Tập {totalEpisodes}: [Tên tập]'.\n" +
+                         $"Đồng thời thiết lập đầy đủ mảng 'characters' và 'locations' chuẩn xác để các tập sau giữ trọn tính nhất quán!";
 
         return await CallGeminiForJson<SeriesPlan>(systemInstruction, userPrompt, projectId, location, token, ct);
     }
@@ -403,7 +588,7 @@ public class GeminiScriptService
         var systemInstruction =
             "You are an expert investigative documentary screenwriter writing a specific episode of a high-production video series. " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
-            $"CRITICAL REQUIREMENT: You MUST generate EXACTLY {numScenes} scenes inside the 'scenes' array. Do NOT generate fewer than {numScenes} scenes! " +
+            $"CRITICAL REQUIREMENT: You MUST generate approximately {numScenes} scenes inside the 'scenes' array corresponding to narrative beats. " +
             "The JSON structure must exactly match this schema:\n" +
             "{\n" +
             "  \"metadata\": {\n" +
@@ -426,26 +611,32 @@ public class GeminiScriptService
             $"    \"hashtags\": \"#series #tap{epNum} #tailieu #khampha #xuhuong #youtube\"\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
-            "    { \"text\": \"Vietnamese voiceover scene 1...\", \"characters_present\": [\"Tên nhân vật có mặt (hoặc để trống nếu là cảnh hiện trường/vật chứng)\"], \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" },\n" +
-            "    { \"text\": \"Vietnamese voiceover scene 2...\", \"characters_present\": [], \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"pan_left_right\" }\n" +
-            $"    // ... MUST continue until EXACTLY {numScenes} scenes are generated\n" +
+            "    { \"text\": \"Vietnamese voiceover scene 1...\", \"characters_present\": [\"Tên nhân vật có mặt (hoặc để trống nếu là cảnh hiện trường/vật chứng)\"], \"location_id\": \"crime_scene_alley\", \"location_name\": \"Hiện trường con hẻm\", \"pacing_type\": \"fast\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" },\n" +
+            "    { \"text\": \"Vietnamese voiceover scene 2...\", \"characters_present\": [], \"location_id\": \"crime_scene_alley\", \"location_name\": \"Hiện trường con hẻm\", \"pacing_type\": \"moderate\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"pan_left_right\" }\n" +
+            $"    // ... MUST continue until {numScenes} narrative scenes are generated\n" +
             "  ]\n" +
             "}\n\n" +
             "Guidelines:\n" +
             $"1. Video ratio {ratio}. Voice is '{seriesPlan.SuggestedVoice}'. {(string.IsNullOrWhiteSpace(toneOrPacing) ? "" : $"Tone: '{toneOrPacing}'.")}\n" +
-            $"2. MANDATORY SCENE COUNT: Generate EXACTLY {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'. The 'scenes' array MUST have length == {numScenes}. Each scene represents a cinematic beat (8-14s narration). Provide detailed, immersive, atmospheric storytelling (22-38 words of natural, dramatic Vietnamese per scene). Faithfully utilize real facts, dates, clues, suspect statements, and forensics from the provided source dossier without inventing fictitious filler.\n" +
+            $"2. DYNAMIC NARRATIVE PACING (THỜI LƯỢNG & NHỊP ĐIỆU ĐA DẠNG, TỰ NHIÊN): Generate {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'. Do NOT make all scenes have the same length! Vary the word count dynamically based on dramatic beat:\n" +
+            "   - Hook / Climax / Quick Twist ('fast' or 'climactic'): 8-16 concise, punchy Vietnamese words (approx 3-6s duration).\n" +
+            "   - Narrative / Investigation / Dialogue ('moderate'): 20-35 vivid, storytelling words (approx 8-14s duration).\n" +
+            "   - Suspense / Mystery / Atmosphere ('slow'): 14-22 atmospheric, gripping words (approx 6-9s duration).\n" +
+            "   Faithfully utilize real facts, dates, clues, suspect statements, and forensics from the provided source dossier without inventing fictitious filler.\n" +
             $"3. Scene 1 hook: {episodePlan.EpisodeHook}. (If Episode > 1, start with a quick 1-sentence recap or immediate escalation).\n" +
             $"4. Final scene (Scene {numScenes}) MUST end on this cliffhanger: {episodePlan.Cliffhanger}\n" +
             $"5. CRITICAL VISUAL RELEVANCE (ĂN KHỚP 100% VỚI NỘI DUNG TỪNG PHÂN CẢNH):\n" +
             "   - The 'image_prompt' MUST strictly depict the exact situation, setting, objects, or actions described in that scene's 'text'.\n" +
             "   - REAL-WORLD GROUNDING: All visual elements (streets, rooms, cars, evidence, clothing) MUST strictly reflect the real modern investigative setting. NEVER generate fantasy elements (cloaked shamans, magic staffs, glowing orbs, swamp ruins, ancient shrines/torii gates) unless the topic explicitly demands fantasy!\n" +
-            "   - For example, if narration mentions 'không có dấu hiệu giằng co trên đường phố' (no struggle on the street), the prompt MUST illustrate a quiet, dimly lit modern asphalt city street at night under streetlights — NOT a fantasy shaman in a swamp!\n" +
             "   - ENVIRONMENT / CLUE SHOTS: When a scene discusses an environment, crime scene, or evidence, focus the visual strictly on that setting or object. Set 'characters_present': []. DO NOT force characters into the shot if they are not actively present.\n" +
             $"   - You MUST prepend this exact style prefix to the beginning of EVERY single 'image_prompt': '{chosenStyle}'\n" +
             "6. CHARACTER ROSTER & SCENE MAPPING (TUÂN THỦ TUYẾN NHÂN VẬT SERIES):\n" +
             "   - For each scene, declare 'characters_present': ['Tên nhân vật'] if any character actively appears, or [] if it is an environment/clue scene.\n" +
             "   - IF 'characters_present' is empty: DO NOT draw any human characters! Focus 100% on the setting or clue.\n" +
-            "   - IF 'characters_present' has a character: Insert ONLY that specific character's exact Visual Prompt Snippet from the established series roster into 'image_prompt'. NEVER draw the wrong character or mix them up!\n";
+            "   - IF 'characters_present' has a character: Insert ONLY that specific character's exact Visual Prompt Snippet from the established series roster into 'image_prompt'. NEVER draw the wrong character or mix them up!\n" +
+            "7. LOCATION ROSTER & SPATIAL CONTINUITY (TUÂN THỦ BỐI CẢNH SERIES):\n" +
+            "   - Assign 'location_id' and 'location_name' from the established location roster for each scene.\n" +
+            "   - Seamlessly blend the location's visual anchor (architecture, lighting) into the 'image_prompt' for visual continuity.\n";
 
         var userPrompt = $"Series: '{seriesPlan.SeriesTitle}' (Total {totalEpisodes} episodes)\n" +
                          $"Overall Plot: {seriesPlan.OverallPremise}\n" +
@@ -463,13 +654,25 @@ public class GeminiScriptService
             userPrompt += "-----------------------------------------------------------------------------\n\n";
         }
 
+        if (seriesPlan.Locations != null && seriesPlan.Locations.Count > 0)
+        {
+            userPrompt += "--- ESTABLISHED LOCATION ROSTER CHO TOÀN BỘ SERIES (BẮT BUỘC DÙNG ĐÚNG) ---\n";
+            foreach (var loc in seriesPlan.Locations)
+            {
+                userPrompt += $"- [{loc.Id}] {loc.Name} ({loc.InteriorOrExterior}):\n" +
+                              $"  + Kiến trúc & Chi tiết: {loc.ArchitecturalStyle}\n" +
+                              $"  + Ánh sáng mặc định: {loc.LightingDefault}\n" +
+                              $"  + Visual Prompt Anchor: \"{loc.VisualPrompt ?? loc.VisualPromptAnchor}\"\n";
+            }
+            userPrompt += "-----------------------------------------------------------------------------\n\n";
+        }
+
         userPrompt += $"Currently writing Episode {epNum}/{totalEpisodes}: '{episodePlan.EpisodeTitle}'\n" +
                       $"Episode Plot Beat: {episodePlan.PlotBeat}\n" +
                       (string.IsNullOrWhiteSpace(previousEpisodeEndingContext) ? "" : $"Context from previous episode ending: {previousEpisodeEndingContext}\n") +
                       $"Episode Cliffhanger ending: {episodePlan.Cliffhanger}\n\n" +
-                      $"BẮT BUỘC: Hãy viết kịch bản chi tiết gồm ĐÚNG {numScenes} PHÂN CẢNH (scenes) cho Tập {epNum}. " +
-                      $"Hãy bám sát các tình tiết có thật, nhân vật thật, hiện trường và manh mối trong tư liệu hồ sơ gốc ở trên để kể chi tiết từng diễn biến, không lược bỏ hay rút ngắn qua loa. " +
-                      $"Mảng 'scenes' trong JSON PHẢI có đủ đúng {numScenes} phần tử, tuyệt đối không được dừng lại ở ít cảnh hơn!";
+                      $"BẮT BUỘC: Hãy viết kịch bản chi tiết gồm {numScenes} PHÂN CẢNH (scenes) cho Tập {epNum} với nhịp điệu phong phú (ngắn dài đan xen tự nhiên). " +
+                      $"Hãy bám sát các tình tiết có thật, nhân vật thật, hiện trường và manh mối trong tư liệu hồ sơ gốc ở trên để kể chi tiết từng diễn biến, không lược bỏ hay rút ngắn qua loa.";
 
         return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);
     }
@@ -886,4 +1089,70 @@ public class GeminiScriptService
 
         throw new Exception($"Không thể gọi Gemini AI: {lastError}");
     }
+}
+
+public class ContentAndBlueprintResponse
+{
+    [JsonPropertyName("content_analysis")]
+    public ContentAnalysisData ContentAnalysis { get; set; } = new();
+
+    [JsonPropertyName("story_blueprint")]
+    public StoryBlueprintData StoryBlueprint { get; set; } = new();
+}
+
+public class ContentAnalysisData
+{
+    [JsonPropertyName("main_topic")]
+    public string MainTopic { get; set; } = string.Empty;
+
+    [JsonPropertyName("core_message")]
+    public string CoreMessage { get; set; } = string.Empty;
+
+    [JsonPropertyName("summary")]
+    public string Summary { get; set; } = string.Empty;
+
+    [JsonPropertyName("events")]
+    public List<ChronologicalEvent> Events { get; set; } = new();
+
+    [JsonPropertyName("detected_characters")]
+    public List<DetectedEntity> DetectedCharacters { get; set; } = new();
+
+    [JsonPropertyName("detected_locations")]
+    public List<DetectedEntity> DetectedLocations { get; set; } = new();
+
+    [JsonPropertyName("verified_facts")]
+    public List<string> VerifiedFacts { get; set; } = new();
+
+    [JsonPropertyName("unverified_claims")]
+    public List<string> UnverifiedClaims { get; set; } = new();
+}
+
+public class StoryBlueprintData
+{
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = string.Empty;
+
+    [JsonPropertyName("core_theme")]
+    public string CoreTheme { get; set; } = string.Empty;
+
+    [JsonPropertyName("main_message")]
+    public string MainMessage { get; set; } = string.Empty;
+
+    [JsonPropertyName("narrative_arc")]
+    public string NarrativeArc { get; set; } = string.Empty;
+
+    [JsonPropertyName("characters")]
+    public List<CharacterProfile> Characters { get; set; } = new();
+
+    [JsonPropertyName("locations")]
+    public List<LocationProfile> Locations { get; set; } = new();
+
+    [JsonPropertyName("must_keep_details")]
+    public List<string> MustKeepDetails { get; set; } = new();
+
+    [JsonPropertyName("suggested_episodes")]
+    public List<BlueprintEpisodeOutline> SuggestedEpisodes { get; set; } = new();
+
+    [JsonPropertyName("unresolved_points")]
+    public List<string> UnresolvedPoints { get; set; } = new();
 }

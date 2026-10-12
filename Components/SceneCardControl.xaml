@@ -12,6 +12,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- Dòng 1: Badge Cảnh, Trạng thái & Nút Xóa -->
@@ -94,7 +95,7 @@
                                     CommandParameter="{Binding}" />
                         </Grid>
 
-                        <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" Height="46" TextWrapping="Wrap" AcceptsReturn="True"
+                        <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged, Delay=300}" Height="46" TextWrapping="Wrap" AcceptsReturn="True"
                                  Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderDark}"
                                  FontSize="11" Padding="4" VerticalScrollBarVisibility="Auto" Margin="0,0,0,6">
                             <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
@@ -134,7 +135,7 @@
                                     CommandParameter="{Binding}" />
                         </Grid>
 
-                        <TextBox Text="{Binding ImagePrompt, UpdateSourceTrigger=PropertyChanged}" Height="46" TextWrapping="Wrap" AcceptsReturn="True"
+                        <TextBox Text="{Binding ImagePrompt, UpdateSourceTrigger=PropertyChanged, Delay=300}" Height="46" TextWrapping="Wrap" AcceptsReturn="True"
                                  Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="{StaticResource BorderDark}"
                                  FontSize="11" Padding="4" VerticalScrollBarVisibility="Auto" Margin="0,0,0,6">
                             <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
@@ -154,6 +155,73 @@
                     </StackPanel>
                 </Border>
             </Grid>
+
+            <!-- DÒNG 3: PIPELINE V2 SHOTS BREAKDOWN (Góc Quay & Đạo Diễn Hình Ảnh) -->
+            <Border Grid.Row="2" Margin="0,8,0,0" Background="#181825" BorderBrush="#313244" BorderThickness="1" CornerRadius="6" Padding="8">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🎬 Pipeline V2 - Các Góc Quay (Shots):" FontSize="11" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <Border Background="#313244" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Shots.Count, StringFormat='{}{0} shots'}" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource AccentYellow}"/>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Nút chia shot riêng cho cảnh này -->
+                        <Button Grid.Column="1" Content="⚡ Tự Động Chia Shot" FontSize="9.5" Padding="8,2"
+                                Command="{Binding DataContext.PlanShotsForSceneCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                CommandParameter="{Binding}"
+                                ToolTip="Tự động phân bổ lại góc quay (Shot Pacing) dựa trên thời lượng lời thoại" />
+                    </Grid>
+
+                    <!-- Danh sách các Shot hiển thị dạng thẻ nhỏ -->
+                    <ItemsControl ItemsSource="{Binding Shots}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#25263a" BorderBrush="#3d4066" BorderThickness="1" CornerRadius="5" Padding="6,4" Margin="0,0,6,6" MinWidth="135">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Border Background="#313244" CornerRadius="3" Padding="4,1" Margin="0,0,4,0">
+                                                    <TextBlock Text="{Binding ShotCode, StringFormat='Shot {0}'}" FontWeight="Bold" FontSize="9.5" Foreground="{StaticResource AccentBlue}"/>
+                                                </Border>
+                                                <TextBlock Text="{Binding DurationFormatted}" FontSize="9.5" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding ShotType}" FontSize="8.5" Foreground="{StaticResource TextMuted}"/>
+                                        </Grid>
+
+                                        <!-- Trạng thái ảnh & nút sinh ảnh -->
+                                        <Grid Margin="0,2,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Status}" FontSize="9" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding ErrorMessage}"/>
+                                            <Button Grid.Column="1" Content="🎨 Vẽ ảnh" FontSize="8.5" Padding="6,1"
+                                                    Command="{Binding DataContext.GenerateShotImageCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="Sinh hình ảnh riêng cho góc quay này" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
         </Grid>
     </Border>
 </UserControl>

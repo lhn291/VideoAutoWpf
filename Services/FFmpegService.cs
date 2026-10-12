@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using VideoAutoWpf.Models;
+using VideoAutoWpf.Models.V2;
 
 namespace VideoAutoWpf.Services;
 
@@ -120,27 +121,34 @@ public partial class FFmpegService : IFFmpegService
         try
         {
             using var process = Process.Start(psi);
-            if (process == null) return 5.0;
-
-            using var reg = ct.Register(() =>
+            if (process != null)
             {
-                try { if (!process.HasExited) process.Kill(); } catch { }
-            });
+                using var reg = ct.Register(() =>
+                {
+                    try { if (!process.HasExited) process.Kill(); } catch { }
+                });
 
-            var output = await process.StandardOutput.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
+                var output = await process.StandardOutput.ReadToEndAsync(ct);
+                await process.WaitForExitAsync(ct);
 
-            if (double.TryParse(output.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var duration) && duration > 0)
-            {
-                return duration;
+                if (double.TryParse(output.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var duration) && duration > 0)
+                {
+                    return duration;
+                }
             }
         }
         catch (Exception)
         {
-            // Fallback bằng cách chạy ffmpeg -i và đọc Duration trong stderr
+            // Fallback bằng cách chạy ffmpeg -i bên dưới
+        }
+
+        // Fallback bằng cách chạy ffmpeg -i và đọc Duration trong stderr
+        try
+        {
             var fallbackDuration = await GetAudioDurationFallbackAsync(audioPath, customFfmpeg, ct);
             if (fallbackDuration > 0) return fallbackDuration;
         }
+        catch { }
 
         return 5.0;
     }
@@ -793,6 +801,266 @@ public partial class FFmpegService : IFFmpegService
         if (File.Exists(arial)) return arial;
 
         return fileName;
+    }
+
+    /// <summary>
+    /// Render video từ Timeline đa rãnh trong kiến trúc V2.
+    /// FFmpeg đóng vai trò Renderer thuần túy: Không mang business logic storytelling,
+    /// chỉ lắp ráp các clip hình ảnh (Shots), âm thanh thuyết minh (Scenes), nhạc nền và phụ đề ASS.
+    /// </summary>
+    public async Task<string> RenderTimelineAsync(
+        Timeline timeline,
+        VideoConfig config,
+        IProgress<GenerationProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        if (timeline == null || timeline.VideoClips.Count == 0)
+            throw new ArgumentException("Timeline không có clip hình ảnh nào để render.");
+
+        var ffmpeg = LocateFfmpeg(config.CustomFfmpegPath);
+        if (string.IsNullOrEmpty(ffmpeg))
+            throw new FileNotFoundException("Không tìm thấy FFmpeg trên hệ thống. Vui lòng cài đặt FFmpeg hoặc chỉ định đường dẫn.");
+
+        var baseOutputDir = string.IsNullOrWhiteSpace(config.OutputDirectory)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput")
+            : config.OutputDirectory;
+
+        Directory.CreateDirectory(baseOutputDir);
+
+        var videoName = Path.GetFileNameWithoutExtension(config.OutputFileName);
+        if (string.IsNullOrWhiteSpace(videoName)) videoName = $"video_v2_{DateTime.Now:yyyyMMdd_HHmmss}";
+
+        foreach (var c in Path.GetInvalidFileNameChars())
+            videoName = videoName.Replace(c, '_');
+
+        var projectDir = Path.Combine(baseOutputDir, videoName);
+        var imagesDir = Path.Combine(projectDir, "Images");
+        var audioDir = Path.Combine(projectDir, "Audio");
+        var videoDir = Path.Combine(projectDir, "Video");
+
+        Directory.CreateDirectory(projectDir);
+        Directory.CreateDirectory(imagesDir);
+        Directory.CreateDirectory(audioDir);
+        Directory.CreateDirectory(videoDir);
+
+        var tempDir = Path.Combine(projectDir, $"_temp_v2_{DateTime.Now:HHmmss}");
+        Directory.CreateDirectory(tempDir);
+
+        var finalOutputPath = Path.Combine(videoDir, config.OutputFileName);
+        if (!finalOutputPath.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+            finalOutputPath += ".mp4";
+
+        var (width, height) = config.GetDimensions();
+        var tempShotSegments = new List<string>();
+
+        try
+        {
+            progress?.Report(new GenerationProgress
+            {
+                Percentage = 5,
+                StepTitle = "Kiểm tra Timeline & Chuẩn bị render V2",
+                LogMessage = $"[Timeline V2] Bắt đầu render {timeline.VideoClips.Count} shots (Tỷ lệ: {config.AspectRatio}, {width}x{height}, Thời lượng: {timeline.TotalDurationSeconds:F2}s)..."
+            });
+
+            // ── BƯỚC 1: Render từng Shot Video Clip thành Micro-segment ──
+            for (int i = 0; i < timeline.VideoClips.Count; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                var clip = timeline.VideoClips[i];
+                var shotNum = i + 1;
+
+                if (string.IsNullOrEmpty(clip.MediaPath) || !File.Exists(clip.MediaPath))
+                    throw new FileNotFoundException($"Không tìm thấy file ảnh cho Shot #{shotNum} ({clip.ShotCode}): {clip.MediaPath}");
+
+                // Sao lưu ảnh vào thư mục Images/ của project
+                var imgExt = Path.GetExtension(clip.MediaPath);
+                var projectImagePath = Path.Combine(imagesDir, $"shot_{shotNum:D3}_{clip.ShotCode}{imgExt}");
+                File.Copy(clip.MediaPath, projectImagePath, true);
+
+                var dur = Math.Max(0.2, clip.DurationSeconds);
+                var durStr = dur.ToString("0.000", CultureInfo.InvariantCulture);
+
+                var percent = 5 + (int)((i / (double)timeline.VideoClips.Count) * 60);
+                progress?.Report(new GenerationProgress
+                {
+                    Percentage = percent,
+                    StepTitle = $"Đang render Shot {shotNum}/{timeline.VideoClips.Count}",
+                    LogMessage = $"[Shot {shotNum} - {clip.ShotCode}] Render ảnh '{Path.GetFileName(clip.MediaPath)}' ({dur:F2}s, motion: {clip.MotionEffect})..."
+                });
+
+                var segmentPath = Path.Combine(tempDir, $"shot_seg_{shotNum:D3}.mp4");
+
+                // Tạo filter zoompan cho shot
+                var numFrames = Math.Max((int)(dur * config.Fps), 1);
+                var zoomSpeed = 0.15 / numFrames;
+                var zoomSpeedStr = zoomSpeed.ToString("0.000000", CultureInfo.InvariantCulture);
+
+                string motionFilter = clip.MotionEffect switch
+                {
+                    "zoom_out" => $"scale={width * 2}:{height * 2},zoompan=z='if(eq(on,0),1.15,max(1.0,zoom-{zoomSpeedStr}))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={config.Fps}",
+                    "pan_left_right" => $"scale={width * 2}:{height * 2},zoompan=z=1.15:x='(iw-iw/zoom)*(on/{numFrames})':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={config.Fps}",
+                    "pan_right_left" => $"scale={width * 2}:{height * 2},zoompan=z=1.15:x='(iw-iw/zoom)*(1-on/{numFrames})':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={config.Fps}",
+                    "pan_up" => $"scale={width * 2}:{height * 2},zoompan=z=1.15:x='iw/2-(iw/zoom/2)':y='(ih-ih/zoom)*(1-on/{numFrames})':d={numFrames}:s={width}x{height}:fps={config.Fps}",
+                    "pan_down" => $"scale={width * 2}:{height * 2},zoompan=z=1.15:x='iw/2-(iw/zoom/2)':y='(ih-ih/zoom)*(on/{numFrames})':d={numFrames}:s={width}x{height}:fps={config.Fps}",
+                    "none" => $"scale={width}:{height}",
+                    _ => $"scale={width * 2}:{height * 2},zoompan=z='min(zoom+{zoomSpeedStr},1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={numFrames}:s={width}x{height}:fps={config.Fps}" // zoom_in
+                };
+
+                var filterParts = new List<string> { motionFilter };
+                if (config.EnableVignette) filterParts.Add("vignette=PI/4");
+                filterParts.Add("setsar=1");
+
+                var filterString = $"\"{string.Join(",", filterParts)}\"";
+                var shotArgs = $"-y -loop 1 -i \"{clip.MediaPath}\" -c:v libx264 -tune stillimage -r {config.Fps} -vf {filterString} -pix_fmt yuv420p -t {durStr} \"{segmentPath}\"";
+                await RunFfmpegAsync(ffmpeg, shotArgs, progress, ct);
+
+                tempShotSegments.Add(segmentPath);
+            }
+
+            // ── BƯỚC 2: Ghép các Shot thành 1 Video Track duy nhất qua Concat Demuxer ──
+            ct.ThrowIfCancellationRequested();
+            progress?.Report(new GenerationProgress
+            {
+                Percentage = 70,
+                StepTitle = "Ghép nối các góc quay (Shots)",
+                LogMessage = $"Đang ghép {tempShotSegments.Count} shot clips bằng FFmpeg Concat Demuxer..."
+            });
+
+            var concatShotsList = Path.Combine(tempDir, "concat_shots.txt");
+            var sbShots = new StringBuilder();
+            foreach (var seg in tempShotSegments)
+            {
+                sbShots.AppendLine($"file '{seg.Replace('\\', '/')}'");
+            }
+            await File.WriteAllTextAsync(concatShotsList, sbShots.ToString(), new UTF8Encoding(false), ct);
+
+            var mergedVideoTrack = Path.Combine(tempDir, "merged_video_track.mp4");
+            await RunFfmpegAsync(ffmpeg, $"-y -f concat -safe 0 -i \"{concatShotsList}\" -c copy \"{mergedVideoTrack}\"", progress, ct);
+
+            // ── BƯỚC 3: Ghép các Audio Clips của các Scene thành 1 Audio Track ──
+            ct.ThrowIfCancellationRequested();
+            string mergedAudioTrack;
+            if (timeline.AudioClips.Count == 0)
+            {
+                // Không có audio, tạo silent audio
+                mergedAudioTrack = Path.Combine(tempDir, "silent_audio.mp3");
+                await RunFfmpegAsync(ffmpeg, $"-y -f lavfi -i anullsrc=r=44100:cl=stereo -t {timeline.TotalDurationSeconds:F2} -c:a libmp3lame \"{mergedAudioTrack}\"", progress, ct);
+            }
+            else if (timeline.AudioClips.Count == 1)
+            {
+                mergedAudioTrack = timeline.AudioClips[0].AudioPath;
+            }
+            else
+            {
+                var concatAudioList = Path.Combine(tempDir, "concat_audio.txt");
+                var sbAudio = new StringBuilder();
+                for (int aIdx = 0; aIdx < timeline.AudioClips.Count; aIdx++)
+                {
+                    var aClip = timeline.AudioClips[aIdx];
+                    if (File.Exists(aClip.AudioPath))
+                    {
+                        // Backup audio vào folder Audio/ của project
+                        var destAudio = Path.Combine(audioDir, $"scene_{aIdx + 1:D3}{Path.GetExtension(aClip.AudioPath)}");
+                        File.Copy(aClip.AudioPath, destAudio, true);
+                        sbAudio.AppendLine($"file '{aClip.AudioPath.Replace('\\', '/')}'");
+                    }
+                }
+                await File.WriteAllTextAsync(concatAudioList, sbAudio.ToString(), new UTF8Encoding(false), ct);
+
+                mergedAudioTrack = Path.Combine(tempDir, "merged_audio_track.mp3");
+                await RunFfmpegAsync(ffmpeg, $"-y -f concat -safe 0 -i \"{concatAudioList}\" -c copy \"{mergedAudioTrack}\"", progress, ct);
+            }
+
+            // ── BƯỚC 4: Hòa âm, Áp dụng Phụ đề ASS và Trộn BGM ──
+            ct.ThrowIfCancellationRequested();
+            progress?.Report(new GenerationProgress
+            {
+                Percentage = 85,
+                StepTitle = "Hoàn thiện Video & Phụ đề ASS",
+                LogMessage = "Đang lắp ráp âm thanh, phụ đề ASS và nhạc nền..."
+            });
+
+            // Xử lý filter phụ đề ASS nếu có
+            string? subtitleFilter = null;
+            if (!string.IsNullOrEmpty(timeline.SubtitleFilePath) && File.Exists(timeline.SubtitleFilePath))
+            {
+                var safeSub = timeline.SubtitleFilePath.Replace('\\', '/').Replace(":", "\\:");
+                subtitleFilter = $"subtitles='{safeSub}'";
+                progress?.Report(new GenerationProgress
+                {
+                    LogMessage = $"[Phụ đề ASS] Đang nhúng phụ đề mượt mà từ file '{Path.GetFileName(timeline.SubtitleFilePath)}'..."
+                });
+            }
+
+            bool hasBgm = timeline.BgmClip != null && File.Exists(timeline.BgmClip.AudioPath);
+
+            if (hasBgm)
+            {
+                var bgmPath = timeline.BgmClip!.AudioPath;
+                var bgmDest = Path.Combine(audioDir, $"bgm_{Path.GetFileName(bgmPath)}");
+                File.Copy(bgmPath, bgmDest, true);
+
+                var volStr = timeline.BgmClip.Volume.ToString("0.00", CultureInfo.InvariantCulture);
+                var filterComplex = $"\"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[a1];[2:a]aformat=sample_rates=44100:channel_layouts=stereo,volume={volStr}[a2];[a1][a2]amix=inputs=2:duration=first:dropout_transition=3[a]\"";
+
+                string finalArgs;
+                if (!string.IsNullOrEmpty(subtitleFilter))
+                {
+                    finalArgs = $"-y -i \"{mergedVideoTrack}\" -i \"{mergedAudioTrack}\" -stream_loop -1 -i \"{bgmPath}\" -vf \"{subtitleFilter}\" -filter_complex {filterComplex} -map 0:v -map \"[a]\" -c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 192k \"{finalOutputPath}\"";
+                }
+                else
+                {
+                    finalArgs = $"-y -i \"{mergedVideoTrack}\" -i \"{mergedAudioTrack}\" -stream_loop -1 -i \"{bgmPath}\" -filter_complex {filterComplex} -map 0:v -map \"[a]\" -c:v copy -c:a aac -b:a 192k \"{finalOutputPath}\"";
+                }
+
+                await RunFfmpegAsync(ffmpeg, finalArgs, progress, ct);
+            }
+            else
+            {
+                string finalArgs;
+                if (!string.IsNullOrEmpty(subtitleFilter))
+                {
+                    finalArgs = $"-y -i \"{mergedVideoTrack}\" -i \"{mergedAudioTrack}\" -vf \"{subtitleFilter}\" -c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 192k \"{finalOutputPath}\"";
+                }
+                else
+                {
+                    finalArgs = $"-y -i \"{mergedVideoTrack}\" -i \"{mergedAudioTrack}\" -c:v copy -c:a aac -b:a 192k \"{finalOutputPath}\"";
+                }
+
+                await RunFfmpegAsync(ffmpeg, finalArgs, progress, ct);
+            }
+
+            // ── BƯỚC 5: Xuất file DANG_BAI_METADATA.txt ──
+            var publishInfo = config.PublishInfo ?? new VideoPublishInfo();
+            if (string.IsNullOrWhiteSpace(publishInfo.Title)) publishInfo.Title = videoName.Replace('_', ' ');
+            var txtContent = publishInfo.GenerateFormattedTxt(
+                videoFileName: Path.GetFileName(finalOutputPath),
+                aspectRatio: $"{config.AspectRatio} ({width}x{height})",
+                voice: config.Voice,
+                sceneCount: timeline.VideoClips.Count,
+                bgmName: hasBgm ? Path.GetFileName(timeline.BgmClip!.AudioPath) : "Không sử dụng");
+
+            var infoFilePath = Path.Combine(projectDir, "DANG_BAI_METADATA.txt");
+            await File.WriteAllTextAsync(infoFilePath, txtContent, new UTF8Encoding(false), ct);
+
+            progress?.Report(new GenerationProgress
+            {
+                Percentage = 100,
+                StepTitle = "Hoàn thành xuất sắc!",
+                LogMessage = $"TẠO VIDEO V2 THÀNH CÔNG!\n📁 Thư mục project: {projectDir}\n🎬 Video: {finalOutputPath}\n📝 Metadata (.txt): {infoFilePath}\n🎞️ Tổng số shots: {timeline.VideoClips.Count}"
+            });
+
+            return finalOutputPath;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, true);
+            }
+            catch { }
+        }
     }
 
     private static async Task RunFfmpegAsync(string ffmpeg, string arguments, IProgress<GenerationProgress>? progress, CancellationToken ct)

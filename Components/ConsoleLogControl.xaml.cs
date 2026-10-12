@@ -13,7 +13,7 @@ public partial class ConsoleLogControl : UserControl
     {
         if (sender is TextBox tb)
         {
-            tb.ScrollToEnd();
+            Dispatcher.BeginInvoke(new Action(() => tb.ScrollToEnd()), System.Windows.Threading.DispatcherPriority.Background);
         }
     }
 }

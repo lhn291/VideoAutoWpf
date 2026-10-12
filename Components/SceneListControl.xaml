@@ -53,6 +53,12 @@
                             Padding="10,6" Margin="0,0,8,0" 
                             ToolTip="Lưu kịch bản hiện tại ra file JSON" />
 
+                    <!-- Nút Chia Shots V2 Toàn Bộ -->
+                    <Button Content="🎬 Chia Shots V2" Command="{Binding PlanAllShotsCommand}"
+                            Background="#313244" Foreground="{StaticResource AccentYellow}" BorderBrush="#45475a" BorderThickness="1" FontWeight="Bold"
+                            Padding="10,6" Margin="0,0,6,0"
+                            ToolTip="Tự động phân tích thời lượng và chia toàn bộ phân cảnh thành các góc quay (Shots) đa dạng" />
+
                     <!-- Nút Thêm Cảnh -->
                     <Button Content="+ Thêm Cảnh" Command="{Binding AddSceneCommand}" 
                             Style="{StaticResource BtnPrimary}"

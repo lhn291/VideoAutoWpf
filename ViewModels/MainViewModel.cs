@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using VideoAutoWpf.Models;
+using VideoAutoWpf.Models.V2;
 using VideoAutoWpf.Services;
 using VideoAutoWpf.Views;
 
@@ -24,6 +25,13 @@ public partial class MainViewModel : ObservableObject
     private readonly GeminiScriptService _geminiService;
     private readonly YouTubeAnalyticsService _youtubeService;
     private readonly GoogleDriveService _driveService;
+
+    // ── VideoAuto V2 Core Services ──
+    private readonly ShotPlannerService _shotPlannerService;
+    private readonly VisualDirectorService _visualDirectorService;
+    private readonly GenerationQueue _generationQueue;
+    private readonly ContinuityEngine _continuityEngine;
+
     private CancellationTokenSource? _cts;
     private MediaPlayer? _bgmPlayer;
 
@@ -67,6 +75,20 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _enableVignette = false;
+
+    // ── VideoAuto V2 Pipeline Configuration ──
+    [ObservableProperty]
+    private bool _useV2Pipeline = true;
+
+    [ObservableProperty]
+    private string _renderQualityMode = "Production";
+
+    public IReadOnlyList<string> AvailableQualityModes { get; } = new List<string>
+    {
+        "Production",
+        "Preview",
+        "Draft"
+    };
 
     // ── Cấu Hình Chữ Chạy / Phụ Đề Video ──
     [ObservableProperty]
@@ -237,6 +259,12 @@ public partial class MainViewModel : ObservableObject
         _driveService = new GoogleDriveService(_authService);
         _driveFolderId = GoogleDriveService.LoadTargetFolderId() ?? string.Empty;
         _driveServiceAccountEmail = _driveService.GetServiceAccountEmail() ?? string.Empty;
+
+        // ── Khởi tạo các dịch vụ VideoAuto V2 ──
+        _shotPlannerService = new ShotPlannerService();
+        _visualDirectorService = new VisualDirectorService(_geminiService);
+        _generationQueue = new GenerationQueue();
+        _continuityEngine = new ContinuityEngine();
 
         var defaultOut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput");
         _outputDirectory = defaultOut;
@@ -471,10 +499,61 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private readonly System.Text.StringBuilder _logBuffer = new();
+    private readonly object _logLock = new();
+    private DateTime _lastLogFlush = DateTime.MinValue;
+    private bool _logFlushPending;
+
     private void AppendLog(string message)
     {
         var time = DateTime.Now.ToString("HH:mm:ss");
-        LogText += $"[{time}] {message}\n";
+        string line = $"[{time}] {message}\n";
+
+        lock (_logLock)
+        {
+            _logBuffer.Append(line);
+            // Giới hạn buffer tối đa ~70,000 ký tự để bảo vệ RAM
+            if (_logBuffer.Length > 70000)
+            {
+                _logBuffer.Remove(0, _logBuffer.Length - 50000);
+            }
+        }
+
+        FlushLogThrottled();
+    }
+
+    private void FlushLogThrottled(bool force = false)
+    {
+        var now = DateTime.Now;
+        if (!force && (now - _lastLogFlush).TotalMilliseconds < 120)
+        {
+            if (!_logFlushPending)
+            {
+                _logFlushPending = true;
+                _ = Task.Delay(120).ContinueWith(_ =>
+                {
+                    _logFlushPending = false;
+                    System.Windows.Application.Current?.Dispatcher?.InvokeAsync(() => FlushLogThrottled(true));
+                });
+            }
+            return;
+        }
+
+        _lastLogFlush = now;
+        string currentText;
+        lock (_logLock)
+        {
+            currentText = _logBuffer.ToString();
+        }
+
+        if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() == true)
+        {
+            LogText = currentText;
+        }
+        else
+        {
+            System.Windows.Application.Current?.Dispatcher?.InvokeAsync(() => LogText = currentText);
+        }
     }
 
     [RelayCommand]
@@ -584,7 +663,7 @@ public partial class MainViewModel : ObservableObject
         int idx = 1;
         foreach (var sc in workspace.Scenes)
         {
-            Scenes.Add(new SceneItem
+            var item = new SceneItem
             {
                 Index = idx++,
                 Text = sc.Text,
@@ -592,10 +671,24 @@ public partial class MainViewModel : ObservableObject
                 CharactersPresentText = sc.CharactersPresent != null && sc.CharactersPresent.Count > 0
                     ? string.Join(", ", sc.CharactersPresent)
                     : "🏙️ Ngoại cảnh / Hiện trường",
+                LocationId = sc.LocationId,
+                LocationName = sc.LocationName ?? string.Empty,
                 MotionEffect = string.IsNullOrEmpty(sc.MotionEffect) ? "zoom_in" : sc.MotionEffect,
+                // Story Beat fields (Phase B)
+                StoryBeat = string.IsNullOrEmpty(sc.StoryBeat) ? "Setup" : sc.StoryBeat,
+                PacingType = string.IsNullOrEmpty(sc.PacingType) ? "Normal" : sc.PacingType,
+                PacingNote = sc.PacingNote ?? string.Empty,
+                EstimatedDurationHint = sc.EstimatedDurationHint,
                 Status = "Kịch bản mới"
-            });
+            };
+
+            // Propagate character ID references
+            if (sc.CharacterIdsPresent?.Count > 0)
+                item.CharacterIdsPresent.AddRange(sc.CharacterIdsPresent);
+
+            Scenes.Add(item);
         }
+
 
         // Áp dụng thông tin đăng bài (Tiêu đề, Mô tả, Hashtags)
         if (workspace.PublishInfo != null)
@@ -1350,47 +1443,267 @@ public partial class MainViewModel : ObservableObject
                 }
             }
 
-            if (!s.HasImage)
+            if (UseV2Pipeline)
             {
-                if (!string.IsNullOrWhiteSpace(s.ImagePrompt))
+                // V2 Shot Planning: Nếu cảnh chưa có Shot nào, tự động chia Shot theo thời lượng audio và nhịp điệu
+                if (s.Shots.Count == 0)
                 {
-                    StatusMessage = $"Đang gọi Gemini Image vẽ ảnh cảnh {sNum}/{targetScenes.Count}...";
-                    AppendLog($"[Tự động] Cảnh #{sNum}: Đang gửi prompt tới Gemini Image...");
-                    s.IsGeneratingImage = true;
-                    var imgOut = Path.Combine(assetsDir, $"image_scene_{sNum:D3}_{DateTime.Now:HHmmss}.png");
-                    try
-                    {
-                        await _imagenService.GenerateImageAsync(s.ImagePrompt, imgOut, AspectRatio, onLog: msg => AppendLog(msg), ct: ct);
-                        s.ImagePath = imgOut;
-                    }
-                    catch (Exception ex)
-                    {
-                        // Cơ chế dự phòng (Fallback): Nếu bị hạn mức Quota và phân cảnh trước đã có ảnh, tái sử dụng để video không bị đứt đoạn
-                        var prevSceneWithImage = targetScenes.Take(i).LastOrDefault(x => !string.IsNullOrEmpty(x.ImagePath) && File.Exists(x.ImagePath));
-                        if (prevSceneWithImage != null)
-                        {
-                            AppendLog($"[Dự phòng Quota] Cảnh #{sNum} không thể tạo ảnh mới ({ex.Message}). Sử dụng lại ảnh từ cảnh #{prevSceneWithImage.Index} để tiếp tục tạo video!");
-                            File.Copy(prevSceneWithImage.ImagePath!, imgOut, true);
-                            s.ImagePath = imgOut;
-                        }
-                        else
-                        {
-                            throw;
-                        }
-                    }
-                    finally
-                    {
-                        s.IsGeneratingImage = false;
-                    }
+                    var v2Scene = s.ToV2Scene();
+                    var planned = _shotPlannerService.PlanShotsForScene(v2Scene);
 
-                    // Nghỉ một chút giữa các phân cảnh để tránh vượt hạn mức Quota (RPM) của Vertex AI
-                    await Task.Delay(2500, ct);
+                    var activeLocation = CurrentSeries?.Locations?.FirstOrDefault(l => l.Id == s.LocationId || l.Name == s.LocationName);
+                    var activeChars = CurrentSeries?.Characters;
+                    var styleKey = CurrentSeries?.GlobalStyleKey ?? "dark-anime";
+
+                    _shotPlannerService.CompileShotPrompts(planned, activeChars, activeLocation, styleKey, AspectRatio);
+
+                    s.Shots.Clear();
+                    foreach (var shot in planned.Shots)
+                    {
+                        s.Shots.Add(shot);
+                    }
+                    s.NotifyShotsUpdated();
+                    AppendLog($"[V2 Shot Planner] Cảnh #{sNum}: Đã tự động chia thành {s.Shots.Count} shots với góc máy điện ảnh độc lập.");
                 }
-                else
+
+                // Sinh ảnh cho từng Shot nếu thiếu
+                for (int shotIdx = 0; shotIdx < s.Shots.Count; shotIdx++)
                 {
-                    throw new InvalidOperationException($"Phân cảnh #{sNum} chưa có file ảnh và chưa có mô tả (prompt) để vẽ!");
+                    ct.ThrowIfCancellationRequested();
+                    var shot = s.Shots[shotIdx];
+                    if (!shot.HasImage)
+                    {
+                        if (string.IsNullOrWhiteSpace(shot.CompiledImagePrompt))
+                        {
+                            var activeLocation = CurrentSeries?.Locations?.FirstOrDefault(l => l.Id == s.LocationId || l.Name == s.LocationName);
+                            var activeChars = CurrentSeries?.Characters;
+                            var styleKey = CurrentSeries?.GlobalStyleKey ?? "dark-anime";
+                            var v2Scene = s.ToV2Scene();
+                            _shotPlannerService.CompileShotPrompts(v2Scene, activeChars, activeLocation, styleKey, AspectRatio);
+                            var matching = v2Scene.Shots.FirstOrDefault(x => x.ShotCode == shot.ShotCode);
+                            shot.CompiledImagePrompt = matching?.CompiledImagePrompt ?? s.ImagePrompt ?? string.Empty;
+                        }
+
+                        var prompt = !string.IsNullOrWhiteSpace(shot.CompiledImagePrompt)
+                            ? shot.CompiledImagePrompt
+                            : (!string.IsNullOrWhiteSpace(shot.VisualDescription) ? shot.VisualDescription : s.ImagePrompt);
+
+                        if (string.IsNullOrWhiteSpace(prompt))
+                        {
+                            throw new InvalidOperationException($"Cảnh #{sNum} - Shot {shot.ShotCode} chưa có mô tả (prompt) để vẽ!");
+                        }
+
+                        StatusMessage = $"Đang vẽ ảnh Shot {shot.ShotCode} (Cảnh {sNum}/{targetScenes.Count})...";
+                        AppendLog($"[V2 Pipeline] Cảnh #{sNum} - Shot {shot.ShotCode}: Đang gửi prompt tới Gemini Image...");
+                        shot.IsGenerating = true;
+                        var imgOut = Path.Combine(assetsDir, $"shot_s{sNum:D3}_{shot.ShotCode}_{DateTime.Now:HHmmss}.png");
+
+                        // ── Phase C: Tìm ảnh tham chiếu nhân vật/bối cảnh để duy trì tính nhất quán ──
+                        // Ưu tiên: ảnh tham chiếu nhân vật trực tiếp (ReferenceImagePath trong Character Bible)
+                        // Fallback: ảnh đã được sinh trong tập/cảnh trước của nhân vật đó
+                        string? referenceImagePath = null;
+                        var presentCharIds = shot.CharacterIds?.Count > 0
+                            ? shot.CharacterIds
+                            : s.CharacterIdsPresent;
+
+                        if (presentCharIds?.Count > 0 && CurrentSeries?.Characters != null)
+                        {
+                            foreach (var charId in presentCharIds)
+                            {
+                                var character = CurrentSeries.Characters.FirstOrDefault(c =>
+                                    c.Id == charId || c.Name == charId);
+                                if (character != null && !string.IsNullOrEmpty(character.ReferenceImagePath) &&
+                                    File.Exists(character.ReferenceImagePath))
+                                {
+                                    referenceImagePath = character.ReferenceImagePath;
+                                    AppendLog($"[V2 Continuity] Cảnh #{sNum} Shot {shot.ShotCode}: Dùng ảnh tham chiếu nhân vật '{character.Name}'.");
+                                    break;
+                                }
+                            }
+                        }
+
+                        try
+                        {
+                            await _imagenService.GenerateShotImageAsync(
+                                shot, prompt, imgOut, AspectRatio,
+                                referenceImagePath: referenceImagePath,
+                                onLog: msg => AppendLog(msg), ct: ct);
+                            if (string.IsNullOrEmpty(s.ImagePath))
+                                s.ImagePath = shot.ImagePath;
+                        }
+                        catch (Exception ex)
+                        {
+                            shot.Status = "Failed";
+                            shot.ErrorMessage = ex.Message;
+                            s.Status = "Lỗi sinh ảnh";
+                            AppendLog($"[Lỗi tạo ảnh Shot {shot.ShotCode}] {ex.Message}. Vui lòng thử lại!");
+                            throw new InvalidOperationException($"Cảnh #{sNum} - Shot {shot.ShotCode} không thể tạo ảnh do lỗi: {ex.Message}");
+                        }
+                        finally
+                        {
+                            shot.IsGenerating = false;
+                        }
+
+                        // Delay pacing giữa các shot để đảm bảo an toàn hạn mức RPM (Rate Limit)
+                        await Task.Delay(3500, ct);
+
+                    }
                 }
             }
+            else
+            {
+                // V1 Pipeline: 1 Scene = 1 Image
+                if (!s.HasImage)
+                {
+                    if (!string.IsNullOrWhiteSpace(s.ImagePrompt))
+                    {
+                        StatusMessage = $"Đang gọi Gemini Image vẽ ảnh cảnh {sNum}/{targetScenes.Count}...";
+                        AppendLog($"[Tự động] Cảnh #{sNum}: Đang gửi prompt tới Gemini Image...");
+                        s.IsGeneratingImage = true;
+                        var imgOut = Path.Combine(assetsDir, $"image_scene_{sNum:D3}_{DateTime.Now:HHmmss}.png");
+                        try
+                        {
+                            await _imagenService.GenerateImageAsync(s.ImagePrompt, imgOut, AspectRatio, onLog: msg => AppendLog(msg), ct: ct);
+                            s.ImagePath = imgOut;
+                        }
+                        catch (Exception ex)
+                        {
+                            s.Status = "Lỗi sinh ảnh";
+                            AppendLog($"[Lỗi tạo ảnh Cảnh #{sNum}] Không thể tạo ảnh mới: {ex.Message}. Vui lòng thử lại!");
+                            throw new InvalidOperationException($"Phân cảnh #{sNum} không thể tạo ảnh do lỗi: {ex.Message}. Hệ thống V2 không tự ý copy ảnh cũ để đảm bảo chất lượng video!");
+                        }
+                        finally
+                        {
+                            s.IsGeneratingImage = false;
+                        }
+
+                        // Nghỉ một chút giữa các phân cảnh để tránh vượt hạn mức Quota (RPM) của Vertex AI
+                        await Task.Delay(2500, ct);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"Phân cảnh #{sNum} chưa có file ảnh và chưa có mô tả (prompt) để vẽ!");
+                    }
+                }
+            }
+
+            // ── Phase E: Checkpoint sau khi hoàn thành mỗi cảnh ──────────────────────
+            // Ghi trạng thái hiện tại ra file JSON để có thể phục hồi nếu app đóng giữa chừng.
+            // Fire-and-forget (không await) để không block pipeline generation.
+            if (s.HasImage)
+            {
+                s.Status = $"Cảnh {sNum} hoàn thành";
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var checkpointDir = Path.Combine(assetsDir, "checkpoints");
+                        Directory.CreateDirectory(checkpointDir);
+                        var checkpointFile = Path.Combine(checkpointDir, "latest_checkpoint.json");
+                        var checkpointData = new
+                        {
+                            SavedAt = DateTime.Now,
+                            TotalScenes = targetScenes.Count,
+                            CompletedScenes = targetScenes.Count(x => x.HasImage),
+                            Scenes = targetScenes.Select(x => new
+                            {
+                                x.Index,
+                                x.Text,
+                                x.ImagePath,
+                                x.AudioPath,
+                                x.ImagePrompt,
+                                x.MotionEffect,
+                                x.DurationSeconds,
+                                x.Status,
+                                x.StoryBeat,
+                                x.PacingType,
+                                ShotPaths = x.Shots.Where(sh => sh.HasImage).Select(sh => sh.ImagePath).ToList()
+                            }).ToList()
+                        };
+                        var json = System.Text.Json.JsonSerializer.Serialize(checkpointData,
+                            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                        await File.WriteAllTextAsync(checkpointFile, json);
+                    }
+                    catch { /* Checkpoint thất bại không được crash pipeline chính */ }
+                });
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void PlanShotsForScene(SceneItem? scene)
+    {
+        var target = scene ?? SelectedScene;
+        if (target == null) return;
+
+        if (target.DurationSeconds <= 0 && !string.IsNullOrWhiteSpace(target.Text))
+        {
+            target.DurationSeconds = Math.Max(3.0, (target.Text.Length / 18.0));
+        }
+
+        var v2Scene = target.ToV2Scene();
+        var planned = _shotPlannerService.PlanShotsForScene(v2Scene);
+        target.Shots.Clear();
+        foreach (var s in planned.Shots)
+        {
+            if (string.IsNullOrWhiteSpace(s.CompiledImagePrompt))
+                s.CompiledImagePrompt = target.ImagePrompt ?? string.Empty;
+            target.Shots.Add(s);
+        }
+        target.NotifyShotsUpdated();
+        AppendLog($"[V2 Shot Planner] Cảnh #{target.Index}: Đã chia thành {target.Shots.Count} shots.");
+    }
+
+    [RelayCommand]
+    private void PlanAllShots()
+    {
+        if (Scenes.Count == 0) return;
+        AppendLog($"[V2 Shot Planner] Đang tự động chia Shots cho toàn bộ {Scenes.Count} phân cảnh...");
+        foreach (var sc in Scenes)
+        {
+            PlanShotsForScene(sc);
+        }
+        AppendLog($"[V2 Shot Planner] Hoàn tất chia Shots cho tất cả phân cảnh!");
+    }
+
+    [RelayCommand]
+    private async Task GenerateShotImage(Shot? shot)
+    {
+        if (shot == null) return;
+
+        shot.IsGenerating = true;
+        shot.Status = "Generating";
+        AppendLog($"[V2 Shot {shot.ShotCode}] Đang gửi prompt tới Gemini Image...");
+
+        try
+        {
+            var tempDir = Path.Combine(OutputDirectory, "generated_assets");
+            Directory.CreateDirectory(tempDir);
+            var prompt = !string.IsNullOrWhiteSpace(shot.CompiledImagePrompt)
+                ? shot.CompiledImagePrompt
+                : (!string.IsNullOrWhiteSpace(shot.VisualDescription) ? shot.VisualDescription : "Cinematic scene");
+
+            var outPath = Path.Combine(tempDir, $"shot_{shot.ShotCode}_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+            await _imagenService.GenerateShotImageAsync(shot, prompt, outPath, AspectRatio, onLog: msg => AppendLog(msg));
+
+            var parentScene = Scenes.FirstOrDefault(s => s.Shots.Contains(shot));
+            if (parentScene != null && (string.IsNullOrEmpty(parentScene.ImagePath) || !File.Exists(parentScene.ImagePath)))
+            {
+                parentScene.ImagePath = shot.ImagePath;
+            }
+
+            AppendLog($"[V2 Shot {shot.ShotCode}] Tạo ảnh thành công: {Path.GetFileName(shot.ImagePath)}");
+        }
+        catch (Exception ex)
+        {
+            shot.Status = "Failed";
+            shot.ErrorMessage = ex.Message;
+            AppendLog($"[Lỗi tạo ảnh Shot {shot.ShotCode}] {ex.Message}");
+            MessageBox.Show($"Lỗi sinh ảnh cho Shot {shot.ShotCode}:\n{ex.Message}", "Lỗi ảnh", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            shot.IsGenerating = false;
         }
     }
 
@@ -1448,7 +1761,45 @@ public partial class MainViewModel : ObservableObject
                     AppendLog(p.LogMessage);
             });
 
-            var resultFile = await _ffmpegService.GenerateVideoAsync(Scenes.ToList(), config, progress, ct);
+            string resultFile;
+            if (UseV2Pipeline)
+            {
+                AppendLog("[Pipeline V2] Đang xây dựng Multi-Track Timeline và tạo phụ đề ASS...");
+                var v2Project = SceneItemAdapter.ToV2Project(
+                    Scenes, 
+                    config, 
+                    CurrentPublishInfo,
+                    null);
+
+                string? subtitleAssPath = null;
+                if (EnableSubtitles)
+                {
+                    var (width, height) = config.GetDimensions();
+                    var assPath = Path.Combine(tempAssetsDir, $"subtitles_{DateTime.Now:HHmmss}.ass");
+                    var v2Scenes = Scenes.Select(s => s.ToV2Scene()).ToList();
+                    await AssSubtitleService.GenerateAssFileAsync(
+                        v2Scenes,
+                        assPath,
+                        width: width,
+                        height: height,
+                        fontName: SelectedSubtitleFont?.Name ?? "Segoe UI Bold",
+                        subtitleStyle: SelectedSubtitleStyle?.Id ?? "cinematic",
+                        ct: ct);
+
+                    if (File.Exists(assPath))
+                    {
+                        subtitleAssPath = assPath;
+                        AppendLog($"[Pipeline V2] Đã tạo file phụ đề ASS karaoke: {Path.GetFileName(assPath)}");
+                    }
+                }
+
+                var timeline = TimelineBuilder.BuildTimeline(v2Project, subtitleAssPath: subtitleAssPath);
+                resultFile = await _ffmpegService.RenderTimelineAsync(timeline, config, progress, ct);
+            }
+            else
+            {
+                resultFile = await _ffmpegService.GenerateVideoAsync(Scenes.ToList(), config, progress, ct);
+            }
             LastGeneratedVideoPath = resultFile;
             StatusMessage = "Tạo video thành công!";
             ProgressPercentage = 100;
@@ -1668,8 +2019,46 @@ public partial class MainViewModel : ObservableObject
                         AppendLog($"[Tập {epNum}] {p.LogMessage}");
                 });
 
-                // 3. Render video qua FFmpeg
-                var resultFile = await _ffmpegService.GenerateVideoAsync(ep.Scenes.ToList(), epConfig, progress, ct);
+                // 3. Render video qua FFmpeg (V2 Timeline hoặc V1 Concat)
+                string resultFile;
+                if (UseV2Pipeline)
+                {
+                    AppendLog($"[Batch Series Tập {epNum}] Đang xây dựng Multi-Track Timeline và tạo phụ đề ASS...");
+                    var v2Project = SceneItemAdapter.ToV2Project(
+                        ep.Scenes,
+                        epConfig,
+                        ep.PublishInfo ?? CurrentPublishInfo,
+                        null);
+
+                    string? subtitleAssPath = null;
+                    if (EnableSubtitles)
+                    {
+                        var (width, height) = epConfig.GetDimensions();
+                        var assPath = Path.Combine(epTempAssets, $"subtitles_ep{epNum:D2}_{DateTime.Now:HHmmss}.ass");
+                        var v2Scenes = ep.Scenes.Select(s => s.ToV2Scene()).ToList();
+                        await AssSubtitleService.GenerateAssFileAsync(
+                            v2Scenes,
+                            assPath,
+                            width: width,
+                            height: height,
+                            fontName: SelectedSubtitleFont?.Name ?? "Segoe UI Bold",
+                            subtitleStyle: SelectedSubtitleStyle?.Id ?? "cinematic",
+                            ct: ct);
+
+                        if (File.Exists(assPath))
+                        {
+                            subtitleAssPath = assPath;
+                            AppendLog($"[Batch Series Tập {epNum}] Đã tạo file phụ đề ASS karaoke: {Path.GetFileName(assPath)}");
+                        }
+                    }
+
+                    var timeline = TimelineBuilder.BuildTimeline(v2Project, subtitleAssPath: subtitleAssPath);
+                    resultFile = await _ffmpegService.RenderTimelineAsync(timeline, epConfig, progress, ct);
+                }
+                else
+                {
+                    resultFile = await _ffmpegService.GenerateVideoAsync(ep.Scenes.ToList(), epConfig, progress, ct);
+                }
                 ep.OutputVideoPath = resultFile;
                 ep.LastRenderedDate = DateTime.Now;
                 ep.Status = "Hoàn thành";
@@ -1914,6 +2303,10 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ClearLog()
     {
+        lock (_logLock)
+        {
+            _logBuffer.Clear();
+        }
         LogText = string.Empty;
     }
 

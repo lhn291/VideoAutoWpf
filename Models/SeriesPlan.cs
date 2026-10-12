@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using VideoAutoWpf.Models.V2;
 
 namespace VideoAutoWpf.Models;
 
@@ -20,6 +21,15 @@ public partial class SeriesPlan : ObservableObject
 
     [JsonPropertyName("characters")]
     public ObservableCollection<CharacterProfile> Characters { get; set; } = new();
+
+    [JsonPropertyName("locations")]
+    public ObservableCollection<LocationProfile> Locations { get; set; } = new();
+
+    [JsonPropertyName("story_blueprint")]
+    public StoryBlueprint? StoryBlueprint { get; set; }
+
+    [JsonPropertyName("content_analysis")]
+    public ContentAnalysis? ContentAnalysis { get; set; }
 
     [ObservableProperty]
     [JsonPropertyName("suggested_style")]
@@ -58,4 +68,11 @@ public partial class EpisodePlanItem : ObservableObject
     [ObservableProperty]
     [JsonPropertyName("suggested_scene_count")]
     private int _suggestedSceneCount = 5;
+
+    [JsonPropertyName("focus_characters")]
+    public List<string> FocusCharacters { get; set; } = new();
+
+    [ObservableProperty]
+    [JsonPropertyName("primary_location_id")]
+    private string? _primaryLocationId;
 }

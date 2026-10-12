@@ -372,17 +372,18 @@ public partial class SeriesCreatorViewModel : ObservableObject
 
         try
         {
-            var transcript = await _youtubeService.GetVideoTranscriptAsync(SourceVideoId);
-            if (!string.IsNullOrWhiteSpace(transcript))
+            var transcriptResult = await _youtubeService.GetDetailedVideoTranscriptAsync(SourceVideoId);
+            if (transcriptResult != null && !string.IsNullOrWhiteSpace(transcriptResult.FullText))
             {
                 var sb = new System.Text.StringBuilder();
                 if (!string.IsNullOrWhiteSpace(SourceTitle))
                     sb.AppendLine($"Chủ đề: {SourceTitle}\n");
-                sb.AppendLine("--- LỜI THOẠI / PHỤ ĐỀ GỐC CỦA VIDEO TRÊN YOUTUBE ---");
-                sb.AppendLine(transcript.Trim());
+                var durText = transcriptResult.TotalDuration > TimeSpan.Zero ? $"thời lượng ~{transcriptResult.TotalDuration:mm\\:ss}" : $"{transcriptResult.WordCount:N0} từ";
+                sb.AppendLine($"--- LỜI THOẠI / PHỤ ĐỀ GỐC CỦA VIDEO TRÊN YOUTUBE ({transcriptResult.Lines.Count} đoạn thoại, {durText}) ---");
+                sb.AppendLine(transcriptResult.FullText.Trim());
                 TopicOrStory = sb.ToString();
-                BatchStatusText = $"✅ Đã tải thành công {transcript.Length:N0} ký tự lời thoại của video YouTube gốc!";
-                MessageBox.Show($"Đã tải thành công {transcript.Length:N0} ký tự phụ đề/lời thoại từ YouTube và nạp vào cốt truyện!", "Tải Thành Công", MessageBoxButton.OK, MessageBoxImage.Information);
+                BatchStatusText = $"✅ Đã tải thành công {transcriptResult.WordCount:N0} từ ({transcriptResult.Lines.Count} đoạn thoại) của video YouTube gốc!";
+                MessageBox.Show($"Đã tải thành công {transcriptResult.WordCount:N0} từ ({transcriptResult.Lines.Count} đoạn thoại, {durText}) từ YouTube và nạp vào cốt truyện!", "Tải Thành Công", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
             {
@@ -647,8 +648,22 @@ public partial class SeriesCreatorViewModel : ObservableObject
             GlobalStyleKey = CurrentSeriesPlan.SuggestedStyle,
             GlobalVoice = CurrentSeriesPlan.SuggestedVoice,
             AspectRatio = ActualAspectRatio,
-            CharacterBibleRules = CurrentSeriesPlan.CharacterBible
+            CharacterBibleRules = CurrentSeriesPlan.CharacterBible,
+            StoryBlueprint = CurrentSeriesPlan.StoryBlueprint,
+            ContentAnalysis = CurrentSeriesPlan.ContentAnalysis
         };
+
+        if (CurrentSeriesPlan.Characters != null)
+        {
+            foreach (var ch in CurrentSeriesPlan.Characters)
+                seriesProject.Characters.Add(ch);
+        }
+
+        if (CurrentSeriesPlan.Locations != null)
+        {
+            foreach (var loc in CurrentSeriesPlan.Locations)
+                seriesProject.Locations.Add(loc);
+        }
 
         try
         {
@@ -662,7 +677,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
                 var sceneCount = epPlan.SuggestedSceneCount > 0 ? epPlan.SuggestedSceneCount : SelectedScenesPerEpisode;
 
                 BatchProgress = (i / (double)total) * 100;
-                BatchStatusText = $"⏳ Đang viết kịch bản chi tiết cho Tập {epNum}/{total} ({sceneCount} cảnh): '{epPlan.EpisodeTitle}'...";
+                BatchStatusText = $"⏳ Đang viết kịch bản chi tiết cho Tập {epNum}/{total} (~{sceneCount} cảnh nhịp điệu tự nhiên): '{epPlan.EpisodeTitle}'...";
 
                 // Gọi sinh kịch bản chi tiết với cơ chế thử lại (retry) nếu gặp gián đoạn kết nối
                 ScriptWorkspace? ws = null;
@@ -719,28 +734,8 @@ public partial class SeriesCreatorViewModel : ObservableObject
                         CharactersPresentText = sc.CharactersPresent != null && sc.CharactersPresent.Count > 0
                             ? string.Join(", ", sc.CharactersPresent)
                             : "🏙️ Ngoại cảnh / Hiện trường",
-                        Status = "Đã sinh kịch bản"
-                    });
-                }
-
-                // ĐẢM BẢO ĐỦ 100% SỐ CẢNH THEO YÊU CẦU:
-                // Nếu AI trả về ít cảnh hơn sceneCount, tự động bổ sung cảnh nối tiếp để đủ số cảnh
-                var stylePrompt = GeminiScriptService.StylePrompts.TryGetValue(CurrentSeriesPlan.SuggestedStyle, out var sp) ? sp : GeminiScriptService.StylePrompts["dark-anime"];
-                while (epItem.Scenes.Count < sceneCount)
-                {
-                    int missingIdx = epItem.Scenes.Count + 1;
-                    var lastScene = epItem.Scenes.LastOrDefault();
-                    string contText = $"Diễn biến tiếp nối đầy kịch tính của Tập {epNum}, đẩy cốt truyện đến cao trào nghẹt thở...";
-                    string contPrompt = (lastScene != null && !string.IsNullOrWhiteSpace(lastScene.ImagePrompt))
-                        ? lastScene.ImagePrompt
-                        : $"{stylePrompt} Dramatic cinematic continuation shot, {CurrentSeriesPlan.CharacterBible}";
-
-                    epItem.Scenes.Add(new SceneItem
-                    {
-                        Index = missingIdx,
-                        Text = contText,
-                        ImagePrompt = contPrompt,
-                        MotionEffect = (missingIdx % 2 == 0) ? "pan_left_right" : "zoom_in",
+                        LocationId = sc.LocationId,
+                        LocationName = sc.LocationName,
                         Status = "Đã sinh kịch bản"
                     });
                 }

@@ -12,4 +12,11 @@ public interface IFFmpegService
         VideoConfig config,
         IProgress<GenerationProgress>? progress = null,
         CancellationToken ct = default);
+
+    Task<string> RenderTimelineAsync(
+        VideoAutoWpf.Models.V2.Timeline timeline,
+        VideoConfig config,
+        IProgress<GenerationProgress>? progress = null,
+        CancellationToken ct = default);
 }
+

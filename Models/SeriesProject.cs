@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using VideoAutoWpf.Models.V2;
 
 namespace VideoAutoWpf.Models;
 
@@ -11,6 +12,10 @@ public partial class SeriesProject : ObservableObject
     [ObservableProperty]
     [JsonPropertyName("series_id")]
     private string _seriesId = Guid.NewGuid().ToString("N");
+
+    [ObservableProperty]
+    [JsonPropertyName("schema_version")]
+    private int _schemaVersion = 2;
 
     [ObservableProperty]
     [JsonPropertyName("series_title")]
@@ -47,6 +52,18 @@ public partial class SeriesProject : ObservableObject
     [JsonPropertyName("character_bible_rules")]
     private string _characterBibleRules = string.Empty;
 
+    [JsonPropertyName("characters")]
+    public ObservableCollection<CharacterProfile> Characters { get; set; } = new();
+
+    [JsonPropertyName("locations")]
+    public ObservableCollection<LocationProfile> Locations { get; set; } = new();
+
+    [JsonPropertyName("story_blueprint")]
+    public StoryBlueprint? StoryBlueprint { get; set; }
+
+    [JsonPropertyName("content_analysis")]
+    public ContentAnalysis? ContentAnalysis { get; set; }
+
     [ObservableProperty]
     [JsonPropertyName("global_bgm_path")]
     private string? _globalBgmPath;
@@ -69,7 +86,7 @@ public partial class SeriesProject : ObservableObject
     }
 
     /// <summary>
-    /// Đọc cấu hình dự án Series từ file .json
+    /// Đọc cấu hình dự án Series từ file .json (tương thích cả V1 và V2)
     /// </summary>
     public static async Task<SeriesProject?> LoadFromFileAsync(string filePath)
     {

@@ -70,8 +70,53 @@ public class ScriptScene
     [JsonPropertyName("motion_effect")]
     public string? MotionEffect { get; set; }
 
+    // ── Characters & Location ──────────────────────────────────────────────
+    /// <summary>Tên nhân vật xuất hiện trực tiếp trong phân cảnh (hiển thị UI)</summary>
     [JsonPropertyName("characters_present")]
     public List<string> CharactersPresent { get; set; } = new();
+
+    /// <summary>Danh sách ID nhân vật từ Character Bible (khớp với CharacterProfile.Id)</summary>
+    [JsonPropertyName("character_ids_present")]
+    public List<string> CharacterIdsPresent { get; set; } = new();
+
+    [JsonPropertyName("location_id")]
+    public string? LocationId { get; set; }
+
+    [JsonPropertyName("location_name")]
+    public string? LocationName { get; set; }
+
+    // ── Story Beat & Pacing (Phase B additions) ────────────────────────────
+    /// <summary>
+    /// Loại nhịp kể chuyện: Hook | Setup | Rising_Action | Clue_Reveal | Confrontation | Climax | Resolution | Cliffhanger
+    /// Quyết định trọng số thời lượng và số Shot được phân bổ cho phân cảnh này.
+    /// </summary>
+    [JsonPropertyName("story_beat")]
+    public string StoryBeat { get; set; } = "Setup";
+
+    /// <summary>
+    /// Loại nhịp điệu: Hook (nhanh, giật gân) | Normal | Suspense (chậm, căng thẳng) | Climax (dồn dập)
+    /// </summary>
+    [JsonPropertyName("pacing_type")]
+    public string PacingType { get; set; } = "Normal";
+
+    /// <summary>
+    /// Gợi ý thời lượng mục tiêu tính bằng giây, do AI đề xuất dựa trên nhịp kể và số từ.
+    /// 0 = để TTS thực tế quyết định.
+    /// </summary>
+    [JsonPropertyName("estimated_duration_hint")]
+    public double EstimatedDurationHint { get; set; } = 0;
+
+    /// <summary>Ghi chú ngắn cho đạo diễn về nhịp điệu và cảm xúc của phân cảnh này.</summary>
+    [JsonPropertyName("pacing_note")]
+    public string PacingNote { get; set; } = string.Empty;
+
+    /// <summary>Mốc giây bắt đầu trong video nguồn (nếu phân tích từ transcript có timestamp).</summary>
+    [JsonPropertyName("source_start_seconds")]
+    public double? SourceStartSeconds { get; set; }
+
+    /// <summary>Mốc giây kết thúc trong video nguồn (nếu phân tích từ transcript có timestamp).</summary>
+    [JsonPropertyName("source_end_seconds")]
+    public double? SourceEndSeconds { get; set; }
 
     [JsonPropertyName("engine")]
     public string? Engine { get; set; } = "imagen";
