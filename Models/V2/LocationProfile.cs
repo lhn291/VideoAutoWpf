@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -73,5 +74,54 @@ public partial class LocationProfile : ObservableObject
     [JsonPropertyName("reference_image_path")]
     private string? _referenceImagePath;
 
+    // ── Visual Planning Studio: Approval & Asset Management ─────────────────
+    /// <summary>Địa điểm quan trọng cần duyệt ảnh trước khi sản xuất hàng loạt.</summary>
+    [ObservableProperty]
+    [JsonPropertyName("is_critical")]
+    private bool _isCritical = true;
+
+    [ObservableProperty]
+    [JsonPropertyName("approval_status")]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
+    [NotifyPropertyChangedFor(nameof(IsApproved))]
+    [NotifyPropertyChangedFor(nameof(IsLocked))]
+    private AssetApprovalStatus _approvalStatus = AssetApprovalStatus.Pending;
+
+    /// <summary>Ảnh tổng thể chuẩn của địa điểm (wide establishing shot).</summary>
+    [ObservableProperty]
+    [JsonPropertyName("location_asset")]
+    private VideoAutoWpf.Models.VisualAsset _locationAsset = new() { AssetType = "Location" };
+
+    /// <summary>Số scene dự kiến sử dụng địa điểm này.</summary>
+    [ObservableProperty]
+    [JsonPropertyName("expected_scene_count")]
+    private int _expectedSceneCount;
+
+    [JsonPropertyName("dependent_scene_ids")]
+    public List<string> DependentSceneIds { get; set; } = new();
+
+    [JsonIgnore]
+    public bool IsLocked => ApprovalStatus == AssetApprovalStatus.Approved;
+
+    [JsonIgnore]
+    public bool IsApproved => ApprovalStatus == AssetApprovalStatus.Approved;
+
+    [JsonIgnore]
+    public string StatusText => ApprovalStatus.ToDisplayText();
+
+    [JsonIgnore]
+    public string? DisplayImagePath => LocationAsset.DisplayImagePath;
+
+    [JsonIgnore]
+    public bool HasImage => LocationAsset.HasImage;
+
     public string DisplayTitle => string.IsNullOrWhiteSpace(ArchitecturalStyle) ? Name : $"{Name} ({ArchitecturalStyle})";
+    public string SceneCountText => ExpectedSceneCount > 0 ? $"{ExpectedSceneCount} cảnh" : "";
+
+    public void MarkDependentScenesForReview()
+    {
+        if (ApprovalStatus == AssetApprovalStatus.Approved)
+            ApprovalStatus = AssetApprovalStatus.NeedsReview;
+        LocationAsset.MarkNeedsReview();
+    }
 }

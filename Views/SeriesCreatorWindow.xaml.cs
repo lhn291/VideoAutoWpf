@@ -14,7 +14,13 @@ public partial class SeriesCreatorWindow : Window
     {
         InitializeComponent();
         WindowState = WindowState.Maximized;
-        ViewModel = new SeriesCreatorViewModel(geminiService, ytService);
+
+        // Khởi tạo VisualPlanningService (cần GoogleAuthService từ geminiService)
+        var authService = new GoogleAuthService();
+        var imagenService = new VertexImagenService(authService);
+        var visualPlanningService = new VisualPlanningService(imagenService, geminiService);
+
+        ViewModel = new SeriesCreatorViewModel(geminiService, ytService, visualPlanningService);
         ViewModel.RequestClose = (dialogResult) =>
         {
             DialogResult = dialogResult;

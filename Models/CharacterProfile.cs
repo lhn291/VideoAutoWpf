@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -74,7 +75,68 @@ public partial class CharacterProfile : ObservableObject
     [JsonPropertyName("reference_image_path")]
     private string? _referenceImagePath;
 
-    public string DisplayTitle => string.IsNullOrWhiteSpace(Role) ? Name : $"{Name} • {Role}";
+    // ── Visual Planning Studio: Approval & Asset Management ──────────────────
+    /// <summary>Nhân vật quan trọng cần phải duyệt ảnh trước khi sản xuất hàng loạt.</summary>
+    [ObservableProperty]
+    [JsonPropertyName("is_critical")]
+    private bool _isCritical = true;
 
+    /// <summary>Trạng thái duyệt tổng hợp (dựa trên PortraitAsset).</summary>
+    [ObservableProperty]
+    [JsonPropertyName("approval_status")]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
+    [NotifyPropertyChangedFor(nameof(IsApproved))]
+    [NotifyPropertyChangedFor(nameof(IsLocked))]
+    private AssetApprovalStatus _approvalStatus = AssetApprovalStatus.Pending;
+
+    /// <summary>Ảnh chân dung chuẩn (Portrait) — ưu tiên cao nhất.</summary>
+    [ObservableProperty]
+    [JsonPropertyName("portrait_asset")]
+    private VisualAsset _portraitAsset = new() { AssetType = "Portrait" };
+
+    /// <summary>Ảnh toàn thân (FullBody).</summary>
+    [ObservableProperty]
+    [JsonPropertyName("full_body_asset")]
+    private VisualAsset _fullBodyAsset = new() { AssetType = "FullBody" };
+
+    /// <summary>Hồ sơ đã được khóa — không cho phép sửa mô tả mà không mở khóa.</summary>
+    [JsonIgnore]
+    public bool IsLocked => ApprovalStatus == AssetApprovalStatus.Approved;
+
+    /// <summary>Các scene ID phụ thuộc vào nhân vật này — cần NeedsReview khi profile thay đổi.</summary>
+    [JsonPropertyName("dependent_scene_ids")]
+    public List<string> DependentSceneIds { get; set; } = new();
+
+    /// <summary>Số scene dự kiến có nhân vật này xuất hiện.</summary>
+    [ObservableProperty]
+    [JsonPropertyName("expected_scene_count")]
+    private int _expectedSceneCount;
+
+    [JsonIgnore]
+    public bool IsApproved => ApprovalStatus == AssetApprovalStatus.Approved;
+
+    [JsonIgnore]
+    public string StatusText => ApprovalStatus.ToDisplayText();
+
+    [JsonIgnore]
+    public string? DisplayImagePath => PortraitAsset.DisplayImagePath ?? FullBodyAsset.DisplayImagePath;
+
+    [JsonIgnore]
+    public bool HasAnyImage => PortraitAsset.HasImage || FullBodyAsset.HasImage;
+
+    public string DisplayTitle => string.IsNullOrWhiteSpace(Role) ? Name : $"{Name} • {Role}";
     public string DisplaySummary => $"{GenderAge} • {OutfitVn}";
+    public string SceneCountText => ExpectedSceneCount > 0 ? $"{ExpectedSceneCount} cảnh" : "";
+
+    /// <summary>
+    /// Đánh dấu tất cả scene phụ thuộc là NeedsReview khi profile thay đổi.
+    /// KHÔNG tự động xóa hay tạo lại ảnh.
+    /// </summary>
+    public void MarkDependentScenesForReview()
+    {
+        if (ApprovalStatus == AssetApprovalStatus.Approved)
+            ApprovalStatus = AssetApprovalStatus.NeedsReview;
+        PortraitAsset.MarkNeedsReview();
+        FullBodyAsset.MarkNeedsReview();
+    }
 }

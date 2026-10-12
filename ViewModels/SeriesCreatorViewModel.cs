@@ -6,16 +6,47 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VideoAutoWpf.Models;
+using VideoAutoWpf.Models.V2;
 using VideoAutoWpf.Services;
 
 namespace VideoAutoWpf.ViewModels;
+
+/// <summary>Stage (giai đoạn) của workflow Series Creator.</summary>
+public enum SeriesCreatorStage
+{
+    /// <summary>Nhập chủ đề và cấu hình.</summary>
+    Input = 0,
+    /// <summary>Đã có dàn ý — đang chờ duyệt hoặc tạo kịch bản.</summary>
+    SeriesPlan = 1,
+    /// <summary>Kịch bản đã tạo xong — đang mở Visual Planning Studio.</summary>
+    VisualPlanning = 2,
+    /// <summary>Approval Gate đã qua — sẵn sàng tạo ảnh hàng loạt.</summary>
+    ReadyToGenerate = 3
+}
 
 public partial class SeriesCreatorViewModel : ObservableObject
 {
     private readonly GeminiScriptService _geminiService;
     private readonly YouTubeAnalyticsService? _youtubeService;
+    private readonly VisualPlanningService? _visualPlanningService;
 
     public Action<bool>? RequestClose { get; set; }
+
+    // ── Visual Planning Studio ──────────────────────────────────────────────
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInputStage))]
+    [NotifyPropertyChangedFor(nameof(IsSeriesPlanStage))]
+    [NotifyPropertyChangedFor(nameof(IsVisualPlanningStage))]
+    [NotifyPropertyChangedFor(nameof(IsReadyToGenerateStage))]
+    private SeriesCreatorStage _currentStage = SeriesCreatorStage.Input;
+
+    public bool IsInputStage         => CurrentStage == SeriesCreatorStage.Input;
+    public bool IsSeriesPlanStage    => CurrentStage == SeriesCreatorStage.SeriesPlan;
+    public bool IsVisualPlanningStage => CurrentStage == SeriesCreatorStage.VisualPlanning;
+    public bool IsReadyToGenerateStage => CurrentStage == SeriesCreatorStage.ReadyToGenerate;
+
+    [ObservableProperty]
+    private VisualPlanningViewModel? _visualPlanningVm;
 
     [ObservableProperty]
     private string _topicOrStory = string.Empty;
@@ -233,10 +264,11 @@ public partial class SeriesCreatorViewModel : ObservableObject
     [ObservableProperty]
     private SeriesProject? _resultSeriesProject;
 
-    public SeriesCreatorViewModel(GeminiScriptService geminiService, YouTubeAnalyticsService? youtubeService = null)
+    public SeriesCreatorViewModel(GeminiScriptService geminiService, YouTubeAnalyticsService? youtubeService = null, VisualPlanningService? visualPlanningService = null)
     {
         _geminiService = geminiService;
         _youtubeService = youtubeService;
+        _visualPlanningService = visualPlanningService;
         _selectedStyleCard = StyleCards.FirstOrDefault(s => s.Key == "dark-anime") ?? StyleCards.FirstOrDefault();
         _selectedVoiceCard = VoiceCards.FirstOrDefault(v => v.Key == "vi-VN-Neural2-D") ?? VoiceCards.FirstOrDefault();
         _geminiApiKey = _geminiService.ApiKey ?? string.Empty;
@@ -504,6 +536,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
 
             CurrentSeriesPlan = plan;
             HasSeriesPlan = true;
+            CurrentStage = SeriesCreatorStage.SeriesPlan;
             BatchStatusText = $"✅ Đã lập dàn ý {plan.Episodes.Count} tập thành công! Bạn có thể tùy biến số cảnh từng tập bên dưới.";
         }
         catch (Exception ex)
@@ -623,6 +656,83 @@ public partial class SeriesCreatorViewModel : ObservableObject
     private void BackToInput()
     {
         HasSeriesPlan = false;
+        CurrentStage = SeriesCreatorStage.Input;
+    }
+
+    // ── Visual Planning Studio Commands ───────────────────────────────────────────
+    /// <summary>
+    /// Bước trung gian sau khi sinh kịch bản: phân tích nhân vật & địa điểm
+    /// và mở Visual Planning Studio thay vì đóng cửa sổ ngay.
+    /// </summary>
+    [RelayCommand]
+    private void OpenVisualPlanningStudio()
+    {
+        if (CurrentSeriesPlan == null || !HasSeriesPlan)
+        {
+            MessageBox.Show("Vui lòng lập dàn ý trước!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (_visualPlanningService == null)
+        {
+            MessageBox.Show("Visual Planning Service chưa được khởi tạo.", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        // Chuẩn bị output directory
+        var outputDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+            "KyAnStudio", "VisualAssets",
+            SanitizeFolderName(CurrentSeriesPlan.SeriesTitle));
+
+        // Khởi tạo VisualPlanningViewModel nếu chưa có
+        if (VisualPlanningVm == null)
+        {
+            VisualPlanningVm = new VisualPlanningViewModel(_visualPlanningService);
+        }
+
+        // Gom tất cả scenes từ tập đầu để tính usage (dùng tập 1 nếu chưa sinh kịch bản)
+        var allScenes = new List<SceneItem>();
+
+        // Nạp dữ liệu characters + locations từ SeriesPlan
+        var characters = CurrentSeriesPlan.Characters ?? new System.Collections.ObjectModel.ObservableCollection<CharacterProfile>();
+        var locations = CurrentSeriesPlan.Locations ?? new System.Collections.ObjectModel.ObservableCollection<LocationProfile>();
+
+        VisualPlanningVm.Initialize(
+            characters,
+            locations,
+            allScenes,
+            outputDir,
+            ActualAspectRatio,
+            null);
+
+        CurrentStage = SeriesCreatorStage.VisualPlanning;
+        BatchStatusText = $"🎨 Đã mở Visual Planning Studio — {characters.Count} nhân vật, {locations.Count} địa điểm. Hãy tạo và duyệt ảnh trước khi sản xuất!";
+    }
+
+    [RelayCommand]
+    private void BackToSeriesPlan()
+    {
+        CurrentStage = SeriesCreatorStage.SeriesPlan;
+    }
+
+    [RelayCommand]
+    private void ConfirmVisualPlanningAndProceed()
+    {
+        if (VisualPlanningVm == null) return;
+        VisualPlanningVm.ConfirmStartProductionCommand.Execute(null);
+
+        if (VisualPlanningVm.IsApprovalGatePassed)
+        {
+            CurrentStage = SeriesCreatorStage.ReadyToGenerate;
+            BatchStatusText = "✅ Visual Planning đã duyệt! Sẵn sàng sinh kịch bản chi tiết và ảnh hàng loạt.";
+        }
+    }
+
+    private static string SanitizeFolderName(string name)
+    {
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+        return name.Length > 50 ? name[..50] : name;
     }
 
     /// <summary>
@@ -636,6 +746,25 @@ public partial class SeriesCreatorViewModel : ObservableObject
             MessageBox.Show("Chưa có dàn ý Series. Vui lòng bấm 'Lập Kế Hoạch Chuỗi' trước!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+
+        // ── APPROVAL GATE CHECK ─────────────────────────────────────────────
+        // Chỉ bỏ qua nếu VisualPlanningVm chưa được khởi tạo (trường hợp legacy)
+        if (VisualPlanningVm != null && !VisualPlanningVm.IsApprovalGatePassed)
+        {
+            VisualPlanningVm.RefreshApprovalGateCommand.Execute(null);
+            var errors = VisualPlanningVm.ApprovalGateErrors;
+            if (errors.Count > 0)
+            {
+                var errorMsg = string.Join("\n", errors.Take(5));
+                var forceSkip = MessageBox.Show(
+                    $"⚠️ Approval Gate: Còn {errors.Count} điều kiện chưa đáp ứng:\n\n{errorMsg}\n\nBạn có chắc muốn BỎ QUA Visual Planning Studio và sinh kịch bản ngay?",
+                    "Approval Gate — Cảnh báo",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+                if (forceSkip == MessageBoxResult.No) return;
+            }
+        }
+        // ────────────────────────────────────────────────────────────────────
 
         IsGeneratingEpisodes = true;
         BatchProgress = 0;

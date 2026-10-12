@@ -71,6 +71,19 @@ public partial class SeriesProject : ObservableObject
     [JsonPropertyName("episodes")]
     public ObservableCollection<EpisodeItem> Episodes { get; set; } = new();
 
+    // ── Visual Planning Studio ───────────────────────────────────────────────
+    /// <summary>Visual Style Bible cho cả dự án — phải được duyệt trước khi sản xuất.</summary>
+    [JsonPropertyName("visual_style_bible")]
+    public VisualStyleBible VisualStyleBible { get; set; } = new();
+
+    /// <summary>True khi tất cả tài sản đã qua Approval Gate.</summary>
+    [ObservableProperty]
+    [JsonPropertyName("visual_planning_approved")]
+    private bool _visualPlanningApproved;
+
+    [JsonPropertyName("scene_previews")]
+    public List<ScenePreviewItem> ScenePreviews { get; set; } = new();
+
     /// <summary>
     /// Lưu cấu hình dự án Series thành file .json
     /// </summary>

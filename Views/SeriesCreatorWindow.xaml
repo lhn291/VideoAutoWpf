@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:viewmodels="clr-namespace:VideoAutoWpf.ViewModels"
         xmlns:models="clr-namespace:VideoAutoWpf.Models"
+        xmlns:components="clr-namespace:VideoAutoWpf.Components"
         mc:Ignorable="d"
         Title="Tạo Chuỗi Video Nhiều Tập (Gemini AI Multi-Episode Engine)" 
         Height="760" Width="980"
@@ -91,9 +92,9 @@
             </Grid>
         </Border>
 
-        <!-- STEP 1: NHẬP CỐT TRUYỆN & CẤU HÌNH (Hiện khi chưa có plan) -->
+        <!-- STEP 1: NHẬP CỐT TRUYỆN & CẤU HÌNH (Hiện khi IsInputStage) -->
         <Border Grid.Row="1" Background="{StaticResource BgCard}" CornerRadius="10" Padding="16" BorderBrush="{StaticResource BorderDark}" BorderThickness="1"
-                Visibility="{Binding HasSeriesPlan, Converter={StaticResource InverseBoolToVisConverter}}">
+                Visibility="{Binding IsInputStage, Converter={StaticResource BoolToVisConverter}}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Orientation="Vertical">
                     <!-- GEMINI API KEY CONFIG PANEL (Cứu cánh khi Google Cloud Vertex AI gặp lỗi) -->
@@ -525,6 +526,49 @@
             </Grid>
         </Border>
 
+        <!-- STEP 3: VISUAL PLANNING STUDIO (Hiện khi IsVisualPlanningStage) -->
+        <Border Grid.Row="1" CornerRadius="10" BorderBrush="#FF4E3A" BorderThickness="2" Margin="0"
+                Visibility="{Binding IsVisualPlanningStage, Converter={StaticResource BoolToVisConverter}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Studio navigation bar -->
+                <Border Grid.Row="0" Background="#1A0A06" Padding="12,8" CornerRadius="10,10,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="← Về Dàn Ý"
+                                Command="{Binding BackToSeriesPlanCommand}"
+                                Padding="10,5" Background="#21262D" Foreground="#C9D1D9"
+                                BorderBrush="#30363D" BorderThickness="1" Cursor="Hand"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="🎨 VISUAL PLANNING STUDIO — " FontSize="13"
+                                       FontWeight="Bold" Foreground="#FF4E3A"/>
+                            <TextBlock Text="{Binding CurrentSeriesPlan.SeriesTitle}" FontSize="13"
+                                       FontWeight="Bold" Foreground="#F0F6FC"
+                                       TextTrimming="CharacterEllipsis" MaxWidth="300"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="✅ Duyệt &amp; Tiến Tới Sản Xuất"
+                                Command="{Binding ConfirmVisualPlanningAndProceedCommand}"
+                                Padding="12,5" Background="#1A4731" Foreground="#56D364"
+                                BorderBrush="#2EA043" BorderThickness="1" Cursor="Hand"
+                                FontWeight="SemiBold"/>
+                    </Grid>
+                </Border>
+
+                <!-- Visual Planning Studio Control -->
+                <components:VisualPlanningStudio Grid.Row="1"
+                    DataContext="{Binding VisualPlanningVm}"/>
+            </Grid>
+        </Border>
+
         <!-- FOOTER ACTIONS -->
         <Border Grid.Row="2" Background="{StaticResource BgCard}" CornerRadius="10" Padding="12,10" Margin="0,12,0,0" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
             <Grid>
@@ -552,14 +596,32 @@
                             Padding="12,6" Margin="0,0,8,0" Cursor="Hand"
                             ToolTip="Nạp danh sách các tập vào dự án để bạn tự biên tập kịch bản từng tập sau"/>
 
-                    <!-- Nút Sinh Toàn Bộ Kịch Bản Hàng Loạt -->
+                    <!-- Nút Mở Visual Planning Studio (Bước bắt buộc trước khi sinh kịch bản) -->
+                    <Button Content="🎨 Mở Visual Planning Studio"
+                            Command="{Binding OpenVisualPlanningStudioCommand}"
+                            Visibility="{Binding IsSeriesPlanStage, Converter={StaticResource BoolToVisConverter}}"
+                            IsEnabled="{Binding IsGeneratingEpisodes, Converter={StaticResource InverseBoolConverter}}"
+                            Style="{StaticResource HeroSeriesBtn}"
+                            Height="38" Padding="16,0" Margin="0,0,8,0"
+                            ToolTip="Tạo và duyệt ảnh nhân vật, địa điểm, phong cách trước khi sản xuất hàng loạt"/>
+
+                    <!-- Nút Sinh Toàn Bộ Kịch Bản Hàng Loạt (chỉ sau khi qua Approval Gate) -->
                     <Button Content="⚡ TẠO KỊCH BẢN TẤT CẢ CÁC TẬP (BATCH GENERATE)"
                             Command="{Binding GenerateAllEpisodesCommand}"
-                            Visibility="{Binding HasSeriesPlan, Converter={StaticResource BoolToVisConverter}}"
+                            Visibility="{Binding IsReadyToGenerateStage, Converter={StaticResource BoolToVisConverter}}"
                             IsEnabled="{Binding IsGeneratingEpisodes, Converter={StaticResource InverseBoolConverter}}"
                             Style="{StaticResource HeroSeriesBtn}"
                             Height="38" Padding="16,0" Margin="0,0,8,0"
                             ToolTip="AI sẽ tuần tự viết kịch bản chi tiết cho từng tập một và lưu vào dự án chuỗi"/>
+
+                    <!-- Nút Sinh kịch bản ngay (không qua Visual Planning - ẩn khi Visual Planning đang mở) -->
+                    <Button Content="⚡ TẠO KỊCH BẢN TẤT CẢ"
+                            Command="{Binding GenerateAllEpisodesCommand}"
+                            Visibility="{Binding IsSeriesPlanStage, Converter={StaticResource BoolToVisConverter}}"
+                            IsEnabled="{Binding IsGeneratingEpisodes, Converter={StaticResource InverseBoolConverter}}"
+                            Padding="12,6" Margin="0,0,8,0" Cursor="Hand"
+                            Background="#21262D" Foreground="#6E7681" BorderBrush="#30363D" BorderThickness="1"
+                            ToolTip="Sinh kịch bản ngay (bỏ qua Visual Planning Studio — không được khuyến nghị)"/>
 
                     <!-- Nút Đóng -->
                     <Button Content="Đóng" Click="CloseButton_Click"
