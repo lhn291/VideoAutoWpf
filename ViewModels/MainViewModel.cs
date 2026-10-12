@@ -1522,6 +1522,22 @@ public partial class MainViewModel : ObservableObject
                             }
                         }
 
+                        // Fallback: Nếu không có nhân vật hoặc không có ảnh tham chiếu nhân vật, dùng ảnh tham chiếu địa điểm
+                        if (referenceImagePath == null && CurrentSeries?.Locations != null)
+                        {
+                            var locId = shot.LocationId ?? s.LocationId;
+                            var locName = shot.LocationName ?? s.LocationName;
+                            var location = CurrentSeries.Locations.FirstOrDefault(l =>
+                                (!string.IsNullOrEmpty(locId) && l.Id == locId) ||
+                                (!string.IsNullOrEmpty(locName) && l.Name == locName));
+                            if (location != null && !string.IsNullOrEmpty(location.ReferenceImagePath) &&
+                                File.Exists(location.ReferenceImagePath))
+                            {
+                                referenceImagePath = location.ReferenceImagePath;
+                                AppendLog($"[V2 Continuity] Cảnh #{sNum} Shot {shot.ShotCode}: Dùng ảnh tham chiếu địa điểm '{location.Name}'.");
+                            }
+                        }
+
                         try
                         {
                             await _imagenService.GenerateShotImageAsync(

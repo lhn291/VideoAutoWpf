@@ -124,9 +124,26 @@ public partial class CharacterProfile : ObservableObject
     [JsonIgnore]
     public bool HasAnyImage => PortraitAsset.HasImage || FullBodyAsset.HasImage;
 
+    [JsonIgnore]
+    public bool HasImage => HasAnyImage;
+
+    [JsonIgnore]
+    public bool CanApprove => HasAnyImage;
+
     public string DisplayTitle => string.IsNullOrWhiteSpace(Role) ? Name : $"{Name} • {Role}";
     public string DisplaySummary => $"{GenderAge} • {OutfitVn}";
     public string SceneCountText => ExpectedSceneCount > 0 ? $"{ExpectedSceneCount} cảnh" : "";
+
+    public void NotifyImageUpdated()
+    {
+        OnPropertyChanged(nameof(DisplayImagePath));
+        OnPropertyChanged(nameof(HasAnyImage));
+        OnPropertyChanged(nameof(HasImage));
+        OnPropertyChanged(nameof(CanApprove));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(IsApproved));
+        OnPropertyChanged(nameof(IsLocked));
+    }
 
     /// <summary>
     /// Đánh dấu tất cả scene phụ thuộc là NeedsReview khi profile thay đổi.
@@ -138,5 +155,6 @@ public partial class CharacterProfile : ObservableObject
             ApprovalStatus = AssetApprovalStatus.NeedsReview;
         PortraitAsset.MarkNeedsReview();
         FullBodyAsset.MarkNeedsReview();
+        NotifyImageUpdated();
     }
 }

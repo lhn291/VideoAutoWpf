@@ -782,6 +782,17 @@ public partial class SeriesCreatorViewModel : ObservableObject
             ContentAnalysis = CurrentSeriesPlan.ContentAnalysis
         };
 
+        if (VisualPlanningVm != null)
+        {
+            seriesProject.VisualPlanningApproved = VisualPlanningVm.IsApprovalGatePassed;
+            seriesProject.VisualStyleBible = VisualPlanningVm.StyleBible;
+            seriesProject.ScenePreviews = VisualPlanningVm.ScenePreviews.ToList();
+        }
+        else if (CurrentSeriesPlan.VisualStyleBible != null)
+        {
+            seriesProject.VisualStyleBible = CurrentSeriesPlan.VisualStyleBible;
+        }
+
         if (CurrentSeriesPlan.Characters != null)
         {
             foreach (var ch in CurrentSeriesPlan.Characters)
@@ -854,6 +865,23 @@ public partial class SeriesCreatorViewModel : ObservableObject
                 int sIdx = 1;
                 foreach (var sc in ws.Scenes)
                 {
+                    var charIds = new List<string>();
+                    if (sc.CharactersPresent != null && CurrentSeriesPlan.Characters != null)
+                    {
+                        foreach (var cp in sc.CharactersPresent)
+                        {
+                            var matched = CurrentSeriesPlan.Characters.FirstOrDefault(c =>
+                                c.Name.Equals(cp, StringComparison.OrdinalIgnoreCase) ||
+                                c.Id.Equals(cp, StringComparison.OrdinalIgnoreCase) ||
+                                c.Name.Contains(cp, StringComparison.OrdinalIgnoreCase) ||
+                                cp.Contains(c.Name, StringComparison.OrdinalIgnoreCase));
+                            if (matched != null && !charIds.Contains(matched.Id))
+                                charIds.Add(matched.Id);
+                            else if (!string.IsNullOrWhiteSpace(cp) && !charIds.Contains(cp))
+                                charIds.Add(cp);
+                        }
+                    }
+
                     epItem.Scenes.Add(new SceneItem
                     {
                         Index = sIdx++,
@@ -863,6 +891,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
                         CharactersPresentText = sc.CharactersPresent != null && sc.CharactersPresent.Count > 0
                             ? string.Join(", ", sc.CharactersPresent)
                             : "🏙️ Ngoại cảnh / Hiện trường",
+                        CharacterIdsPresent = charIds,
                         LocationId = sc.LocationId,
                         LocationName = sc.LocationName,
                         Status = "Đã sinh kịch bản"
@@ -916,8 +945,33 @@ public partial class SeriesCreatorViewModel : ObservableObject
             GlobalStyleKey = CurrentSeriesPlan.SuggestedStyle,
             GlobalVoice = CurrentSeriesPlan.SuggestedVoice,
             AspectRatio = ActualAspectRatio,
-            CharacterBibleRules = CurrentSeriesPlan.CharacterBible
+            CharacterBibleRules = CurrentSeriesPlan.CharacterBible,
+            StoryBlueprint = CurrentSeriesPlan.StoryBlueprint,
+            ContentAnalysis = CurrentSeriesPlan.ContentAnalysis
         };
+
+        if (VisualPlanningVm != null)
+        {
+            seriesProject.VisualPlanningApproved = VisualPlanningVm.IsApprovalGatePassed;
+            seriesProject.VisualStyleBible = VisualPlanningVm.StyleBible;
+            seriesProject.ScenePreviews = VisualPlanningVm.ScenePreviews.ToList();
+        }
+        else if (CurrentSeriesPlan.VisualStyleBible != null)
+        {
+            seriesProject.VisualStyleBible = CurrentSeriesPlan.VisualStyleBible;
+        }
+
+        if (CurrentSeriesPlan.Characters != null)
+        {
+            foreach (var ch in CurrentSeriesPlan.Characters)
+                seriesProject.Characters.Add(ch);
+        }
+
+        if (CurrentSeriesPlan.Locations != null)
+        {
+            foreach (var loc in CurrentSeriesPlan.Locations)
+                seriesProject.Locations.Add(loc);
+        }
 
         foreach (var ep in CurrentSeriesPlan.Episodes)
         {

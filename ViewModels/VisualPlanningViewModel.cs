@@ -151,6 +151,13 @@ public partial class VisualPlanningViewModel : ObservableObject
             foreach (var p in previews) ScenePreviews.Add(p);
         }
 
+        if (Characters.Count > 0 && SelectedCharacter == null)
+            SelectedCharacter = Characters[0];
+        if (Locations.Count > 0 && SelectedLocation == null)
+            SelectedLocation = Locations[0];
+        if (ScenePreviews.Count > 0 && SelectedPreview == null)
+            SelectedPreview = ScenePreviews[0];
+
         RefreshApprovalGate();
         RefreshCounters();
         StatusText = $"✅ Đã nạp {Characters.Count} nhân vật và {Locations.Count} địa điểm. Bắt đầu tạo ảnh mẫu!";
@@ -196,6 +203,7 @@ public partial class VisualPlanningViewModel : ObservableObject
             Log($"⏳ Đang tạo ảnh chân dung cho {ch.Name}...");
             await _planningService.GenerateCharacterPortraitAsync(
                 ch, _outputDir, StyleBible.BuildPromptPrefix(), "1:1", Log, _cts.Token);
+            ch.NotifyImageUpdated();
             RefreshCounters();
             RefreshApprovalGate();
             Log($"✅ Đã tạo ảnh chân dung {ch.Name}. Hãy xem và duyệt!");
@@ -219,6 +227,9 @@ public partial class VisualPlanningViewModel : ObservableObject
             Log($"⏳ Đang tạo ảnh toàn thân cho {ch.Name}...");
             await _planningService.GenerateCharacterFullBodyAsync(
                 ch, _outputDir, StyleBible.BuildPromptPrefix(), "2:3", Log, _cts.Token);
+            ch.NotifyImageUpdated();
+            RefreshCounters();
+            RefreshApprovalGate();
             Log($"✅ Đã tạo ảnh toàn thân {ch.Name}.");
         }
         catch (OperationCanceledException) { Log("⛔ Đã hủy."); }
@@ -247,6 +258,7 @@ public partial class VisualPlanningViewModel : ObservableObject
 
                 await _planningService.GenerateCharacterPortraitAsync(
                     ch, _outputDir, StyleBible.BuildPromptPrefix(), "1:1", Log, _cts.Token);
+                ch.NotifyImageUpdated();
                 done++;
                 await Task.Delay(500, _cts.Token); // đệm nhỏ giữa các request
             }
@@ -269,9 +281,27 @@ public partial class VisualPlanningViewModel : ObservableObject
 
         ch.PortraitAsset.ApproveLatest();
         ch.ApprovalStatus = AssetApprovalStatus.Approved;
+        ch.ReferenceImagePath = ch.PortraitAsset.DisplayImagePath;
+        ch.NotifyImageUpdated();
         RefreshCounters();
         RefreshApprovalGate();
         Log($"✅ Đã duyệt ảnh chân dung: {ch.Name}");
+    }
+
+    [RelayCommand]
+    private void ApproveCharacterFullBody(CharacterProfile? character)
+    {
+        var ch = character ?? SelectedCharacter;
+        if (ch == null) return;
+        if (!ch.FullBodyAsset.HasImage) { MessageBox.Show("Chưa có ảnh toàn thân để duyệt.", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information); return; }
+
+        ch.FullBodyAsset.ApproveLatest();
+        if (string.IsNullOrEmpty(ch.ReferenceImagePath))
+            ch.ReferenceImagePath = ch.FullBodyAsset.DisplayImagePath;
+        ch.NotifyImageUpdated();
+        RefreshCounters();
+        RefreshApprovalGate();
+        Log($"✅ Đã duyệt ảnh toàn thân: {ch.Name}");
     }
 
     [RelayCommand]
@@ -280,6 +310,7 @@ public partial class VisualPlanningViewModel : ObservableObject
         var ch = character ?? SelectedCharacter;
         if (ch == null) return;
         ch.ApprovalStatus = AssetApprovalStatus.Pending;
+        ch.NotifyImageUpdated();
         Log($"🔄 Đã đặt lại trạng thái {ch.Name} — hãy chỉnh sửa mô tả và tạo lại ảnh.");
     }
 
@@ -295,6 +326,7 @@ public partial class VisualPlanningViewModel : ObservableObject
         {
             ch.MarkDependentScenesForReview();
             ch.ApprovalStatus = AssetApprovalStatus.AwaitingApproval;
+            ch.NotifyImageUpdated();
             Log($"⚠️ Đã mở khóa hồ sơ {ch.Name}. Hãy chỉnh sửa và duyệt lại.");
         }
     }
@@ -317,6 +349,7 @@ public partial class VisualPlanningViewModel : ObservableObject
             Log($"⏳ Đang tạo ảnh địa điểm: {loc.Name}...");
             await _planningService.GenerateLocationImageAsync(
                 loc, _outputDir, StyleBible.BuildPromptPrefix(), "16:9", Log, _cts.Token);
+            loc.NotifyImageUpdated();
             RefreshCounters();
             RefreshApprovalGate();
             Log($"✅ Đã tạo ảnh địa điểm {loc.Name}. Hãy xem và duyệt!");
@@ -342,6 +375,7 @@ public partial class VisualPlanningViewModel : ObservableObject
                 ProgressValue = (done / (double)Locations.Count) * 100;
                 await _planningService.GenerateLocationImageAsync(
                     loc, _outputDir, StyleBible.BuildPromptPrefix(), "16:9", Log, _cts.Token);
+                loc.NotifyImageUpdated();
                 done++;
                 await Task.Delay(500, _cts.Token);
             }
@@ -364,6 +398,8 @@ public partial class VisualPlanningViewModel : ObservableObject
 
         loc.LocationAsset.ApproveLatest();
         loc.ApprovalStatus = AssetApprovalStatus.Approved;
+        loc.ReferenceImagePath = loc.LocationAsset.DisplayImagePath;
+        loc.NotifyImageUpdated();
         RefreshCounters();
         RefreshApprovalGate();
         Log($"✅ Đã duyệt ảnh địa điểm: {loc.Name}");

@@ -39,6 +39,9 @@ public partial class SeriesPlan : ObservableObject
     [JsonPropertyName("suggested_voice")]
     private string _suggestedVoice = "vi-VN-Neural2-D";
 
+    [JsonPropertyName("visual_style_bible")]
+    public VisualStyleBible? VisualStyleBible { get; set; }
+
     [JsonPropertyName("episodes")]
     public ObservableCollection<EpisodePlanItem> Episodes { get; set; } = new();
 }

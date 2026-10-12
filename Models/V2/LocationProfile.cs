@@ -115,13 +115,27 @@ public partial class LocationProfile : ObservableObject
     [JsonIgnore]
     public bool HasImage => LocationAsset.HasImage;
 
+    [JsonIgnore]
+    public bool CanApprove => HasImage;
+
     public string DisplayTitle => string.IsNullOrWhiteSpace(ArchitecturalStyle) ? Name : $"{Name} ({ArchitecturalStyle})";
     public string SceneCountText => ExpectedSceneCount > 0 ? $"{ExpectedSceneCount} cảnh" : "";
+
+    public void NotifyImageUpdated()
+    {
+        OnPropertyChanged(nameof(DisplayImagePath));
+        OnPropertyChanged(nameof(HasImage));
+        OnPropertyChanged(nameof(CanApprove));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(IsApproved));
+        OnPropertyChanged(nameof(IsLocked));
+    }
 
     public void MarkDependentScenesForReview()
     {
         if (ApprovalStatus == AssetApprovalStatus.Approved)
             ApprovalStatus = AssetApprovalStatus.NeedsReview;
         LocationAsset.MarkNeedsReview();
+        NotifyImageUpdated();
     }
 }
