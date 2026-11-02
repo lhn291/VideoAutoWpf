@@ -983,8 +983,8 @@ public class GeminiScriptService
     {
         var apiKey = ApiKey;
         var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
-            ? new[] { "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash" }
-            : new[] { "gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-flash-002", "gemini-3.5-flash-lite" };
+            ? new[] { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.8-flash" }
+            : new[] { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.8-flash" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
@@ -1038,7 +1038,7 @@ public class GeminiScriptService
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(TimeSpan.FromSeconds(60));
+                cts.CancelAfter(TimeSpan.FromSeconds(25));
 
                 onStatus?.Invoke($"AI ({modelName}) đang phân tích và lên dàn ý...");
                 using var response = await _httpClient.SendAsync(request, cts.Token);

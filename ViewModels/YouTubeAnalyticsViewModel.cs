@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -242,23 +242,28 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
 
         try
         {
+            StatusMessage = "🔍 Đang nhận diện kênh YouTube...";
             var channelId = await _ytService.ResolveChannelIdAsync(ChannelInput);
+
+            StatusMessage = "📊 Đang tải thông tin chi tiết kênh...";
             ChannelInfo = await _ytService.GetChannelInfoAsync(channelId);
             HasChannelResult = true;
 
-            StatusMessage = $"Đang tải top video của {ChannelInfo.Title}...";
+            StatusMessage = $"🎬 Đang tải danh sách video của {ChannelInfo.Title}...";
 
-            // Load top videos
+            // Tải song song Top Video và Video Mới Nhất để tăng tốc gấp đôi
+            var topVidsTask = _ytService.GetTopVideosAsync(channelId, 15);
+            var latestVidsTask = _ytService.GetLatestVideosAsync(channelId, 15);
+
+            await Task.WhenAll(topVidsTask, latestVidsTask);
+
             ChannelTopVideos.Clear();
-            var topVids = await _ytService.GetTopVideosAsync(channelId, 15);
-            foreach (var v in topVids) ChannelTopVideos.Add(v);
+            foreach (var v in await topVidsTask) ChannelTopVideos.Add(v);
 
-            // Load latest videos
             ChannelLatestVideos.Clear();
-            var latestVids = await _ytService.GetLatestVideosAsync(channelId, 15);
-            foreach (var v in latestVids) ChannelLatestVideos.Add(v);
+            foreach (var v in await latestVidsTask) ChannelLatestVideos.Add(v);
 
-            StatusMessage = $"✅ Đã phân tích xong kênh {ChannelInfo.Title} ({ChannelInfo.SubscriberDisplay} subscribers)";
+            StatusMessage = $"✅ Đã phân tích xong kênh {ChannelInfo.Title} ({ChannelInfo.SubscriberDisplay} subscribers, {ChannelTopVideos.Count} video)";
         }
         catch (Exception ex)
         {

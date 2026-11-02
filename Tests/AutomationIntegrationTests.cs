@@ -513,4 +513,31 @@ public class AutomationIntegrationTests : IDisposable
         Assert.NotEmpty(analysis.Summary);
         Assert.NotEmpty(analysis.TitleFormulas);
     }
+
+    [Fact]
+    public async Task Test_23_ResolveChannelIdAsync()
+    {
+        var auth = new VideoAutoWpf.Services.GoogleAuthService();
+        var yt = new VideoAutoWpf.Services.YouTubeAnalyticsService(auth);
+        var id = await yt.ResolveChannelIdAsync("https://www.youtube.com/@MrBeast");
+        Assert.NotNull(id);
+        Assert.StartsWith("UC", id);
+    }
+
+    [Fact]
+    public async Task Test_24_ChannelFullAnalysis()
+    {
+        var auth = new VideoAutoWpf.Services.GoogleAuthService();
+        var yt = new VideoAutoWpf.Services.YouTubeAnalyticsService(auth);
+        var channelId = await yt.ResolveChannelIdAsync("https://www.youtube.com/@MrBeast");
+        var info = await yt.GetChannelInfoAsync(channelId);
+        Assert.NotNull(info);
+        Assert.NotEmpty(info.Title);
+
+        var topVids = await yt.GetTopVideosAsync(channelId, 5);
+        Assert.NotEmpty(topVids);
+
+        var latestVids = await yt.GetLatestVideosAsync(channelId, 5);
+        Assert.NotEmpty(latestVids);
+    }
 }

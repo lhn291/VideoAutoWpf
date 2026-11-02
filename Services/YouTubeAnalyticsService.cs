@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -130,15 +130,15 @@ public class YouTubeAnalyticsService
         return new YouTubeChannelInfo
         {
             ChannelId = ch.Id,
-            Title = ch.Snippet.Title ?? string.Empty,
-            Description = ch.Snippet.Description ?? string.Empty,
+            Title = ch.Snippet?.Title ?? string.Empty,
+            Description = ch.Snippet?.Description ?? string.Empty,
             ThumbnailUrl = ch.Snippet.Thumbnails?.Medium?.Url ?? ch.Snippet.Thumbnails?.Default__?.Url ?? string.Empty,
-            CustomUrl = ch.Snippet.CustomUrl ?? string.Empty,
+            CustomUrl = ch.Snippet?.CustomUrl ?? string.Empty,
             PublishedAt = SafeParsePublishedAt(ch.Snippet.PublishedAtRaw),
-            SubscriberCount = (long)(ch.Statistics.SubscriberCount ?? 0),
-            ViewCount = (long)(ch.Statistics.ViewCount ?? 0),
-            VideoCount = (long)(ch.Statistics.VideoCount ?? 0),
-            Country = ch.Snippet.Country ?? "N/A"
+            SubscriberCount = (long)(ch.Statistics?.SubscriberCount ?? 0),
+            ViewCount = (long)(ch.Statistics?.ViewCount ?? 0),
+            VideoCount = (long)(ch.Statistics?.VideoCount ?? 0),
+            Country = ch.Snippet?.Country ?? "N/A"
         };
     }
 
@@ -168,7 +168,8 @@ public class YouTubeAnalyticsService
 
         var result = new ObservableCollection<YouTubeVideoInfo>();
         int rank = 1;
-        foreach (var v in videoResponse.Items.OrderByDescending(v => v.Statistics.ViewCount ?? 0))
+        if (videoResponse.Items != null)
+        foreach (var v in videoResponse.Items.OrderByDescending(v => v.Statistics?.ViewCount ?? 0))
         {
             result.Add(MapVideoToInfo(v, rank++));
         }
@@ -439,18 +440,18 @@ public class YouTubeAnalyticsService
         return new YouTubeVideoInfo
         {
             VideoId = v.Id,
-            Title = v.Snippet.Title ?? string.Empty,
-            Description = v.Snippet.Description ?? string.Empty,
+            Title = v.Snippet?.Title ?? string.Empty,
+            Description = v.Snippet?.Description ?? string.Empty,
             ThumbnailUrl = v.Snippet.Thumbnails?.Medium?.Url ?? v.Snippet.Thumbnails?.Default__?.Url ?? string.Empty,
-            ChannelTitle = v.Snippet.ChannelTitle ?? string.Empty,
-            ChannelId = v.Snippet.ChannelId ?? string.Empty,
+            ChannelTitle = v.Snippet?.ChannelTitle ?? string.Empty,
+            ChannelId = v.Snippet?.ChannelId ?? string.Empty,
             PublishedAt = SafeParsePublishedAt(v.Snippet?.PublishedAtRaw),
             Duration = ParseIsoDuration(v.ContentDetails?.Duration),
             ViewCount = (long)(v.Statistics?.ViewCount ?? 0),
             LikeCount = (long)(v.Statistics?.LikeCount ?? 0),
             CommentCount = (long)(v.Statistics?.CommentCount ?? 0),
-            Tags = v.Snippet.Tags != null ? string.Join(", ", v.Snippet.Tags) : string.Empty,
-            CategoryId = v.Snippet.CategoryId ?? string.Empty,
+            Tags = v.Snippet?.Tags != null ? string.Join(", ", v.Snippet.Tags) : string.Empty,
+            CategoryId = v.Snippet?.CategoryId ?? string.Empty,
             Rank = rank
         };
     }
@@ -522,7 +523,7 @@ public class YouTubeAnalyticsService
 
         try
         {
-            using var http = new HttpClient();
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             http.DefaultRequestHeaders.Add("Accept-Language", "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7");
             var url = $"https://www.youtube.com/watch?v={videoId.Trim()}";
