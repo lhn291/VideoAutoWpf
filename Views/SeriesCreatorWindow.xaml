@@ -369,11 +369,26 @@
                     </Grid>
 
                     <!-- Nút bắt đầu phân tích -->
-                    <Button Content="🤖 AI PHÂN TÍCH &amp; LẬP DÀN Ý CHUỖI VIDEO"
+                    <Button Content="{Binding PlanButtonText}"
                             Command="{Binding PlanSeriesCommand}"
                             IsEnabled="{Binding IsPlanningSeries, Converter={StaticResource InverseBoolConverter}}"
                             Style="{StaticResource HeroSeriesBtn}"
                             Height="48" Margin="0,6,0,0"/>
+
+                    <!-- Loading Progress Bar ngay dưới nút bấm khi đang phân tích -->
+                    <Border Visibility="{Binding IsPlanningSeries, Converter={StaticResource BoolToVisConverter}}"
+                            Background="#1e1e2e" BorderBrush="{StaticResource AccentBlue}" BorderThickness="1" CornerRadius="8"
+                            Padding="12,10" Margin="0,10,0,0">
+                        <StackPanel Orientation="Vertical">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="⏳ " FontSize="13" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding BatchStatusText}" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource AccentYellow}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ProgressBar IsIndeterminate="True" Height="6" Foreground="{StaticResource AccentBlue}" Background="#11111b" BorderThickness="0">
+                                <ProgressBar.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="3"/></Style></ProgressBar.Resources>
+                            </ProgressBar>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
         </Border>

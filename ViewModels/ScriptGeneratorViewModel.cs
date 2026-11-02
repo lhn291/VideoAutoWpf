@@ -588,7 +588,7 @@ public partial class ScriptGeneratorViewModel : ObservableObject
 
         try
         {
-            var plan = await _geminiService.GeneratePlanAsync(Topic.Trim());
+            var plan = await _geminiService.GeneratePlanAsync(Topic.Trim(), onStatus: msg => StatusText = msg);
 
             // Override style nếu user đã chọn trước (qua genre hoặc manual)
             if (SelectedStyleCard != null)

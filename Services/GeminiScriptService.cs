@@ -99,6 +99,70 @@ public class GeminiScriptService
     /// Project ID Google Cloud từ google_credentials.json.
     /// Dùng bởi các service phụ thuộc như VisualDirectorService để tránh hardcode.
     /// </summary>
+    private static readonly JsonSerializerOptions _geminiJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
+    /// <summary>
+    /// Trích xuất khối JSON sạch từ phản hồi của AI (loại bỏ markdown, text hội thoại bên ngoài)
+    /// </summary>
+    public static string CleanAndExtractJson(string rawText)
+    {
+        if (string.IsNullOrWhiteSpace(rawText)) return string.Empty;
+        var text = rawText.Trim();
+
+        // 1. Bóc tách markdown ```json ... ``` hoặc ``` ... ```
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"```(?:json)?\s*([\s\S]*?)\s*```", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (match.Success)
+        {
+            text = match.Groups[1].Value.Trim();
+        }
+
+        // 2. Tìm vị trí ngoặc JSON ngoài cùng { } hoặc [ ]
+        int firstBrace = text.IndexOf('{');
+        int firstBracket = text.IndexOf('[');
+
+        int start = -1;
+        int end = -1;
+
+        if (firstBrace >= 0 && (firstBracket < 0 || firstBrace < firstBracket))
+        {
+            start = firstBrace;
+            end = text.LastIndexOf('}');
+        }
+        else if (firstBracket >= 0)
+        {
+            start = firstBracket;
+            end = text.LastIndexOf(']');
+        }
+
+        if (start >= 0 && end > start)
+        {
+            text = text.Substring(start, end - start + 1);
+        }
+
+        return text.Trim();
+    }
+
+    /// <summary>
+    /// Lấy token xác thực: nếu đã có Gemini API Key thì không cần gọi Service Account token để tránh lỗi/treo
+    /// </summary>
+    private async Task<(string token, string projectId)> ResolveAuthCredentialsAsync()
+    {
+        var projectId = _authService.ProjectId;
+        if (!string.IsNullOrWhiteSpace(ApiKey))
+        {
+            return (string.Empty, projectId);
+        }
+        var token = await _authService.GetAccessTokenAsync();
+        return (token, projectId);
+    }
+
     public string ProjectId => _authService.ProjectId ?? string.Empty;
 
     /// <summary>
@@ -115,8 +179,9 @@ public class GeminiScriptService
         if (string.IsNullOrWhiteSpace(topicOrContent))
             throw new ArgumentException("Nội dung hoặc chủ đề không được để trống.", nameof(topicOrContent));
 
-        var token = await _authService.GetAccessTokenAsync();
-        var projectId = _authService.ProjectId;
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+        
+        //
 
         var systemInstruction =
             "You are a master investigative documentary director, narrative architect, and screenplay consultant. " +
@@ -263,13 +328,15 @@ public class GeminiScriptService
     public async Task<ScriptPlan> GeneratePlanAsync(
         string topic,
         string location = "us-central1",
+        Action<string>? onStatus = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(topic))
             throw new ArgumentException("Chủ đề không được để trống.", nameof(topic));
 
-        var token = await _authService.GetAccessTokenAsync();
-        var projectId = _authService.ProjectId;
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+        
+        //
 
         var systemInstruction =
             "You are an expert creative video planning consultant. " +
@@ -331,7 +398,7 @@ public class GeminiScriptService
         var userPrompt = $"Hãy lên kế hoạch chi tiết cho video về chủ đề sau:\n'{topic}'\n\n" +
                          "Phân tích chủ đề và đề xuất số cảnh, phong cách hình ảnh, tone giọng đọc, hiệu ứng camera phù hợp nhất.";
 
-        return await CallGeminiForJson<ScriptPlan>(systemInstruction, userPrompt, projectId, location, token, ct);
+        return await CallGeminiForJson<ScriptPlan>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
     }
 
     /// <summary>
@@ -347,8 +414,9 @@ public class GeminiScriptService
         if (string.IsNullOrWhiteSpace(topic))
             throw new ArgumentException("Chủ đề hoặc nội dung kịch bản không được để trống.", nameof(topic));
 
-        var token = await _authService.GetAccessTokenAsync();
-        var projectId = _authService.ProjectId;
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+        
+        //
 
         var chosenStyle = StylePrompts.TryGetValue(plan.SuggestedStyle, out var styleVal) ? styleVal : StylePrompts["dark-anime"];
         var numScenes = plan.SuggestedScenes > 0 ? plan.SuggestedScenes : 5;
@@ -458,8 +526,9 @@ public class GeminiScriptService
         string location = "us-central1",
         CancellationToken ct = default)
     {
-        var token = await _authService.GetAccessTokenAsync();
-        var projectId = _authService.ProjectId;
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+        
+        //
 
         var systemInstruction =
             "You are a top-tier viral content marketing expert and social media strategist specializing in TikTok, YouTube Shorts, and Facebook/Instagram Reels. " +
@@ -492,13 +561,15 @@ public class GeminiScriptService
         string toneOrPacing = "Kịch tính, dồn dập, giật gân (Dramatic / Thriller)",
         string aspectRatio = "9:16",
         string location = "us-central1",
+        Action<string>? onStatus = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(topicOrPremise))
             throw new ArgumentException("Chủ đề hoặc cốt truyện không được để trống.", nameof(topicOrPremise));
 
-        var token = await _authService.GetAccessTokenAsync();
-        var projectId = _authService.ProjectId;
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+        
+        //
 
         var systemInstruction =
             "You are an acclaimed showrunner, executive producer, and investigative crime documentary director. " +
@@ -559,7 +630,7 @@ public class GeminiScriptService
                          $"Tiêu đề mỗi tập PHẢI đặt theo mẫu: 'Tập 1: [Tên tập]', 'Tập 2: [Tên tập]', ..., 'Tập {totalEpisodes}: [Tên tập]'.\n" +
                          $"Đồng thời thiết lập đầy đủ mảng 'characters' và 'locations' chuẩn xác để các tập sau giữ trọn tính nhất quán!";
 
-        return await CallGeminiForJson<SeriesPlan>(systemInstruction, userPrompt, projectId, location, token, ct);
+        return await CallGeminiForJson<SeriesPlan>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
     }
 
     /// <summary>
@@ -576,8 +647,9 @@ public class GeminiScriptService
         string location = "us-central1",
         CancellationToken ct = default)
     {
-        var token = await _authService.GetAccessTokenAsync();
-        var projectId = _authService.ProjectId;
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+        
+        //
 
         var chosenStyle = StylePrompts.TryGetValue(seriesPlan.SuggestedStyle, out var styleVal) ? styleVal : StylePrompts["dark-anime"];
         var numScenes = episodePlan.SuggestedSceneCount > 0 ? episodePlan.SuggestedSceneCount : 6;
@@ -709,8 +781,9 @@ public class GeminiScriptService
         string location = "us-central1",
         CancellationToken ct = default)
     {
-        var token = await _authService.GetAccessTokenAsync();
-        var projectId = _authService.ProjectId;
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+        
+        //
 
         var videoListSummary = new StringBuilder();
         int idx = 1;
@@ -782,8 +855,9 @@ public class GeminiScriptService
         string location = "us-central1",
         CancellationToken ct = default)
     {
-        var token = await _authService.GetAccessTokenAsync();
-        var projectId = _authService.ProjectId;
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+        
+        //
 
         var systemInstruction =
             "Bạn là chuyên gia phân tích Viral Content YouTube. " +
@@ -810,17 +884,19 @@ public class GeminiScriptService
         string projectId,
         string location,
         string token,
-        CancellationToken ct) where T : class
+        CancellationToken ct = default,
+        Action<string>? onStatus = null) where T : class
     {
         var apiKey = ApiKey;
         var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
-            ? new[] { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash" }
-            : new[] { "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash" };
+            ? new[] { "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash" }
+            : new[] { "gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-flash-002", "gemini-3.5-flash-lite" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
         {
             if (ct.IsCancellationRequested) break;
+            onStatus?.Invoke($"Đang kết nối AI ({modelName})...");
 
             string endpoint;
             HttpRequestMessage request;
@@ -868,39 +944,47 @@ public class GeminiScriptService
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(TimeSpan.FromSeconds(25));
+                cts.CancelAfter(TimeSpan.FromSeconds(60));
 
+                onStatus?.Invoke($"AI ({modelName}) đang phân tích và lên dàn ý...");
                 using var response = await _httpClient.SendAsync(request, cts.Token);
                 var responseStr = await response.Content.ReadAsStringAsync(ct);
 
                 if (response.IsSuccessStatusCode)
                 {
                     using var doc = JsonDocument.Parse(responseStr);
-                    var candidates = doc.RootElement.GetProperty("candidates");
-                    if (candidates.GetArrayLength() > 0)
+                    if (doc.RootElement.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
                     {
-                        var textJson = candidates[0]
-                            .GetProperty("content")
-                            .GetProperty("parts")[0]
-                            .GetProperty("text")
-                            .GetString();
-
-                        if (!string.IsNullOrEmpty(textJson))
+                        var firstCandidate = candidates[0];
+                        if (firstCandidate.TryGetProperty("content", out var content) &&
+                            content.TryGetProperty("parts", out var parts) &&
+                            parts.GetArrayLength() > 0)
                         {
-                            var cleanJson = textJson.Trim();
-                            if (cleanJson.StartsWith("```json")) cleanJson = cleanJson[7..];
-                            if (cleanJson.StartsWith("```")) cleanJson = cleanJson[3..];
-                            if (cleanJson.EndsWith("```")) cleanJson = cleanJson[..^3];
-                            cleanJson = cleanJson.Trim();
-
-                            var result = JsonSerializer.Deserialize<T>(cleanJson, new JsonSerializerOptions
+                            string? textJson = null;
+                            foreach (var part in parts.EnumerateArray())
                             {
-                                PropertyNameCaseInsensitive = true
-                            });
+                                if (part.TryGetProperty("text", out var tProp))
+                                {
+                                    var textCandidate = tProp.GetString();
+                                    if (!string.IsNullOrEmpty(textCandidate))
+                                    {
+                                        textJson = textCandidate;
+                                        if (textCandidate.Contains('{') || textCandidate.Contains('[')) break;
+                                    }
+                                }
+                            }
 
-                            if (result != null)
+                            if (!string.IsNullOrEmpty(textJson))
                             {
-                                return result;
+                                var cleanJson = CleanAndExtractJson(textJson);
+                                if (!string.IsNullOrEmpty(cleanJson))
+                                {
+                                    var result = JsonSerializer.Deserialize<T>(cleanJson, _geminiJsonOptions);
+                                    if (result != null)
+                                    {
+                                        return result;
+                                    }
+                                }
                             }
                         }
                     }
@@ -910,13 +994,15 @@ public class GeminiScriptService
                     lastError = $"Model {modelName} returned {response.StatusCode}: {responseStr}";
                     if ((int)response.StatusCode == 503 || (int)response.StatusCode == 429)
                     {
+                        onStatus?.Invoke($"Máy chủ {modelName} phản hồi {response.StatusCode}, tự động chuyển model tiếp theo...");
                         await Task.Delay(800, ct);
                     }
                 }
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                lastError = $"Model {modelName} phản hồi chậm quá 25s.";
+                lastError = $"Model {modelName} phản hồi chậm quá 60s.";
+                onStatus?.Invoke($"Model {modelName} quá thời gian 60s, thử model khác...");
             }
             catch (Exception ex)
             {
@@ -955,8 +1041,9 @@ public class GeminiScriptService
         string location = "us-central1",
         CancellationToken ct = default)
     {
-        var token = await _authService.GetAccessTokenAsync();
-        var projectId = _authService.ProjectId;
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+        
+        //
 
         var systemInstruction =
             "Bạn là chuyên gia điều tra tội phạm học và nghiên cứu hồ sơ kỳ án thực tế. " +

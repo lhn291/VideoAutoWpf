@@ -408,4 +408,58 @@ public class AutomationIntegrationTests : IDisposable
         using var mutex2 = new Mutex(true, testMutexName, out bool isSecondCreated);
         Assert.False(isSecondCreated); // Không được phép tạo thêm instance thứ 2!
     }
+
+    [Fact]
+    public void Test_17_VisualPlanningViewModel_Init()
+    {
+        var auth = new VideoAutoWpf.Services.GoogleAuthService();
+        var gemini = new VideoAutoWpf.Services.GeminiScriptService(auth);
+        var imagen = new VideoAutoWpf.Services.VertexImagenService(auth);
+        var planning = new VideoAutoWpf.Services.VisualPlanningService(imagen, gemini);
+        var vm = new VideoAutoWpf.ViewModels.VisualPlanningViewModel(planning);
+
+        var chars = new List<VideoAutoWpf.Models.CharacterProfile>
+        {
+            new VideoAutoWpf.Models.CharacterProfile { Id = "c1", Name = "Lan" }
+        };
+        var locs = new List<VideoAutoWpf.Models.V2.LocationProfile>
+        {
+            new VideoAutoWpf.Models.V2.LocationProfile { Id = "l1", Name = "Hẻm" }
+        };
+        var scenes = new List<VideoAutoWpf.Models.SceneItem>
+        {
+            new VideoAutoWpf.Models.SceneItem { Index = 1, Text = "Lan ở hẻm", CharacterIdsPresent = new List<string> { "c1" }, LocationId = "l1" }
+        };
+
+        vm.Initialize(chars, locs, scenes, Path.GetTempPath(), "9:16");
+        Assert.Single(vm.Characters);
+        Assert.Single(vm.Locations);
+        Assert.NotEmpty(vm.ScenePreviews);
+    }
+
+    [Fact]
+    public void Test_18_CleanAndExtractJson()
+    {
+        // 1. Markdown code block
+        string md = "Here is the json:\n```json\n{\n  \"suggested_scenes\": 5\n}\n```\nHope it helps!";
+        string extracted = VideoAutoWpf.Services.GeminiScriptService.CleanAndExtractJson(md);
+        Assert.Equal("{\n  \"suggested_scenes\": 5\n}", extracted);
+
+        // 2. Extra spaces and comment
+        string raw = "   {\n \"a\": 1\n}   ";
+        Assert.Equal("{\n \"a\": 1\n}", VideoAutoWpf.Services.GeminiScriptService.CleanAndExtractJson(raw));
+    }
+
+    [Fact]
+    public async Task Test_19_GeneratePlanAsync_WithStatus()
+    {
+        var auth = new VideoAutoWpf.Services.GoogleAuthService();
+        var gemini = new VideoAutoWpf.Services.GeminiScriptService(auth);
+
+        string lastStatus = "";
+        var plan = await gemini.GeneratePlanAsync("Bí ẩn lăng mộ vua chúa cổ đại", onStatus: s => lastStatus = s);
+        Assert.NotNull(plan);
+        Assert.True(plan.SuggestedScenes >= 3);
+        Assert.NotEmpty(lastStatus);
+    }
 }

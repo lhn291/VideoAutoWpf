@@ -253,6 +253,9 @@ public partial class SeriesCreatorViewModel : ObservableObject
     private bool _isPlanningSeries;
 
     [ObservableProperty]
+    private string _planButtonText = "🤖 AI PHÂN TÍCH & LẬP DÀN Ý CHUỖI VIDEO";
+
+    [ObservableProperty]
     private bool _isGeneratingEpisodes;
 
     [ObservableProperty]
@@ -456,6 +459,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
         if (SelectedScenesPerEpisode < 3) SelectedScenesPerEpisode = 3;
 
         IsPlanningSeries = true;
+        PlanButtonText = "⏳ ĐANG PHÂN TÍCH & LẬP DÀN Ý (XIN ĐỢI)...";
         BatchStatusText = $"⏳ AI đang phân tích cốt truyện, lập dàn ý {SelectedEpisodeCount} tập (~{SelectedScenesPerEpisode} cảnh/tập)...";
 
         try
@@ -464,7 +468,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
             var voiceKey = SelectedVoiceCard?.Key ?? "vi-VN-Neural2-D";
 
             SeriesPlan? plan = null;
-            for (int attempt = 1; attempt <= 3; attempt++)
+            for (int attempt = 1; attempt <= 2; attempt++)
             {
                 try
                 {
@@ -475,15 +479,16 @@ public partial class SeriesCreatorViewModel : ObservableObject
                         styleKey,
                         voiceKey,
                         SelectedSeriesTone,
-                        ActualAspectRatio);
+                        ActualAspectRatio,
+                        onStatus: msg => BatchStatusText = msg);
                     if (plan != null && plan.Episodes.Count > 0)
                         break;
                 }
-                catch
+                catch (Exception ex)
                 {
-                    if (attempt == 3) throw;
-                    BatchStatusText = $"⏳ Đang thử lại lập dàn ý (Lần {attempt + 1}/3 do máy chủ AI tải nặng)...";
-                    await Task.Delay(2500);
+                    if (attempt == 2) throw;
+                    BatchStatusText = $"⏳ Đang thử lại lập dàn ý (Lần {attempt + 1}/2 do {ex.Message})...";
+                    await Task.Delay(2000);
                 }
             }
 
@@ -551,6 +556,7 @@ public partial class SeriesCreatorViewModel : ObservableObject
         finally
         {
             IsPlanningSeries = false;
+            PlanButtonText = "🤖 AI PHÂN TÍCH & LẬP DÀN Ý CHUỖI VIDEO";
         }
     }
 
