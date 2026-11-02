@@ -1,0 +1,263 @@
+<Window x:Class="VideoAutoWpf.Views.AutomationDashboardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:viewmodels="clr-namespace:VideoAutoWpf.ViewModels"
+        mc:Ignorable="d"
+        Title="Bảng Điều Khiển Tự Động Vận Hành &amp; Phê Duyệt Telegram (Mini PC Auto Run)"
+        Height="820" Width="1100"
+        MinHeight="700" MinWidth="950"
+        WindowState="Maximized"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgDark}"
+        Foreground="{StaticResource TextPrimary}"
+        FontFamily="Segoe UI, Segoe UI Variable, Arial"
+        d:DataContext="{d:DesignInstance Type=viewmodels:MainViewModel}">
+
+    <Window.Resources>
+        <Style x:Key="StatCard" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource BgCard}"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="14,10"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderDark}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+        </Style>
+
+        <Style x:Key="SectionBorder" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource BgCard}"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="14"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderDark}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <!-- 0: Header -->
+            <RowDefinition Height="Auto"/>
+            <!-- 1: Stat Counters -->
+            <RowDefinition Height="Auto"/>
+            <!-- 2: Shutdown Banner (if pending) -->
+            <RowDefinition Height="Auto"/>
+            <!-- 3: Main Content (Tabs: Jobs Queue vs Settings) -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 0. HEADER -->
+        <Border Grid.Row="0" Style="{StaticResource SectionBorder}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Vertical">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="🤖" FontSize="22" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="AUTO RUN &amp; TELEGRAM APPROVAL STUDIO" FontSize="16" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" VerticalAlignment="Center"/>
+                        <Border Background="#2a2542" CornerRadius="6" Padding="8,3" Margin="12,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding JobScheduler.SchedulerStatus, StringFormat='Trạng thái: {0}'}" FontSize="11" FontWeight="Bold" Foreground="#cba6f7"/>
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="Quản lý chu trình tự vận hành mini PC: Khôi phục SQLite ➔ Tạo video AI ➔ Telegram duyệt từ xa ➔ Đăng TikTok/YouTube ➔ Safe Shutdown an toàn."
+                               FontSize="11.5" Foreground="{StaticResource TextSecondary}" Margin="32,3,0,0"/>
+                </StackPanel>
+
+                <!-- Action Controls -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Toggle Auto Run -->
+                    <Button Command="{Binding ToggleAutoRunCommand}" 
+                            Style="{StaticResource BtnPrimary}" Padding="14,7" Margin="0,0,8,0" Height="36" Cursor="Hand"
+                            Background="{Binding AutomationConfig.AutoRunEnabled, Converter={StaticResource BoolToVisConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚡" Margin="0,0,6,0"/>
+                            <TextBlock Text="BẬT / TẮT AUTO RUN" FontWeight="Bold" FontSize="11.5"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Manual Shutdown Request -->
+                    <Button Command="{Binding RequestManualShutdownCommand}" 
+                            Style="{StaticResource BtnDanger}" Padding="14,7" Height="36" Cursor="Hand"
+                            ToolTip="Kiểm tra 12 điều kiện an toàn và kích hoạt tắt máy">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🔌" Margin="0,0,6,0"/>
+                            <TextBlock Text="YÊU CẦU TẮT MÁY" FontWeight="Bold" FontSize="11.5"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 1. STAT COUNTERS -->
+        <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Pending -->
+            <Border Grid.Column="0" Style="{StaticResource StatCard}">
+                <StackPanel>
+                    <TextBlock Text="⏳ HÀNG ĐỢI (PENDING)" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}"/>
+                    <TextBlock Text="{Binding JobScheduler.PendingJobsCount}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentYellow}" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Running -->
+            <Border Grid.Column="1" Style="{StaticResource StatCard}">
+                <StackPanel>
+                    <TextBlock Text="⚙️ ĐANG XỬ LÝ (RUNNING)" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}"/>
+                    <TextBlock Text="{Binding JobScheduler.RunningJobsCount}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Awaiting Approval -->
+            <Border Grid.Column="2" Style="{StaticResource StatCard}">
+                <StackPanel>
+                    <TextBlock Text="📱 CHỜ DUYỆT TELEGRAM" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}"/>
+                    <TextBlock Text="{Binding JobScheduler.AwaitingApprovalCount}" FontSize="24" FontWeight="Bold" Foreground="#f38ba8" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Completed -->
+            <Border Grid.Column="3" Style="{StaticResource StatCard}" Margin="0">
+                <StackPanel>
+                    <TextBlock Text="🎉 ĐÃ ĐĂNG HOÀN TẤT" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource TextMuted}"/>
+                    <TextBlock Text="{Binding JobScheduler.CompletedJobsCount}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource AccentGreen}" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- 2. SHUTDOWN COUNTDOWN BANNER (Hiển thị nổi bật khi đang đếm ngược) -->
+        <Border Grid.Row="2" Background="#381c25" BorderBrush="#f38ba8" BorderThickness="1.5" CornerRadius="10" Padding="14" Margin="0,0,0,12"
+                Visibility="{Binding ShutdownCoordinator.SecondsRemaining, Converter={StaticResource BoolToVisConverter}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="💤" FontSize="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="CHUẨN BỊ TẮT MÁY AN TOÀN TRONG:" FontSize="14" FontWeight="Bold" Foreground="#f38ba8" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding ShutdownCoordinator.SecondsRemaining, StringFormat=' {0} GIÂY'}" FontSize="15" FontWeight="Bold" Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding ShutdownCoordinator.StatusMessage}" FontSize="11.5" Foreground="{StaticResource TextSecondary}" Margin="26,3,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" Command="{Binding AbortShutdownCountdownCommand}"
+                        Content="🛑 HỦY TẮT MÁY (ABORT)" Height="40" Padding="20,0" FontSize="12" FontWeight="Bold"
+                        Style="{StaticResource BtnDanger}" Cursor="Hand"/>
+            </Grid>
+        </Border>
+
+        <!-- 3. MAIN TABS (Danh sách Jobs & Cấu hình) -->
+        <TabControl Grid.Row="3" Background="Transparent" BorderThickness="0">
+            <!-- TAB 1: DANH SÁCH JOBS -->
+            <TabItem Header="📋 Hàng Đợi &amp; Danh Sách Job (SQLite)" FontSize="12.5" FontWeight="SemiBold">
+                <Grid Margin="0,10,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <DataGrid Grid.Row="0" ItemsSource="{Binding JobScheduler.ActiveJobs}" 
+                              AutoGenerateColumns="False" CanUserAddRows="False"
+                              Background="{StaticResource BgCard}" Foreground="{StaticResource TextPrimary}"
+                              BorderBrush="{StaticResource BorderDark}" BorderThickness="1"
+                              RowBackground="#181825" AlternatingRowBackground="#1e1e2e"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#313244">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Mã Job" Binding="{Binding Id}" Width="90"/>
+                            <DataGridTextColumn Header="Tiêu Đề Video" Binding="{Binding Title}" Width="2*"/>
+                            <DataGridTextColumn Header="Trạng Thái" Binding="{Binding DisplayStatus}" Width="150"/>
+                            <DataGridTextColumn Header="TikTok" Binding="{Binding TikTokStatus}" Width="100"/>
+                            <DataGridTextColumn Header="YouTube" Binding="{Binding YouTubeStatus}" Width="100"/>
+                            <DataGridTextColumn Header="Tạo Lúc" Binding="{Binding CreatedAt, StringFormat='dd/MM HH:mm'}" Width="100"/>
+                            <DataGridTextColumn Header="Ghi Chú / Lỗi" Binding="{Binding LastErrorMessage}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Blocking reasons bar -->
+                    <Border Grid.Row="1" Background="#181825" CornerRadius="8" Padding="12,8" Margin="0,10,0,0" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="🛡️ Trạng thái điều kiện tắt máy an toàn (12 tiêu chí):" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextSecondary}"/>
+                            <ItemsControl ItemsSource="{Binding ShutdownCoordinator.CurrentBlockingReasons}" Margin="0,4,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding StringFormat='• {0}'}" FontSize="11" Foreground="#fab387" Margin="0,1,0,0"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 2: CẤU HÌNH TỰ ĐỘNG HÓA -->
+            <TabItem Header="⚙️ Thiết Lập Telegram &amp; Tắt Máy" FontSize="12.5" FontWeight="SemiBold">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                    <StackPanel Orientation="Vertical" MaxWidth="850" HorizontalAlignment="Left">
+                        <!-- Telegram Setup -->
+                        <Border Style="{StaticResource SectionBorder}">
+                            <StackPanel>
+                                <TextBlock Text="📱 Cấu Hình Telegram Bot Phê Duyệt Từ Xa" FontSize="13" FontWeight="Bold" Foreground="{StaticResource AccentBlue}" Margin="0,0,0,10"/>
+                                
+                                <TextBlock Text="Telegram Bot Token (từ @BotFather):" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                                <TextBox Text="{Binding AutomationConfig.TelegramBotToken, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,10" Padding="8,6" Background="#161726" Foreground="{StaticResource TextPrimary}" BorderBrush="#313244"/>
+
+                                <TextBlock Text="Telegram Chat ID nhận thông báo:" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                                <TextBox Text="{Binding AutomationConfig.TelegramChatId, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,10" Padding="8,6" Background="#161726" Foreground="{StaticResource TextPrimary}" BorderBrush="#313244"/>
+
+                                <TextBlock Text="Allowed User IDs (Chỉ cho phép ID này bấm Duyệt, cách nhau bởi dấu phẩy):" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                                <TextBox Text="{Binding AutomationConfig.TelegramAllowedUserIds, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,10" Padding="8,6" Background="#161726" Foreground="{StaticResource TextPrimary}" BorderBrush="#313244"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Shutdown Settings -->
+                        <Border Style="{StaticResource SectionBorder}">
+                            <StackPanel>
+                                <TextBlock Text="🔌 Điều Phối Tắt Máy An Toàn (Safe Shutdown)" FontSize="13" FontWeight="Bold" Foreground="{StaticResource AccentYellow}" Margin="0,0,0,10"/>
+
+                                <CheckBox IsChecked="{Binding AutomationConfig.AutoShutdownEnabled}" Content="Bật tính năng Auto Shutdown khi hết việc" FontSize="12" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,8"/>
+                                <CheckBox IsChecked="{Binding AutomationConfig.WaitForPendingApproval}" Content="Chờ video duyệt xong mới được tắt máy (Mặc định BẬT)" FontSize="12" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,8"/>
+                                <CheckBox IsChecked="{Binding AutomationConfig.WaitForScheduledJobs}" Content="Chờ lịch đăng video đến hạn mới được tắt máy" FontSize="12" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,8"/>
+                                <CheckBox IsChecked="{Binding AutomationConfig.ShutdownOnPermanentFailure}" Content="Cho phép tắt máy nếu có job lỗi vĩnh viễn (Mặc định TẮT để bảo vệ)" FontSize="12" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,8"/>
+                                <CheckBox IsChecked="{Binding AutomationConfig.DryRunMode}" Content="Chế độ Dry Run (Mô phỏng an toàn, không tắt máy thật và không upload thật)" FontSize="12" FontWeight="Bold" Foreground="#a6e3a1" Margin="0,0,0,8"/>
+
+                                <TextBlock Text="Thời gian đếm ngược Grace Period (giây):" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,6,0,0"/>
+                                <TextBox Text="{Binding AutomationConfig.ShutdownGracePeriodSeconds, UpdateSourceTrigger=PropertyChanged}" Width="120" HorizontalAlignment="Left" Margin="0,4,0,0" Padding="8,6" Background="#161726" Foreground="{StaticResource TextPrimary}" BorderBrush="#313244"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Platform Tokens -->
+                        <Border Style="{StaticResource SectionBorder}">
+                            <StackPanel>
+                                <TextBlock Text="🌐 Đăng Kênh TikTok &amp; YouTube" FontSize="13" FontWeight="Bold" Foreground="{StaticResource AccentGreen}" Margin="0,0,0,10"/>
+
+                                <CheckBox IsChecked="{Binding AutomationConfig.TikTokEnabled}" Content="Bật đăng kênh TikTok" FontSize="12" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
+                                <TextBlock Text="TikTok Access Token (Direct Post API):" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                                <TextBox Text="{Binding AutomationConfig.TikTokAccessToken, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,10" Padding="8,6" Background="#161726" Foreground="{StaticResource TextPrimary}" BorderBrush="#313244"/>
+
+                                <CheckBox IsChecked="{Binding AutomationConfig.YouTubeEnabled}" Content="Bật đăng kênh YouTube Shorts / Video" FontSize="12" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,6"/>
+                                <TextBlock Text="Quyền riêng tư YouTube (public, unlisted, private):" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                                <TextBox Text="{Binding AutomationConfig.YouTubePrivacyStatus, UpdateSourceTrigger=PropertyChanged}" Width="150" HorizontalAlignment="Left" Margin="0,4,0,0" Padding="8,6" Background="#161726" Foreground="{StaticResource TextPrimary}" BorderBrush="#313244"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Save Button -->
+                        <Button Command="{Binding SaveAutomationConfigCommand}" 
+                                Content="💾 LƯU TOÀN BỘ CẤU HÌNH" 
+                                Style="{StaticResource BtnPrimary}" Height="42" Padding="24,0" 
+                                HorizontalAlignment="Left" Cursor="Hand" Margin="0,0,0,20"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

@@ -202,7 +202,7 @@ public partial class VisualPlanningViewModel : ObservableObject
         {
             Log($"⏳ Đang tạo ảnh chân dung cho {ch.Name}...");
             await _planningService.GenerateCharacterPortraitAsync(
-                ch, _outputDir, StyleBible.BuildPromptPrefix(), "1:1", Log, _cts.Token);
+                ch, _outputDir, StyleBible, "1:1", Log, _cts.Token);
             ch.NotifyImageUpdated();
             RefreshCounters();
             RefreshApprovalGate();
@@ -226,7 +226,7 @@ public partial class VisualPlanningViewModel : ObservableObject
         {
             Log($"⏳ Đang tạo ảnh toàn thân cho {ch.Name}...");
             await _planningService.GenerateCharacterFullBodyAsync(
-                ch, _outputDir, StyleBible.BuildPromptPrefix(), "2:3", Log, _cts.Token);
+                ch, _outputDir, StyleBible, "2:3", Log, _cts.Token);
             ch.NotifyImageUpdated();
             RefreshCounters();
             RefreshApprovalGate();
@@ -257,7 +257,7 @@ public partial class VisualPlanningViewModel : ObservableObject
                 ProgressText = $"{done + 1}/{Characters.Count}";
 
                 await _planningService.GenerateCharacterPortraitAsync(
-                    ch, _outputDir, StyleBible.BuildPromptPrefix(), "1:1", Log, _cts.Token);
+                    ch, _outputDir, StyleBible, "1:1", Log, _cts.Token);
                 ch.NotifyImageUpdated();
                 done++;
                 await Task.Delay(500, _cts.Token); // đệm nhỏ giữa các request
@@ -348,7 +348,7 @@ public partial class VisualPlanningViewModel : ObservableObject
         {
             Log($"⏳ Đang tạo ảnh địa điểm: {loc.Name}...");
             await _planningService.GenerateLocationImageAsync(
-                loc, _outputDir, StyleBible.BuildPromptPrefix(), "16:9", Log, _cts.Token);
+                loc, _outputDir, StyleBible, "16:9", Log, _cts.Token);
             loc.NotifyImageUpdated();
             RefreshCounters();
             RefreshApprovalGate();
@@ -374,7 +374,7 @@ public partial class VisualPlanningViewModel : ObservableObject
                 Log($"⏳ [{done + 1}/{Locations.Count}] Tạo ảnh địa điểm: {loc.Name}...");
                 ProgressValue = (done / (double)Locations.Count) * 100;
                 await _planningService.GenerateLocationImageAsync(
-                    loc, _outputDir, StyleBible.BuildPromptPrefix(), "16:9", Log, _cts.Token);
+                    loc, _outputDir, StyleBible, "16:9", Log, _cts.Token);
                 loc.NotifyImageUpdated();
                 done++;
                 await Task.Delay(500, _cts.Token);

@@ -326,6 +326,13 @@
                                 FontSize="13" Height="46" Margin="0,0,0,8"
                                 ToolTip="Tự động gọi Google TTS cho audio thiếu + Imagen 3 cho ảnh thiếu + FFmpeg ghép video" />
 
+                        <!-- Nút đưa vào hàng đợi Auto Run -->
+                        <Button Content="📥 ĐƯA VÀO HÀNG ĐỢI AUTO RUN (TELEGRAM DUYỆT)" Command="{Binding EnqueueCurrentProjectToAutoRunCommand}"
+                                IsEnabled="{Binding IsRendering, Converter={StaticResource InverseBoolConverter}}"
+                                Background="#1e1e2e" BorderBrush="#cba6f7" BorderThickness="1.2" Foreground="#cba6f7"
+                                FontWeight="Bold" FontSize="11" Height="38" Margin="0,0,0,8" Cursor="Hand"
+                                ToolTip="Lưu project vào SQLite để mini PC tự tạo video, gửi duyệt Telegram và tự đăng theo lịch" />
+
                         <!-- Nút Hủy (Chỉ hiện khi đang render) -->
                         <Button Content="⛔ Dừng / Hủy Render" Command="{Binding CancelRenderCommand}"
                                 Visibility="{Binding IsRendering, Converter={StaticResource BoolToVisConverter}}"

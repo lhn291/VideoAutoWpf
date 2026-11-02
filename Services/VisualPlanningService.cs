@@ -218,26 +218,50 @@ public class VisualPlanningService
 
     /// <summary>
     /// Tạo ảnh chân dung (portrait) cho nhân vật.
+    /// Nếu đã có ảnh toàn thân thì dùng làm tham chiếu để giữ đúng khuôn mặt.
     /// Append vào danh sách Versions — không xóa ảnh cũ.
     /// </summary>
     public async Task<VisualAssetVersion> GenerateCharacterPortraitAsync(
         CharacterProfile character,
         string outputDir,
-        string styleBiblePrefix,
+        VisualStyleBible bible,
         string aspectRatio = "1:1",
         Action<string>? onLog = null,
         CancellationToken ct = default)
     {
         character.ApprovalStatus = AssetApprovalStatus.Generating;
 
-        var prompt = BuildCharacterPortraitPrompt(character, styleBiblePrefix);
+        var prompt = BuildCharacterPortraitPrompt(character, bible);
         var fileName = $"char_{character.Id}_portrait_v{character.PortraitAsset.Versions.Count}.png";
         var outputPath = Path.Combine(outputDir, "characters", fileName);
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
         try
         {
-            await _imagenService.GenerateImageAsync(prompt, outputPath, aspectRatio, onLog: onLog, ct: ct);
+            // Tìm ảnh tham chiếu tốt nhất: Ưu tiên ReferenceImagePath đã duyệt, rồi tới FullBody hiện có
+            var referencePath = (!string.IsNullOrEmpty(character.ReferenceImagePath) && File.Exists(character.ReferenceImagePath))
+                ? character.ReferenceImagePath
+                : character.FullBodyAsset.DisplayImagePath;
+
+            if (!string.IsNullOrEmpty(referencePath) && File.Exists(referencePath))
+            {
+                onLog?.Invoke($"[Visual Continuity] Dùng ảnh tham chiếu ({Path.GetFileName(referencePath)}) để giữ 100% đồng nhất khuôn mặt nhân vật {character.Name}...");
+                var styleDesc = bible.IsIllustrationStyle ? "2D manga/anime graphic novel art style" : "cinematic style";
+                var refInstruction = $"CRITICAL IDENTITY CONTINUITY: You MUST strictly preserve the exact same face, facial structure, eye shape, hairstyle, hair color, skin tone, and {styleDesc} shown in the reference image above. The person in this close-up portrait must be unmistakably the EXACT SAME INDIVIDUAL as the reference image. Render a detailed portrait headshot:";
+                await _imagenService.GenerateImageWithReferenceAsync(
+                    prompt, referencePath, outputPath, aspectRatio,
+                    onLog: onLog, referenceContextInstruction: refInstruction, ct: ct);
+            }
+            else
+            {
+                await _imagenService.GenerateImageAsync(prompt, outputPath, aspectRatio, onLog: onLog, ct: ct);
+            }
+
+            // Gán ảnh tham chiếu gốc nếu chưa có
+            if (string.IsNullOrEmpty(character.ReferenceImagePath) || !File.Exists(character.ReferenceImagePath))
+            {
+                character.ReferenceImagePath = outputPath;
+            }
 
             character.PortraitAsset.Label = $"Chân dung — {character.Name}";
             var version = character.PortraitAsset.AddVersion(outputPath, prompt, $"Portrait v{character.PortraitAsset.Versions.Count}");
@@ -255,21 +279,45 @@ public class VisualPlanningService
 
     /// <summary>
     /// Tạo ảnh toàn thân (full body) cho nhân vật.
+    /// NẾU ĐÃ CÓ ẢNH CHÂN DUNG -> BẮT BUỘC DÙNG LÀM THAM CHIẾU ĐỂ GIỮ NGUYÊN KHUÔN MẶT!
     /// </summary>
     public async Task<VisualAssetVersion> GenerateCharacterFullBodyAsync(
         CharacterProfile character,
         string outputDir,
-        string styleBiblePrefix,
+        VisualStyleBible bible,
         string aspectRatio = "2:3",
         Action<string>? onLog = null,
         CancellationToken ct = default)
     {
-        var prompt = BuildCharacterFullBodyPrompt(character, styleBiblePrefix);
+        var prompt = BuildCharacterFullBodyPrompt(character, bible);
         var fileName = $"char_{character.Id}_fullbody_v{character.FullBodyAsset.Versions.Count}.png";
         var outputPath = Path.Combine(outputDir, "characters", fileName);
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
-        await _imagenService.GenerateImageAsync(prompt, outputPath, aspectRatio, onLog: onLog, ct: ct);
+        // Tìm ảnh tham chiếu tốt nhất: Ưu tiên ReferenceImagePath đã duyệt, rồi tới Portrait hiện có
+        var referencePath = (!string.IsNullOrEmpty(character.ReferenceImagePath) && File.Exists(character.ReferenceImagePath))
+            ? character.ReferenceImagePath
+            : character.PortraitAsset.DisplayImagePath;
+
+        if (!string.IsNullOrEmpty(referencePath) && File.Exists(referencePath))
+        {
+            onLog?.Invoke($"[Visual Continuity] Đang dùng ảnh tham chiếu ({Path.GetFileName(referencePath)}) để giữ 100% đồng nhất khuôn mặt nhân vật {character.Name} cho ảnh toàn thân...");
+            var styleDesc = bible.IsIllustrationStyle ? "2D manga/anime graphic novel art style" : "cinematic style";
+            var refInstruction = $"CRITICAL IDENTITY CONTINUITY: You MUST strictly preserve the exact same person's face, facial structure, eye shape, hairstyle, hair color, skin tone, and {styleDesc} from the reference image above. The person in this full-body image must be unmistakably the EXACT SAME INDIVIDUAL as the reference. Do not generate a different face. Render this exact same character in a full standing body view:";
+            await _imagenService.GenerateImageWithReferenceAsync(
+                prompt, referencePath, outputPath, aspectRatio,
+                onLog: onLog, referenceContextInstruction: refInstruction, ct: ct);
+        }
+        else
+        {
+            await _imagenService.GenerateImageAsync(prompt, outputPath, aspectRatio, onLog: onLog, ct: ct);
+        }
+
+        // Gán ảnh tham chiếu gốc nếu chưa có
+        if (string.IsNullOrEmpty(character.ReferenceImagePath) || !File.Exists(character.ReferenceImagePath))
+        {
+            character.ReferenceImagePath = outputPath;
+        }
 
         character.FullBodyAsset.Label = $"Toàn thân — {character.Name}";
         var version = character.FullBodyAsset.AddVersion(outputPath, prompt, $"FullBody v{character.FullBodyAsset.Versions.Count}");
@@ -287,14 +335,14 @@ public class VisualPlanningService
     public async Task<VisualAssetVersion> GenerateLocationImageAsync(
         LocationProfile location,
         string outputDir,
-        string styleBiblePrefix,
+        VisualStyleBible bible,
         string aspectRatio = "16:9",
         Action<string>? onLog = null,
         CancellationToken ct = default)
     {
         location.ApprovalStatus = AssetApprovalStatus.Generating;
 
-        var prompt = BuildLocationPrompt(location, styleBiblePrefix);
+        var prompt = BuildLocationPrompt(location, bible);
         var fileName = $"loc_{location.Id}_v{location.LocationAsset.Versions.Count}.png";
         var outputPath = Path.Combine(outputDir, "locations", fileName);
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
@@ -375,10 +423,10 @@ public class VisualPlanningService
 
         // Chọn đúng nhân vật và địa điểm liên quan
         var relevantChars = allCharacters
-            .Where(c => preview.CharacterIds.Contains(c.Id) && c.IsApproved)
+            .Where(c => preview.CharacterIds.Contains(c.Id))
             .ToList();
         var relevantLoc = allLocations
-            .FirstOrDefault(l => l.Id == preview.LocationId && l.IsApproved);
+            .FirstOrDefault(l => l.Id == preview.LocationId);
 
         // Build prompt từ scene description + references đã duyệt
         var prompt = BuildScenePreviewPrompt(preview, relevantChars, relevantLoc, bible);
@@ -391,7 +439,34 @@ public class VisualPlanningService
 
         try
         {
-            await _imagenService.GenerateImageAsync(prompt, outputPath, aspectRatio, onLog: onLog, ct: ct);
+            string? refImagePath = null;
+            string? refInstruction = null;
+
+            var charWithImg = relevantChars.FirstOrDefault(c => c.HasAnyImage && File.Exists(c.DisplayImagePath));
+            if (charWithImg != null && !string.IsNullOrEmpty(charWithImg.DisplayImagePath))
+            {
+                refImagePath = charWithImg.DisplayImagePath;
+                refInstruction = $"CRITICAL CONTINUITY: Maintain the exact same facial identity, appearance, and art style of character '{charWithImg.Name}' from the reference image above in this scene:";
+                onLog?.Invoke($"[Scene Preview Continuity] Dùng ảnh tham chiếu nhân vật '{charWithImg.Name}'...");
+            }
+            else if (relevantLoc != null && relevantLoc.HasImage && File.Exists(relevantLoc.DisplayImagePath))
+            {
+                refImagePath = relevantLoc.DisplayImagePath;
+                refInstruction = $"CRITICAL CONTINUITY: Maintain the exact same architectural environment and lighting from the reference image of location '{relevantLoc.Name}' in this scene:";
+                onLog?.Invoke($"[Scene Preview Continuity] Dùng ảnh tham chiếu địa điểm '{relevantLoc.Name}'...");
+            }
+
+            if (!string.IsNullOrEmpty(refImagePath) && File.Exists(refImagePath))
+            {
+                await _imagenService.GenerateImageWithReferenceAsync(
+                    prompt, refImagePath, outputPath, aspectRatio,
+                    onLog: onLog, referenceContextInstruction: refInstruction, ct: ct);
+            }
+            else
+            {
+                await _imagenService.GenerateImageAsync(prompt, outputPath, aspectRatio, onLog: onLog, ct: ct);
+            }
+
             var version = preview.PreviewAsset.AddVersion(outputPath, prompt, $"Preview Tập {preview.EpisodeNumber} Cảnh {preview.SceneIndex}");
             preview.Status = AssetApprovalStatus.AwaitingApproval;
             onLog?.Invoke($"✅ Đã tạo ảnh preview Tập {preview.EpisodeNumber} Cảnh {preview.SceneIndex}: {fileName}");
@@ -447,64 +522,111 @@ public class VisualPlanningService
     // PROMPT BUILDERS
     // ════════════════════════════════════════════════════════════════════
 
-    private static string BuildCharacterPortraitPrompt(CharacterProfile ch, string stylePrefix)
+    private static string BuildCharacterPortraitPrompt(CharacterProfile ch, VisualStyleBible bible)
     {
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(stylePrefix)) parts.Add(stylePrefix);
-        parts.Add("portrait headshot, upper body");
-        if (!string.IsNullOrWhiteSpace(ch.FaceDescription)) parts.Add(ch.FaceDescription);
-        if (!string.IsNullOrWhiteSpace(ch.Hair)) parts.Add(ch.Hair);
-        if (!string.IsNullOrWhiteSpace(ch.Skin)) parts.Add($"skin: {ch.Skin}");
-        if (!string.IsNullOrWhiteSpace(ch.OutfitVn)) parts.Add($"wearing {ch.OutfitVn}");
-        if (!string.IsNullOrWhiteSpace(ch.Accessories)) parts.Add(ch.Accessories);
+        var prefix = bible.BuildPromptPrefix();
+        if (!string.IsNullOrWhiteSpace(prefix)) parts.Add(prefix.Trim());
+
+        parts.Add("portrait headshot, upper body view");
+        if (!string.IsNullOrWhiteSpace(ch.FaceDescription)) parts.Add($"face: {ch.FaceDescription}");
+        if (!string.IsNullOrWhiteSpace(ch.Hair)) parts.Add($"hair: {ch.Hair}");
+        if (!string.IsNullOrWhiteSpace(ch.Skin)) parts.Add($"skin tone: {ch.Skin}");
+        if (!string.IsNullOrWhiteSpace(ch.OutfitVn)) parts.Add($"wearing: {ch.OutfitVn}");
+        if (!string.IsNullOrWhiteSpace(ch.Accessories)) parts.Add($"accessories: {ch.Accessories}");
         if (!string.IsNullOrWhiteSpace(ch.DefaultExpressions)) parts.Add($"expression: {ch.DefaultExpressions}");
-        if (!string.IsNullOrWhiteSpace(ch.DistinguishingMarker)) parts.Add($"distinctive: {ch.DistinguishingMarker}");
-        parts.Add("neutral background, studio lighting, high detail, photorealistic");
+        if (!string.IsNullOrWhiteSpace(ch.DistinguishingMarker)) parts.Add($"distinctive feature: {ch.DistinguishingMarker}");
+
+        if (bible.IsIllustrationStyle)
+        {
+            parts.Add("clean studio background, stylized lighting, 2D graphic novel art, clean sharp line art, flat dramatic cel shading, no photorealism, no real human photo, no realistic skin texture, no 3D render");
+        }
+        else
+        {
+            parts.Add("neutral background, studio lighting, high detail, cinematic photography, lifelike textures");
+        }
+
         parts.Add("no watermark, no text");
         return string.Join(", ", parts);
     }
 
-    private static string BuildCharacterFullBodyPrompt(CharacterProfile ch, string stylePrefix)
+    private static string BuildCharacterFullBodyPrompt(CharacterProfile ch, VisualStyleBible bible)
     {
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(stylePrefix)) parts.Add(stylePrefix);
-        parts.Add("full body shot, standing pose");
-        if (!string.IsNullOrWhiteSpace(ch.FaceDescription)) parts.Add(ch.FaceDescription);
-        if (!string.IsNullOrWhiteSpace(ch.Body)) parts.Add(ch.Body);
-        if (!string.IsNullOrWhiteSpace(ch.Hair)) parts.Add(ch.Hair);
-        if (!string.IsNullOrWhiteSpace(ch.OutfitVn)) parts.Add($"wearing {ch.OutfitVn}");
-        if (!string.IsNullOrWhiteSpace(ch.Accessories)) parts.Add(ch.Accessories);
-        if (!string.IsNullOrWhiteSpace(ch.DefaultPoses)) parts.Add(ch.DefaultPoses);
-        parts.Add("plain background, full body visible, high detail");
+        var prefix = bible.BuildPromptPrefix();
+        if (!string.IsNullOrWhiteSpace(prefix)) parts.Add(prefix.Trim());
+
+        parts.Add("full body shot, complete head-to-toe standing view");
+        if (!string.IsNullOrWhiteSpace(ch.FaceDescription)) parts.Add($"face: {ch.FaceDescription}");
+        if (!string.IsNullOrWhiteSpace(ch.Hair)) parts.Add($"hair: {ch.Hair}");
+        if (!string.IsNullOrWhiteSpace(ch.Skin)) parts.Add($"skin tone: {ch.Skin}");
+        if (!string.IsNullOrWhiteSpace(ch.Body)) parts.Add($"body build: {ch.Body}");
+        if (!string.IsNullOrWhiteSpace(ch.OutfitVn)) parts.Add($"wearing: {ch.OutfitVn}");
+        if (!string.IsNullOrWhiteSpace(ch.Accessories)) parts.Add($"accessories: {ch.Accessories}");
+        if (!string.IsNullOrWhiteSpace(ch.DefaultPoses)) parts.Add($"pose: {ch.DefaultPoses}");
+        if (!string.IsNullOrWhiteSpace(ch.DistinguishingMarker)) parts.Add($"distinctive feature: {ch.DistinguishingMarker}");
+
+        if (bible.IsIllustrationStyle)
+        {
+            parts.Add("plain solid background, full body visible from head to shoes, 2D graphic novel art, clean sharp line art, flat dramatic cel shading, no photorealism, no real human photo, no realistic skin texture, no 3D render");
+        }
+        else
+        {
+            parts.Add("plain background, full body visible, high detail, cinematic photography");
+        }
+
         parts.Add("no watermark, no text");
         return string.Join(", ", parts);
     }
 
-    private static string BuildLocationPrompt(LocationProfile loc, string stylePrefix)
+    private static string BuildLocationPrompt(LocationProfile loc, VisualStyleBible bible)
     {
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(stylePrefix)) parts.Add(stylePrefix);
-        parts.Add("wide establishing shot, architectural photography");
+        var prefix = bible.BuildPromptPrefix();
+        if (!string.IsNullOrWhiteSpace(prefix)) parts.Add(prefix.Trim());
+
+        parts.Add("wide establishing shot, architectural environment");
         if (!string.IsNullOrWhiteSpace(loc.ArchitecturalStyle)) parts.Add(loc.ArchitecturalStyle);
         if (!string.IsNullOrWhiteSpace(loc.InteriorDetails)) parts.Add(loc.InteriorDetails);
         if (!string.IsNullOrWhiteSpace(loc.ExteriorDetails)) parts.Add(loc.ExteriorDetails);
         if (!string.IsNullOrWhiteSpace(loc.SignatureColors)) parts.Add($"color palette: {loc.SignatureColors}");
         if (!string.IsNullOrWhiteSpace(loc.LightingDefault)) parts.Add($"{loc.LightingDefault} lighting");
         if (loc.KeyProps.Count > 0) parts.Add($"key props: {string.Join(", ", loc.KeyProps.Take(3))}");
-        parts.Add("no people, highly detailed, cinematic, no watermark, no text");
+
+        if (bible.IsIllustrationStyle)
+        {
+            parts.Add("no people, highly detailed 2D graphic novel background art, clean line art, dramatic cel shading, no photorealism, no real photo, no 3D render");
+        }
+        else
+        {
+            parts.Add("no people, highly detailed, architectural photography, cinematic lighting");
+        }
+
+        parts.Add("no watermark, no text");
         return string.Join(", ", parts);
     }
 
     private static string BuildStyleSamplePrompt(VisualStyleBible bible)
     {
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(bible.StyleDisplayName)) parts.Add(bible.StyleDisplayName);
+        var prefix = bible.BuildPromptPrefix();
+        if (!string.IsNullOrWhiteSpace(prefix)) parts.Add(prefix);
         parts.Add("crime thriller scene, Vietnamese urban setting");
         if (!string.IsNullOrWhiteSpace(bible.LightingStyle)) parts.Add(bible.LightingStyle);
         if (!string.IsNullOrWhiteSpace(bible.ColorPalette)) parts.Add($"color: {bible.ColorPalette}");
         if (!string.IsNullOrWhiteSpace(bible.DepthOfField)) parts.Add(bible.DepthOfField);
         if (!string.IsNullOrWhiteSpace(bible.CameraStyle)) parts.Add(bible.CameraStyle);
-        parts.Add("atmospheric, moody, cinematic quality, no text, no watermark");
+
+        if (bible.IsIllustrationStyle)
+        {
+            parts.Add("atmospheric, moody, 2D illustration, stylized graphic novel art, cel shading, clean line art, no photorealism, no real human photo");
+        }
+        else
+        {
+            parts.Add("atmospheric, moody, cinematic film still, photorealistic textures");
+        }
+
+        parts.Add("no text, no watermark");
         return string.Join(", ", parts);
     }
 
@@ -531,6 +653,8 @@ public class VisualPlanningService
         {
             if (!string.IsNullOrWhiteSpace(ch.DistinguishingMarker))
                 parts.Add($"character: {ch.DistinguishingMarker}");
+            else if (!string.IsNullOrWhiteSpace(ch.FaceDescription))
+                parts.Add($"character: {ch.FaceDescription}");
         }
 
         // Scene content
@@ -543,7 +667,14 @@ public class VisualPlanningService
         }
 
         // Quality constraints
-        parts.Add("cinematic, high detail, photorealistic, no watermark, no text");
+        if (bible.IsIllustrationStyle)
+        {
+            parts.Add("2D graphic novel illustration, dramatic moody lighting, cel shading, clean lines, no photorealism, no real human photo, no text, no watermark");
+        }
+        else
+        {
+            parts.Add("cinematic film still, high detail, photorealistic, no watermark, no text");
+        }
 
         return string.Join(", ", parts);
     }

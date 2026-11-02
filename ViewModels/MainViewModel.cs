@@ -9,8 +9,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using VideoAutoWpf.Models;
+using VideoAutoWpf.Models.Automation;
 using VideoAutoWpf.Models.V2;
 using VideoAutoWpf.Services;
+using VideoAutoWpf.Services.Automation;
 using VideoAutoWpf.Views;
 
 namespace VideoAutoWpf.ViewModels;
@@ -31,6 +33,17 @@ public partial class MainViewModel : ObservableObject
     private readonly VisualDirectorService _visualDirectorService;
     private readonly GenerationQueue _generationQueue;
     private readonly ContinuityEngine _continuityEngine;
+
+    // ── Auto Run & Safe Shutdown Services ──
+    private readonly DatabaseService _automationDb;
+    private readonly QualityCheckService _qualityChecker;
+    private readonly TelegramApprovalService _telegramService;
+    private readonly YouTubePublishService _youtubePublishService;
+    private readonly TikTokPublishService _tiktokPublishService;
+    private readonly PublishingStateMachine _publishingStateMachine;
+    private readonly ShutdownCoordinator _shutdownCoordinator;
+    private readonly RecoveryService _recoveryService;
+    private readonly PersistentJobScheduler _jobScheduler;
 
     private CancellationTokenSource? _cts;
     private MediaPlayer? _bgmPlayer;
@@ -244,6 +257,14 @@ public partial class MainViewModel : ObservableObject
 
     public bool HasLastDriveLink => !string.IsNullOrEmpty(LastDriveVideoLink);
 
+    // ── Cấu Hình Tự Động Vận Hành & Điều Phối An Toàn ──
+    [ObservableProperty]
+    private AutomationConfig _automationConfig = new();
+
+    public PersistentJobScheduler JobScheduler => _jobScheduler;
+    public ShutdownCoordinator ShutdownCoordinator => _shutdownCoordinator;
+    public DatabaseService AutomationDb => _automationDb;
+
     public MainViewModel() : this(new FFmpegService())
     {
     }
@@ -265,6 +286,34 @@ public partial class MainViewModel : ObservableObject
         _visualDirectorService = new VisualDirectorService(_geminiService);
         _generationQueue = new GenerationQueue();
         _continuityEngine = new ContinuityEngine();
+
+        // ── Khởi tạo các dịch vụ Auto Run, Telegram & Safe Shutdown ──
+        _automationDb = new DatabaseService();
+        _qualityChecker = new QualityCheckService();
+        _telegramService = new TelegramApprovalService(_automationDb);
+        _youtubePublishService = new YouTubePublishService(_authService);
+        _tiktokPublishService = new TikTokPublishService();
+        _publishingStateMachine = new PublishingStateMachine(_automationDb, _youtubePublishService, _tiktokPublishService);
+        _shutdownCoordinator = new ShutdownCoordinator(_automationDb, _telegramService, _automationConfig);
+        _recoveryService = new RecoveryService(_automationDb, _qualityChecker, _telegramService, _youtubePublishService, _tiktokPublishService);
+        _jobScheduler = new PersistentJobScheduler(
+            _automationDb,
+            _qualityChecker,
+            _telegramService,
+            _publishingStateMachine,
+            _shutdownCoordinator,
+            _recoveryService,
+            _automationConfig);
+
+        // Chuyển tiếp log kiểm toán vào giao diện ConsoleLog
+        _jobScheduler.LogMessage += AppendLog;
+        _telegramService.LogMessage += AppendLog;
+        _publishingStateMachine.LogMessage += AppendLog;
+        _shutdownCoordinator.LogMessage += AppendLog;
+        _recoveryService.LogMessage += AppendLog;
+
+        // Đăng ký pipeline tạo video thực tế cho PersistentJobScheduler
+        _jobScheduler.VideoRenderAction = ExecuteRenderPipelineForJobAsync;
 
         var defaultOut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput");
         _outputDirectory = defaultOut;
@@ -295,6 +344,7 @@ public partial class MainViewModel : ObservableObject
         CheckServicesAvailability();
         InitializeBgmTracksAsync();
         UpdateCostEstimation();
+        InitializeAutomationAsync();
     }
 
     private void OnSceneItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -2733,6 +2783,200 @@ public partial class MainViewModel : ObservableObject
                 mainWin.Focus();
             }
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // AUTO RUN, TELEGRAM APPROVAL & SAFE SHUTDOWN INTEGRATION
+    // ════════════════════════════════════════════════════════════════════
+
+    private async void InitializeAutomationAsync()
+    {
+        try
+        {
+            var loadedConfig = await _automationDb.LoadConfigAsync();
+            AutomationConfig = loadedConfig;
+            _jobScheduler.UpdateConfig(loadedConfig);
+
+            if (loadedConfig.AutoRunEnabled)
+            {
+                await _jobScheduler.StartAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[Khởi tạo Automation Lỗi] {ex.Message}");
+        }
+    }
+
+    private async Task<string> ExecuteRenderPipelineForJobAsync(AutomationJob job, IProgress<GenerationProgress> progress, CancellationToken ct)
+    {
+        var tempAssetsDir = Path.Combine(OutputDirectory, "generated_assets");
+        Directory.CreateDirectory(tempAssetsDir);
+
+        // Lấy danh sách scenes: từ Scenes hiện có hoặc parse từ payload
+        var targetScenes = Scenes.ToList();
+        if (targetScenes.Count == 0 && !string.IsNullOrWhiteSpace(job.PayloadJson) && job.PayloadJson != "{}")
+        {
+            var payloadScenes = job.GetPayload<List<SceneItem>>();
+            if (payloadScenes != null && payloadScenes.Count > 0)
+                targetScenes = payloadScenes;
+        }
+
+        if (targetScenes.Count == 0)
+        {
+            throw new InvalidOperationException($"Công việc '{job.Title}' không có phân cảnh nào để tạo video.");
+        }
+
+        await EnsureAssetsForScenesAsync(targetScenes, tempAssetsDir, ct);
+        EnsureBasicPublishInfo();
+
+        var config = new VideoConfig
+        {
+            AspectRatio = AspectRatio,
+            MotionEffect = SelectedMotionEffect?.Id ?? "random",
+            EnableFadeTransition = EnableFadeTransition,
+            EnableVignette = EnableVignette,
+            EnableBackgroundMusic = EnableBgm,
+            BackgroundMusicPath = BgmPath,
+            BackgroundMusicVolume = BgmVolume,
+            EnableSubtitles = EnableSubtitles,
+            SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
+            SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
+            Voice = SelectedVoice,
+            SpeakingRate = SpeakingRate,
+            OutputDirectory = OutputDirectory,
+            OutputFileName = string.IsNullOrWhiteSpace(job.VideoId) ? $"video_{DateTime.Now:yyyyMMdd_HHmmss}.mp4" : $"{job.VideoId}_{DateTime.Now:yyyyMMdd_HHmmss}.mp4",
+            PublishInfo = CurrentPublishInfo
+        };
+
+        string resultFile;
+        if (UseV2Pipeline)
+        {
+            var v2Project = SceneItemAdapter.ToV2Project(targetScenes, config, CurrentPublishInfo, null);
+            string? subtitleAssPath = null;
+            if (EnableSubtitles)
+            {
+                var (width, height) = config.GetDimensions();
+                var assPath = Path.Combine(tempAssetsDir, $"subtitles_{DateTime.Now:HHmmss}.ass");
+                var v2Scenes = targetScenes.Select(s => s.ToV2Scene()).ToList();
+                await AssSubtitleService.GenerateAssFileAsync(
+                    v2Scenes,
+                    assPath,
+                    width: width,
+                    height: height,
+                    fontName: SelectedSubtitleFont?.Name ?? "Segoe UI Bold",
+                    subtitleStyle: SelectedSubtitleStyle?.Id ?? "cinematic",
+                    ct: ct);
+
+                if (File.Exists(assPath)) subtitleAssPath = assPath;
+            }
+
+            var timeline = TimelineBuilder.BuildTimeline(v2Project, subtitleAssPath: subtitleAssPath);
+            resultFile = await _ffmpegService.RenderTimelineAsync(timeline, config, progress, ct);
+        }
+        else
+        {
+            resultFile = await _ffmpegService.GenerateVideoAsync(targetScenes, config, progress, ct);
+        }
+
+        return resultFile;
+    }
+
+    [RelayCommand]
+    private async Task EnqueueCurrentProjectToAutoRunAsync()
+    {
+        if (Scenes.Count == 0)
+        {
+            MessageBox.Show("Vui lòng thêm ít nhất 1 phân cảnh trước khi đưa vào hàng đợi tự động!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var title = !string.IsNullOrWhiteSpace(CurrentPublishInfo?.Title) ? CurrentPublishInfo.Title : (string.IsNullOrWhiteSpace(OutputFileName) ? $"Video_{DateTime.Now:MMdd_HHmm}" : OutputFileName);
+        var videoId = "vid_" + Guid.NewGuid().ToString("N")[..8];
+        var channelId = "default";
+
+        var job = await _jobScheduler.EnqueueRenderJobAsync(
+            title: title,
+            channelId: channelId,
+            videoId: videoId,
+            payloadData: Scenes.ToList(),
+            caption: CurrentPublishInfo?.Description,
+            hashtags: CurrentPublishInfo?.Hashtags);
+
+        MessageBox.Show($"Đã đưa video '{title}' vào hàng đợi tự động thành công!\nID: {job.Id}\nHệ thống sẽ tự động tạo video, gửi duyệt Telegram và đăng bài theo lịch.", "Đã Lên Kế Hoạch", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    [RelayCommand]
+    private async Task SaveAutomationConfigAsync()
+    {
+        try
+        {
+            await _automationDb.SaveConfigAsync(AutomationConfig);
+            _jobScheduler.UpdateConfig(AutomationConfig);
+            MessageBox.Show("Đã lưu cấu hình Tự Động Hóa & Phê Duyệt Telegram thành công!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Lỗi lưu cấu hình: {ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    [RelayCommand]
+    private async Task ToggleAutoRunAsync()
+    {
+        AutomationConfig.AutoRunEnabled = !AutomationConfig.AutoRunEnabled;
+        await _automationDb.SaveConfigAsync(AutomationConfig);
+        _jobScheduler.UpdateConfig(AutomationConfig);
+        if (AutomationConfig.AutoRunEnabled)
+        {
+            await _jobScheduler.StartAsync();
+            AppendLog("[Auto Run] 🟢 Đã BẬT chế độ tự động vận hành.");
+        }
+        else
+        {
+            _jobScheduler.Stop();
+            AppendLog("[Auto Run] 🔴 Đã TẮT chế độ tự động vận hành.");
+        }
+    }
+
+    [RelayCommand]
+    private void AbortShutdownCountdown()
+    {
+        _shutdownCoordinator.AbortShutdown("Người dùng đã bấm hủy trên giao diện máy tính.");
+    }
+
+    [RelayCommand]
+    private async Task RequestManualShutdownAsync()
+    {
+        var confirm = MessageBox.Show(
+            "Bạn có chắc chắn muốn yêu cầu tắt máy an toàn ngay bây giờ?\nHệ thống sẽ kiểm tra 12 điều kiện công việc trước khi tắt.",
+            "Xác Nhận Tắt Máy An Toàn",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (confirm != MessageBoxResult.Yes) return;
+
+        var eval = await _shutdownCoordinator.EvaluateShutdownSafetyAsync();
+        if (!eval.CanShutdown)
+        {
+            var msg = "⚠️ Hiện tại CHƯA ĐỦ ĐIỀU KIỆN tắt máy an toàn vì các lý do sau:\n\n" +
+                      string.Join("\n", eval.BlockingReasons.Select(r => $"• {r}")) +
+                      "\n\nVui lòng giải quyết các công việc trên hoặc chuyển sang tắt thủ công nếu cần.";
+            MessageBox.Show(msg, "Chưa Đủ Điều Kiện Tắt Máy", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _ = _shutdownCoordinator.StartShutdownCountdownAsync();
+    }
+
+    [RelayCommand]
+    private void OpenAutomationDashboard()
+    {
+        var win = new AutomationDashboardWindow(this)
+        {
+            Owner = Application.Current.MainWindow
+        };
+        win.Show();
     }
 }
 

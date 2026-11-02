@@ -27,6 +27,17 @@
 
             <!-- Status Badges -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Auto Run & Telegram Dashboard Button -->
+                <Button Command="{Binding OpenAutomationDashboardCommand}" 
+                        Padding="10,6" Margin="0,0,8,0" Cursor="Hand"
+                        Background="#251e36" BorderBrush="#cba6f7" BorderThickness="1" Foreground="#cba6f7"
+                        ToolTip="Mở Bảng Điều Khiển Auto Run, Telegram Approval &amp; Tắt Máy An Toàn">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="🤖" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Auto Run &amp; Telegram" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
                 <!-- YouTube Analytics Button -->
                 <Button Command="{Binding OpenYouTubeAnalyticsCommand}" 
                         Padding="10,6" Margin="0,0,8,0" Cursor="Hand"

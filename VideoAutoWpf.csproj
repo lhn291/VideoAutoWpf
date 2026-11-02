@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <UseAppHost>false</UseAppHost>
+    <UseAppHost>true</UseAppHost>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +16,12 @@
     <PackageReference Include="Google.Apis.YouTube.v3" Version="1.77.0.4284" />
     <PackageReference Include="Google.Cloud.Speech.V2" Version="1.8.0" />
     <PackageReference Include="Google.Cloud.TextToSpeech.V1" Version="3.18.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests\**" />
+    <None Remove="Tests\**" />
   </ItemGroup>
 
   <ItemGroup>

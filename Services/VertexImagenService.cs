@@ -321,7 +321,7 @@ public class VertexImagenService
             if (!string.IsNullOrEmpty(referenceImagePath) && File.Exists(referenceImagePath))
             {
                 onLog?.Invoke($"[V2 Continuity] Shot {shot.ShotCode}: Đang dùng ảnh tham chiếu nhân vật/bối cảnh để duy trì tính nhất quán...");
-                savedPath = await GenerateImageWithReferenceAsync(promptToUse, referenceImagePath, outputPath, aspectRatio, location, onLog, ct);
+                savedPath = await GenerateImageWithReferenceAsync(promptToUse, referenceImagePath, outputPath, aspectRatio, location, onLog, ct: ct);
             }
             else
             {
@@ -355,6 +355,7 @@ public class VertexImagenService
         string aspectRatio = "9:16",
         string location = "global",
         Action<string>? onLog = null,
+        string? referenceContextInstruction = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(prompt))
@@ -389,6 +390,10 @@ public class VertexImagenService
             _ => "9:16"
         };
 
+        var textInstruction = !string.IsNullOrWhiteSpace(referenceContextInstruction)
+            ? $"{referenceContextInstruction} {prompt}"
+            : $"Using the person or location shown in the reference image above as the visual anchor for consistency, generate a new image matching this description: {prompt}";
+
         // Xây dựng request multimodal: ảnh tham chiếu + text prompt
         // Gemini Image sẽ dùng ảnh tham chiếu như một style/subject anchor
         var requestBody = new
@@ -408,7 +413,7 @@ public class VertexImagenService
                                 data = referenceBase64
                             }
                         },
-                        new { text = $"Using the person or location shown in the reference image above as the visual anchor for consistency, generate a new image matching this description: {prompt}" }
+                        new { text = textInstruction }
                     }
                 }
             },

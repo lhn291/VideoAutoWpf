@@ -88,20 +88,106 @@ public partial class VisualStyleBible : ObservableObject
     public string StatusText => Status.ToDisplayText();
 
     [JsonIgnore]
+    public bool IsIllustrationStyle =>
+        StyleKey != "realistic-photo" && StyleKey != "cinematic-horror";
+
+    [JsonIgnore]
     public string? SampleImagePath => SampleAsset?.DisplayImagePath;
+
+    /// <summary>
+    /// Khởi tạo VisualStyleBible từ styleKey được chọn bên ngoài (khớp với StyleCard và GeminiScriptService.StylePrompts).
+    /// </summary>
+    public static VisualStyleBible CreateFromStyleKey(string styleKey, string? title = null, string? description = null, string aspectRatio = "9:16")
+    {
+        var bible = new VisualStyleBible
+        {
+            StyleKey = styleKey,
+            AspectRatio = aspectRatio
+        };
+
+        if (Services.GeminiScriptService.StylePrompts.TryGetValue(styleKey, out var promptPrefix))
+        {
+            bible.GlobalPromptPrefix = promptPrefix.Trim();
+        }
+
+        var styleCard = StyleCard.GetDefaultStyles().FirstOrDefault(s => s.Key == styleKey);
+        bible.StyleDisplayName = title ?? styleCard?.Title ?? styleKey;
+        bible.StyleDescription = description ?? styleCard?.Description ?? string.Empty;
+
+        switch (styleKey)
+        {
+            case "dark-anime":
+                bible.ColorPalette = "dark indigo, ash grey, crimson red, dim amber";
+                bible.LightingStyle = "dramatic cel shading, sharp cast shadows, moody backlight";
+                bible.CameraStyle = "anime cinematic angle, high contrast";
+                bible.DepthOfField = "sharp line art, 2D graphic novel depth";
+                break;
+            case "cartoon-2d":
+                bible.ColorPalette = "solid retro palette, bold black ink outlines";
+                bible.LightingStyle = "flat illustration lighting, minimal gradients";
+                bible.CameraStyle = "classic 2D animation framing";
+                bible.DepthOfField = "flat 2D plane";
+                break;
+            case "cyberpunk":
+                bible.ColorPalette = "neon cyan, hot magenta, electric violet, deep midnight black";
+                bible.LightingStyle = "neon rim lighting, reflections on wet asphalt";
+                bible.CameraStyle = "wide dynamic anime angle";
+                bible.DepthOfField = "2D anime cel shading with glowing highlights";
+                break;
+            case "horror-cartoon":
+                bible.ColorPalette = "charcoal black, venom green, deep violet, dark red";
+                bible.LightingStyle = "eerie harsh shadows, sketchy silhouette";
+                bible.CameraStyle = "unsettling Dutch angle";
+                bible.DepthOfField = "hand-drawn sketchy textures";
+                break;
+            case "realistic-photo":
+                bible.ColorPalette = "natural grading, authentic documentary colors";
+                bible.LightingStyle = "natural daylight, soft bounce, ambient practical lights";
+                bible.CameraStyle = "DSLR photography 50mm lens";
+                bible.DepthOfField = "shallow depth of field, natural bokeh";
+                break;
+            case "cinematic-horror":
+                bible.ColorPalette = "desaturated cool teal, sickly olive, deep shadow black";
+                bible.LightingStyle = "volumetric fog lighting, low-key chiaroscuro";
+                bible.CameraStyle = "slow creeping cinematic wide shot";
+                bible.DepthOfField = "anamorphic lens flare, shallow focus";
+                break;
+            default:
+                bible.ColorPalette = "moody atmospheric crime palette";
+                bible.LightingStyle = "dramatic cinematic lighting";
+                bible.CameraStyle = "cinematic framing";
+                bible.DepthOfField = "atmospheric depth";
+                break;
+        }
+
+        return bible;
+    }
 
     /// <summary>Tạo global prompt prefix từ các thông số đã cài đặt.</summary>
     public string BuildPromptPrefix()
     {
         var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(StyleDisplayName))
-            parts.Add(StyleDisplayName);
+
+        // 1. Prefix gốc định hình chất liệu vẽ (2D anime comic novel / cartoon / painting / photo)
+        if (!string.IsNullOrWhiteSpace(GlobalPromptPrefix))
+        {
+            parts.Add(GlobalPromptPrefix.Trim().TrimEnd('.'));
+        }
+        else if (Services.GeminiScriptService.StylePrompts.TryGetValue(StyleKey, out var registeredPrompt))
+        {
+            parts.Add(registeredPrompt.Trim().TrimEnd('.'));
+        }
+        else if (!string.IsNullOrWhiteSpace(StyleDisplayName))
+        {
+            parts.Add($"In a {StyleDisplayName} art style");
+        }
+
+        // 2. Tinh chỉnh ánh sáng, bảng màu
         if (!string.IsNullOrWhiteSpace(LightingStyle))
             parts.Add(LightingStyle);
         if (!string.IsNullOrWhiteSpace(ColorPalette))
             parts.Add($"color palette: {ColorPalette}");
-        if (!string.IsNullOrWhiteSpace(DepthOfField))
-            parts.Add(DepthOfField);
+
         return string.Join(", ", parts);
     }
 }
