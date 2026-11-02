@@ -1,4 +1,5 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
+using System.Text.Json.Serialization;
 
 namespace VideoAutoWpf.Models;
 
@@ -174,34 +175,53 @@ public class ChannelComparisonItem
 /// </summary>
 public class CompetitorAiAnalysis
 {
+    [JsonPropertyName("channel_name")]
     public string ChannelName { get; set; } = string.Empty;
+    [JsonPropertyName("summary")]
     public string Summary { get; set; } = string.Empty;
+    [JsonPropertyName("core_audience")]
     public string CoreAudience { get; set; } = string.Empty;
+    [JsonPropertyName("title_formulas")]
     public List<TitleFormulaItem> TitleFormulas { get; set; } = new();
+    [JsonPropertyName("hook_strategies")]
     public List<HookStrategyItem> HookStrategies { get; set; } = new();
+    [JsonPropertyName("psychology_triggers")]
     public List<string> PsychologyTriggers { get; set; } = new();
+    [JsonPropertyName("suggested_ideas")]
     public List<SuggestedVideoIdea> SuggestedIdeas { get; set; } = new();
 }
 
 public class TitleFormulaItem
 {
+    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("formula")]
     public string Formula { get; set; } = string.Empty;
+    [JsonPropertyName("why_it_works")]
     public string WhyItWorks { get; set; } = string.Empty;
+    [JsonPropertyName("example")]
     public string Example { get; set; } = string.Empty;
 }
 
 public class HookStrategyItem
 {
+    [JsonPropertyName("hook_type")]
     public string HookType { get; set; } = string.Empty;
+    [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
+    [JsonPropertyName("example_script")]
     public string ExampleScript { get; set; } = string.Empty;
 }
 
 public class SuggestedVideoIdea
 {
+    [JsonPropertyName("title")]
     public string Title { get; set; } = string.Empty;
+
+    [JsonPropertyName("hook_opening")]
     public string HookOpening { get; set; } = string.Empty;
+
+    [JsonPropertyName("target_emotion")]
     public string TargetEmotion { get; set; } = string.Empty;
 }
 

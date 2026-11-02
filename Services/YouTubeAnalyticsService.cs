@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
@@ -498,7 +498,7 @@ public class YouTubeAnalyticsService
         if (match.Success) return match.Groups[1].Value;
 
         // youtube.com/embed/ID hoặc /shorts/ID
-        match = Regex.Match(input, @"youtube\.com/(?:embed|shorts|v)/([\w-]{11})");
+        match = Regex.Match(input, @"youtube\.com/(?:embed|shorts|v|live)/([\w-]{11})");
         if (match.Success) return match.Groups[1].Value;
 
         return null;

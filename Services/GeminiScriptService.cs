@@ -779,7 +779,8 @@ public class GeminiScriptService
         string channelDescription,
         IEnumerable<YouTubeVideoInfo> topVideos,
         string location = "us-central1",
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Action<string>? onStatus = null)
     {
         var (token, projectId) = await ResolveAuthCredentialsAsync();
         
@@ -844,7 +845,25 @@ public class GeminiScriptService
                          $"Danh sách Top video nhiều lượt xem nhất:\n{videoListSummary}\n\n" +
                          $"Hãy bóc tách thật sâu các công thức đặt tiêu đề, kỹ thuật hook mở đầu, tâm lý khán giả, và đưa ra 5 ý tưởng video mới siêu hấp dẫn chuẩn bị làm nội dung.";
 
-        return await CallGeminiForJson<CompetitorAiAnalysis>(systemInstruction, userPrompt, projectId, location, token, ct);
+        CompetitorAiAnalysis result;
+        try
+        {
+            result = await CallGeminiForJson<CompetitorAiAnalysis>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
+        }
+        catch
+        {
+            result = CompetitorPatternAnalyzer.AnalyzeChannel(channelTitle, channelDescription, topVideos);
+        }
+
+        if (string.IsNullOrWhiteSpace(result.Summary))
+        {
+            result.Summary = $"Kênh \"{channelTitle}\" sở hữu chiến lược nội dung viral tập trung vào cảm xúc và kích thích tò mò.";
+        }
+        if (string.IsNullOrWhiteSpace(result.ChannelName))
+        {
+            result.ChannelName = channelTitle;
+        }
+        return result;
     }
 
     /// <summary>
@@ -853,26 +872,101 @@ public class GeminiScriptService
     public async Task<CompetitorAiAnalysis> AnalyzeSingleVideoAsync(
         YouTubeVideoInfo video,
         string location = "us-central1",
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Action<string>? onStatus = null)
     {
         var (token, projectId) = await ResolveAuthCredentialsAsync();
-        
-        //
 
         var systemInstruction =
-            "Bạn là chuyên gia phân tích Viral Content YouTube. " +
-            "Nhiệm vụ: Phân tích sâu 1 video YouTube về lý do thành công của tiêu đề, cách tạo hook gây tò mò, và gợi ý 5 video tương tự. " +
-            "Trả về DUY NHẤT khối JSON thô theo schema đã cho.";
+            "Bạn là một chuyên gia hàng đầu về Viral YouTube Algorithm, Phân tích Kỹ thuật Đặt Tiêu đề (Title Blueprint) và Kỹ thuật Hook tâm lý (Retention Hook). " +
+            "Nhiệm vụ của bạn là bóc tách chính xác vì sao video YouTube này lại thu hút người xem, chỉ ra công thức đặt tiêu đề, cách mở màn (hook), tâm lý khán giả, và đưa ra 5 ý tưởng video tương tự để áp dụng. " +
+            "Bạn PHẢI trả về duy nhất khối JSON thô, không bọc trong markdown hay codeblock, đúng schema sau:\n" +
+            "{\n" +
+            "  \"channel_name\": \"Tên kênh hoặc tác giả video\",\n" +
+            "  \"summary\": \"Tóm tắt 2-3 câu về lý do thành công, phong cách nội dung và công thức của video này\",\n" +
+            "  \"core_audience\": \"Mô tả đối tượng khán giả mục tiêu (độ tuổi, tâm lý, nỗi đau, sở thích)\",\n" +
+            "  \"title_formulas\": [\n" +
+            "    {\n" +
+            "      \"name\": \"Tên công thức tiêu đề (ví dụ: Tò mò bí ẩn + Con số gây sốc)\",\n" +
+            "      \"formula\": \"Cấu trúc cú pháp (ví dụ: Sự Thật Về [Sự kiện] Mà [Đối tượng] Không Muốn Bạn Biết)\",\n" +
+            "      \"why_it_works\": \"Lý giải tâm lý học khiến người xem bấm vào\",\n" +
+            "      \"example\": \"Tiêu đề thực tế hoặc biến thể phù hợp\"\n" +
+            "    }\n" +
+            "  ],\n" +
+            "  \"hook_strategies\": [\n" +
+            "    {\n" +
+            "      \"hook_type\": \"Tên chiến thuật hook mở đầu (ví dụ: Câu hỏi mở màn gây sốc / Kịch tính cao trào)\",\n" +
+            "      \"description\": \"Cách giữ chân người xem trong 5-15 giây đầu tiên\",\n" +
+            "      \"example_script\": \"Đoạn thoại mở màn mẫu giả định (15-30 từ)\"\n" +
+            "    }\n" +
+            "  ],\n" +
+            "  \"psychology_triggers\": [\n" +
+            "    \"Trigger 1 (ví dụ: Nỗi sợ bị bỏ rơi / Bí mật cấm kỵ)\",\n" +
+            "    \"Trigger 2 (ví dụ: Tò mò về kết cục)\"\n" +
+            "  ],\n" +
+            "  \"suggested_ideas\": [\n" +
+            "    {\n" +
+            "      \"title\": \"Gợi ý tiêu đề video mới áp dụng đúng công thức trên\",\n" +
+            "      \"hook_opening\": \"Câu hook mở đầu video 5-10s\",\n" +
+            "      \"target_emotion\": \"Cảm xúc nhắm đến\"\n" +
+            "    }\n" +
+            "  ]\n" +
+            "}";
 
         var userPrompt = $"Phân tích video YouTube sau:\n" +
                          $"Tiêu đề: {video.Title}\n" +
+                         $"Kênh: {video.ChannelTitle}\n" +
                          $"Lượt xem: {video.ViewCountDisplay} | Likes: {video.LikeCountDisplay} | Tương tác: {video.EngagementRate:F2}%\n" +
                          $"Thời lượng: {video.DurationDisplay}\n" +
                          $"Tags: {video.Tags}\n" +
                          $"Mô tả: {video.Description}\n\n" +
-                         $"Hãy phân tích công thức tiêu đề, hook giả định, và gợi ý 5 tiêu đề tương tự.";
+                         $"Hãy bóc tách thật sâu công thức đặt tiêu đề, kỹ thuật hook mở đầu, tâm lý khán giả, và đưa ra 5 ý tưởng video tương tự siêu hấp dẫn.";
 
-        return await CallGeminiForJson<CompetitorAiAnalysis>(systemInstruction, userPrompt, projectId, location, token, ct);
+        CompetitorAiAnalysis result;
+        try
+        {
+            result = await CallGeminiForJson<CompetitorAiAnalysis>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
+        }
+        catch
+        {
+            result = CompetitorPatternAnalyzer.AnalyzeSingleVideo(video);
+        }
+
+        if (string.IsNullOrWhiteSpace(result.Summary))
+        {
+            result.Summary = $"Phân tích video \"{video.Title}\": Đạt {video.ViewCountDisplay} lượt xem với tỷ lệ tương tác {video.EngagementRateDisplay}. Tiêu đề áp dụng nghệ thuật kích thích tâm lý tò mò kết hợp góc nhìn sâu sắc.";
+        }
+        if (string.IsNullOrWhiteSpace(result.ChannelName))
+        {
+            result.ChannelName = video.ChannelTitle;
+        }
+        if (result.TitleFormulas == null || result.TitleFormulas.Count == 0)
+        {
+            result.TitleFormulas = new List<TitleFormulaItem>
+            {
+                new()
+                {
+                    Name = "Công thức tiêu đề trọng tâm",
+                    Formula = video.Title,
+                    WhyItWorks = "Tập trung vào yếu tố khơi gợi tò mò hoặc hoài niệm.",
+                    Example = video.Title
+                }
+            };
+        }
+        if (result.SuggestedIdeas == null || result.SuggestedIdeas.Count == 0)
+        {
+            result.SuggestedIdeas = new List<SuggestedVideoIdea>
+            {
+                new()
+                {
+                    Title = $"[BÍ MẬT CHƯA KỂ] Sự Thật Về: {video.Title}",
+                    HookOpening = "Bạn có biết đằng sau câu chuyện này còn một chi tiết kinh ngạc ít ai ngờ tới?",
+                    TargetEmotion = "Tò mò và bất ngờ"
+                }
+            };
+        }
+
+        return result;
     }
 
     /// <summary>

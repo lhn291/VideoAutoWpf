@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using VideoAutoWpf.Models;
 using VideoAutoWpf.Services;
 using VideoAutoWpf.ViewModels;
@@ -27,12 +27,12 @@ public partial class SeriesCreatorWindow : Window
             Close();
         };
 
+        DataContext = ViewModel;
+
         if (analyticsRequest != null)
         {
             ViewModel.InitFromAnalyticsRequest(analyticsRequest);
         }
-
-        DataContext = ViewModel;
     }
 
     public SeriesCreatorWindow(GeminiScriptService geminiService, CreateVideoFromAnalyticsRequest? analyticsRequest = null)

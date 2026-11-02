@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using VideoAutoWpf.Models;
 using VideoAutoWpf.Services;
 using VideoAutoWpf.ViewModels;
@@ -25,12 +25,12 @@ public partial class ScriptGeneratorWindow : Window
             Close();
         };
 
+        DataContext = ViewModel;
+
         if (analyticsRequest != null)
         {
             ViewModel.InitFromAnalyticsRequest(analyticsRequest);
         }
-
-        DataContext = ViewModel;
     }
 
     protected override void OnClosed(EventArgs e)

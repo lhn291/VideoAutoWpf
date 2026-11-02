@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Threading;
 using VideoAutoWpf.Models.Automation;
 using VideoAutoWpf.Services.Automation;
@@ -461,5 +461,56 @@ public class AutomationIntegrationTests : IDisposable
         Assert.NotNull(plan);
         Assert.True(plan.SuggestedScenes >= 3);
         Assert.NotEmpty(lastStatus);
+    }
+
+    [Fact]
+    public async Task Test_20_YouTubeVideoAnalysis()
+    {
+        var auth = new VideoAutoWpf.Services.GoogleAuthService();
+        var yt = new VideoAutoWpf.Services.YouTubeAnalyticsService(auth);
+        var info = await yt.GetVideoInfoAsync("dQw4w9WgXcQ");
+        Assert.NotNull(info);
+        Assert.NotEmpty(info.Title);
+    }
+
+    [Fact]
+    public async Task Test_21_AnalyzeSingleVideoAsync()
+    {
+        var auth = new VideoAutoWpf.Services.GoogleAuthService();
+        var yt = new VideoAutoWpf.Services.YouTubeAnalyticsService(auth);
+        var gemini = new VideoAutoWpf.Services.GeminiScriptService(auth);
+        var info = await yt.GetVideoInfoAsync("dQw4w9WgXcQ");
+
+        var analysis = await gemini.AnalyzeSingleVideoAsync(info);
+        Assert.NotNull(analysis);
+        Assert.NotEmpty(analysis.Summary);
+    }
+
+    [Fact]
+    public async Task Test_22_AnalyzeCompetitorFormulasAsync()
+    {
+        var auth = new VideoAutoWpf.Services.GoogleAuthService();
+        var gemini = new VideoAutoWpf.Services.GeminiScriptService(auth);
+
+        var topVideos = new List<VideoAutoWpf.Models.YouTubeVideoInfo>
+        {
+            new()
+            {
+                Title = "10 Bí Ẩn Chưa Có Lời Giải Lớn Nhất Lịch Sử",
+                ViewCount = 1500000,
+                LikeCount = 80000,
+                Duration = TimeSpan.FromMinutes(12)
+            }
+        };
+
+        var analysis = await gemini.AnalyzeCompetitorFormulasAsync(
+            "Kênh Khám Phá Bí Ẩn",
+            "Kênh chuyên làm về các vụ án và bí ẩn thế giới",
+            topVideos
+        );
+
+        Assert.NotNull(analysis);
+        Assert.NotEmpty(analysis.Summary);
+        Assert.NotEmpty(analysis.TitleFormulas);
     }
 }

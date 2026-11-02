@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -577,7 +577,8 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
             ChannelAiAnalysis = await _geminiService.AnalyzeCompetitorFormulasAsync(
                 ChannelInfo.Title,
                 ChannelInfo.Description,
-                ChannelTopVideos
+                ChannelTopVideos,
+                onStatus: msg => StatusMessage = msg
             );
             HasChannelAiAnalysis = true;
             StatusMessage = $"✅ [Gemini AI] Đã bóc tách thành công {ChannelAiAnalysis.TitleFormulas.Count} công thức tiêu đề & {ChannelAiAnalysis.HookStrategies.Count} chiến lược hook!";
@@ -614,7 +615,7 @@ public partial class YouTubeAnalyticsViewModel : ObservableObject
 
         try
         {
-            VideoAiAnalysis = await _geminiService.AnalyzeSingleVideoAsync(VideoInfo);
+            VideoAiAnalysis = await _geminiService.AnalyzeSingleVideoAsync(VideoInfo, onStatus: msg => StatusMessage = msg);
             HasVideoAiAnalysis = true;
             StatusMessage = "✅ [Gemini AI] Đã bóc tách công thức tiêu đề & hook của video thành công!";
         }
