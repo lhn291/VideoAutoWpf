@@ -606,30 +606,42 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private void ShowException(string title, Exception ex)
+    {
+        AppendLog($"[{title}] {ex.Message}");
+        try
+        {
+            MessageBox.Show($"{title}:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        catch { }
+    }
+
     [RelayCommand]
     private void OpenScriptGenerator()
     {
         var mainWin = Application.Current.MainWindow;
-        var win = new ScriptGeneratorWindow(_geminiService, _ttsService, _bgmService)
-        {
-            WindowState = WindowState.Maximized
-        };
-
         try
         {
-            mainWin?.Hide();
+            var win = new ScriptGeneratorWindow(_geminiService, _ttsService, _bgmService)
+            {
+                WindowState = WindowState.Maximized,
+                Owner = mainWin
+            };
+
             if (win.ShowDialog() == true && win.ResultWorkspace != null)
             {
                 ApplyWorkspace(win.ResultWorkspace);
             }
+        }
+        catch (Exception ex)
+        {
+            ShowException("Lỗi mở Trình Soạn Kịch Bản", ex);
         }
         finally
         {
             if (mainWin != null)
             {
                 Application.Current.MainWindow = mainWin;
-                mainWin.Show();
-                mainWin.WindowState = WindowState.Maximized;
                 mainWin.Activate();
                 mainWin.Focus();
             }
@@ -781,26 +793,28 @@ public partial class MainViewModel : ObservableObject
     private void OpenSeriesCreator()
     {
         var mainWin = Application.Current.MainWindow;
-        var win = new SeriesCreatorWindow(_geminiService, _youtubeService)
-        {
-            WindowState = WindowState.Maximized
-        };
-
         try
         {
-            mainWin?.Hide();
+            var win = new SeriesCreatorWindow(_geminiService, _youtubeService)
+            {
+                WindowState = WindowState.Maximized,
+                Owner = mainWin
+            };
+
             if (win.ShowDialog() == true && win.ResultSeriesProject != null)
             {
                 LoadSeriesProject(win.ResultSeriesProject);
             }
+        }
+        catch (Exception ex)
+        {
+            ShowException("Lỗi mở Trình Tạo Series", ex);
         }
         finally
         {
             if (mainWin != null)
             {
                 Application.Current.MainWindow = mainWin;
-                mainWin.Show();
-                mainWin.WindowState = WindowState.Maximized;
                 mainWin.Activate();
                 mainWin.Focus();
             }
@@ -2688,27 +2702,29 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenYouTubeAnalytics()
     {
-        var vm = new YouTubeAnalyticsViewModel(_youtubeService, _geminiService);
         var mainWin = Application.Current.MainWindow;
+        var vm = new YouTubeAnalyticsViewModel(_youtubeService, _geminiService);
         var win = new Views.YouTubeAnalyticsWindow(vm)
         {
-            WindowState = WindowState.Maximized
+            WindowState = WindowState.Maximized,
+            Owner = mainWin
         };
 
         CreateVideoFromAnalyticsRequest? pendingRequest = null;
         try
         {
-            mainWin?.Hide();
             win.ShowDialog();
             pendingRequest = vm.PendingVideoRequest;
+        }
+        catch (Exception ex)
+        {
+            ShowException("Lỗi mở YouTube Analytics", ex);
         }
         finally
         {
             if (mainWin != null)
             {
                 Application.Current.MainWindow = mainWin;
-                mainWin.Show();
-                mainWin.WindowState = WindowState.Maximized;
                 mainWin.Activate();
                 mainWin.Focus();
             }
@@ -2716,13 +2732,20 @@ public partial class MainViewModel : ObservableObject
 
         if (pendingRequest != null)
         {
-            if (pendingRequest.TargetMode == VideoCreationTargetMode.Series)
+            try
             {
-                OpenSeriesCreatorWithRequest(pendingRequest);
+                if (pendingRequest.TargetMode == VideoCreationTargetMode.Series)
+                {
+                    OpenSeriesCreatorWithRequest(pendingRequest);
+                }
+                else
+                {
+                    OpenScriptGeneratorWithRequest(pendingRequest);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                OpenScriptGeneratorWithRequest(pendingRequest);
+                ShowException("Lỗi khởi tạo kịch bản từ YouTube", ex);
             }
         }
     }
@@ -2730,26 +2753,28 @@ public partial class MainViewModel : ObservableObject
     private void OpenSeriesCreatorWithRequest(CreateVideoFromAnalyticsRequest request)
     {
         var mainWin = Application.Current.MainWindow;
-        var win = new SeriesCreatorWindow(_geminiService, _youtubeService, request)
-        {
-            WindowState = WindowState.Maximized
-        };
-
         try
         {
-            mainWin?.Hide();
+            var win = new SeriesCreatorWindow(_geminiService, _youtubeService, request)
+            {
+                WindowState = WindowState.Maximized,
+                Owner = mainWin
+            };
+
             if (win.ShowDialog() == true && win.ResultSeriesProject != null)
             {
                 LoadSeriesProject(win.ResultSeriesProject);
             }
+        }
+        catch (Exception ex)
+        {
+            ShowException("Lỗi mở Trình Tạo Series từ YouTube", ex);
         }
         finally
         {
             if (mainWin != null)
             {
                 Application.Current.MainWindow = mainWin;
-                mainWin.Show();
-                mainWin.WindowState = WindowState.Maximized;
                 mainWin.Activate();
                 mainWin.Focus();
             }
@@ -2759,26 +2784,28 @@ public partial class MainViewModel : ObservableObject
     private void OpenScriptGeneratorWithRequest(CreateVideoFromAnalyticsRequest request)
     {
         var mainWin = Application.Current.MainWindow;
-        var win = new ScriptGeneratorWindow(_geminiService, _ttsService, _bgmService, request)
-        {
-            WindowState = WindowState.Maximized
-        };
-
         try
         {
-            mainWin?.Hide();
+            var win = new ScriptGeneratorWindow(_geminiService, _ttsService, _bgmService, request)
+            {
+                WindowState = WindowState.Maximized,
+                Owner = mainWin
+            };
+
             if (win.ShowDialog() == true && win.ResultWorkspace != null)
             {
                 ApplyWorkspace(win.ResultWorkspace);
             }
+        }
+        catch (Exception ex)
+        {
+            ShowException("Lỗi mở Trình Soạn Kịch Bản từ YouTube", ex);
         }
         finally
         {
             if (mainWin != null)
             {
                 Application.Current.MainWindow = mainWin;
-                mainWin.Show();
-                mainWin.WindowState = WindowState.Maximized;
                 mainWin.Activate();
                 mainWin.Focus();
             }

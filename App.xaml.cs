@@ -28,13 +28,28 @@ public partial class App : Application
             return;
         }
 
-        // 2. Đăng ký xử lý ngoại lệ toàn cục
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
+
+        // 2. Đăng ký xử lý ngoại lệ toàn cục - Bảo vệ app không bao giờ bị tắt đột ngột
         DispatcherUnhandledException += (s, args) =>
         {
             try
             {
                 var logPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "crash_log.txt");
                 System.IO.File.AppendAllText(logPath, $"[{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}] Dispatcher Error: {args.Exception}\n\n");
+            }
+            catch { }
+
+            // Đánh dấu đã xử lý để WPF không tắt app
+            args.Handled = true;
+
+            try
+            {
+                MessageBox.Show(
+                    $"Đã xảy ra lỗi:\n{args.Exception?.Message}\n\nChi tiết đã được ghi vào crash_log.txt.",
+                    "Thông Báo Lỗi",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
             }
             catch { }
         };
@@ -47,6 +62,17 @@ public partial class App : Application
                 System.IO.File.AppendAllText(logPath, $"[{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}] AppDomain Error: {args.ExceptionObject}\n\n");
             }
             catch { }
+        };
+
+        TaskScheduler.UnobservedTaskException += (s, args) =>
+        {
+            try
+            {
+                var logPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "crash_log.txt");
+                System.IO.File.AppendAllText(logPath, $"[{System.DateTime.Now:yyyy-MM-dd HH:mm:ss}] TaskScheduler Error: {args.Exception}\n\n");
+            }
+            catch { }
+            args.SetObserved();
         };
 
         base.OnStartup(e);

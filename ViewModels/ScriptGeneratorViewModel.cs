@@ -399,8 +399,12 @@ public partial class ScriptGeneratorViewModel : ObservableObject
 
         StatusText = $"🎯 Đã nạp ý tưởng & retention hook từ {req.SourceInfo}! Đang phân tích kịch bản...";
         
-        // Tự động kích hoạt AI Planning
-        _ = GeneratePlan();
+        // Tự động kích hoạt AI Planning an toàn qua Dispatcher sau khi Window đã sẵn sàng
+        _ = System.Windows.Application.Current?.Dispatcher?.InvokeAsync(async () =>
+        {
+            await Task.Delay(300);
+            await GeneratePlan();
+        });
     }
 
 
