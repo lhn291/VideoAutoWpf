@@ -92,7 +92,18 @@
                                 <TextBlock Text="SERIES" FontSize="10" FontWeight="Bold" Foreground="White"/>
                             </Border>
                             <TextBlock Text="{Binding CurrentSeries.SeriesTitle}" FontSize="13" FontWeight="Bold" Foreground="#cdd6f4" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding CurrentSeries.Episodes.Count, StringFormat=' ({0} tập)'}" FontSize="12" Foreground="{StaticResource AccentBlue}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding CurrentSeries.Episodes.Count, StringFormat=' ({0} tập)'}" FontSize="12" Foreground="{StaticResource AccentBlue}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                            <!-- Nút Master Poster Series -->
+                            <Button Command="{Binding SetSeriesPosterCommand}"
+                                    Background="#313244" BorderBrush="#cba6f7" BorderThickness="1"
+                                    Padding="8,3" VerticalAlignment="Center" Cursor="Hand"
+                                    ToolTip="Xem hoặc thiết lập ảnh bìa Master Poster chung cho toàn bộ chuỗi (hiển thị khi video chưa click xem)">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🖼️ " FontSize="11" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Master Poster" FontSize="11" Foreground="#cba6f7" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal">

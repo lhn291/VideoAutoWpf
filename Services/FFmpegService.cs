@@ -359,6 +359,42 @@ public partial class FFmpegService : IFFmpegService
                 File.Move(mergedVideoPath, finalOutputPath);
             }
 
+            // Bước 3.5: Gắn Ảnh Bìa / Poster chung vào Video MP4 (Attached Picture Metadata)
+            var posterToUse = !string.IsNullOrEmpty(config.CoverPosterImagePath) && File.Exists(config.CoverPosterImagePath)
+                ? config.CoverPosterImagePath
+                : scenes.FirstOrDefault(s => !string.IsNullOrEmpty(s.ImagePath) && File.Exists(s.ImagePath))?.ImagePath;
+
+            if (!string.IsNullOrEmpty(posterToUse) && File.Exists(posterToUse))
+            {
+                try
+                {
+                    // 1. Lưu file Poster riêng biệt bên cạnh video để dễ dàng đăng làm Thumbnail lên YouTube/TikTok
+                    var posterDestPath = Path.Combine(projectDir, "POSTER_THUMBNAIL.png");
+                    File.Copy(posterToUse, posterDestPath, true);
+
+                    // 2. Nhúng ảnh bìa vào MP4 container (stream disposition: attached_pic) để Windows Explorer & trình phát video hiện icon bìa khi chưa click
+                    var tempWithPoster = Path.Combine(tempDir, "video_with_poster.mp4");
+                    var attachArgs = $"-y -i \"{finalOutputPath}\" -i \"{posterToUse}\" -map 0 -map 1 -c copy -disposition:v:1 attached_pic \"{tempWithPoster}\"";
+                    
+                    await RunFfmpegAsync(ffmpeg, attachArgs, progress, ct);
+                    if (File.Exists(tempWithPoster) && new FileInfo(tempWithPoster).Length > 1000)
+                    {
+                        File.Copy(tempWithPoster, finalOutputPath, true);
+                        progress?.Report(new GenerationProgress
+                        {
+                            LogMessage = $"[Poster] ✅ Đã nhúng ảnh bìa đại diện chung ({Path.GetFileName(posterToUse)}) vào metadata video."
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    progress?.Report(new GenerationProgress
+                    {
+                        LogMessage = $"[Poster Lưu ý] Không thể gắn metadata ảnh bìa: {ex.Message}"
+                    });
+                }
+            }
+
             // Bước 4: Tự động tạo file .txt chứa Tiêu đề, Mô tả, Hashtags và Caption đầy đủ
             var publishInfo = config.PublishInfo ?? new VideoPublishInfo();
             if (string.IsNullOrWhiteSpace(publishInfo.Title))

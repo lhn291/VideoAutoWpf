@@ -66,8 +66,8 @@ public class VertexImagenService
         var json = JsonSerializer.Serialize(requestBody);
 
         // Các model ảnh Gemini đã được kiểm tra hoạt động tại global location
-        // Thử gemini-3.1-flash-image trước, fallback sang gemini-2.5-flash-image
-        var modelsToTry = new[] { "gemini-3.1-flash-image", "gemini-2.5-flash-image" };
+        // Thử gemini-3.1-flash-image trước, sau đó gemini-3-pro-image, fallback sang gemini-2.5-flash-image
+        var modelsToTry = new[] { "gemini-3.1-flash-image", "gemini-3-pro-image", "gemini-3.1-flash-image-preview", "gemini-2.5-flash-image" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)

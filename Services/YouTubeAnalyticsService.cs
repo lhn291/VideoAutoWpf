@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Xml;
 using Google.Apis.Services;
@@ -125,15 +126,15 @@ public class YouTubeAnalyticsService
         return new YouTubeChannelInfo
         {
             ChannelId = ch.Id,
-            Title = ch.Snippet.Title ?? string.Empty,
-            Description = ch.Snippet.Description ?? string.Empty,
-            ThumbnailUrl = ch.Snippet.Thumbnails?.Medium?.Url ?? ch.Snippet.Thumbnails?.Default__?.Url ?? string.Empty,
-            CustomUrl = ch.Snippet.CustomUrl ?? string.Empty,
-            PublishedAt = ch.Snippet.PublishedAtDateTimeOffset?.UtcDateTime ?? DateTime.MinValue,
-            SubscriberCount = (long)(ch.Statistics.SubscriberCount ?? 0),
-            ViewCount = (long)(ch.Statistics.ViewCount ?? 0),
-            VideoCount = (long)(ch.Statistics.VideoCount ?? 0),
-            Country = ch.Snippet.Country ?? "N/A"
+            Title = ch.Snippet?.Title ?? string.Empty,
+            Description = ch.Snippet?.Description ?? string.Empty,
+            ThumbnailUrl = ch.Snippet?.Thumbnails?.Medium?.Url ?? ch.Snippet?.Thumbnails?.Default__?.Url ?? string.Empty,
+            CustomUrl = ch.Snippet?.CustomUrl ?? string.Empty,
+            PublishedAt = SafeGetPublishedAt(() => ch.Snippet?.PublishedAtDateTimeOffset, ch.Snippet?.PublishedAtRaw),
+            SubscriberCount = (long)(ch.Statistics?.SubscriberCount ?? 0),
+            ViewCount = (long)(ch.Statistics?.ViewCount ?? 0),
+            VideoCount = (long)(ch.Statistics?.VideoCount ?? 0),
+            Country = ch.Snippet?.Country ?? "N/A"
         };
     }
 
@@ -195,7 +196,7 @@ public class YouTubeAnalyticsService
 
         var result = new ObservableCollection<YouTubeVideoInfo>();
         int rank = 1;
-        foreach (var v in videoResponse.Items.OrderByDescending(v => v.Snippet.PublishedAtDateTimeOffset))
+        foreach (var v in videoResponse.Items.OrderByDescending(v => SafeGetPublishedAt(() => v.Snippet?.PublishedAtDateTimeOffset, v.Snippet?.PublishedAtRaw)))
         {
             result.Add(MapVideoToInfo(v, rank++));
         }
@@ -263,10 +264,10 @@ public class YouTubeAnalyticsService
             var sr = new YouTubeSearchResult
             {
                 VideoId = item.Id.VideoId,
-                Title = item.Snippet.Title ?? string.Empty,
-                ChannelTitle = item.Snippet.ChannelTitle ?? string.Empty,
-                ThumbnailUrl = item.Snippet.Thumbnails?.Medium?.Url ?? item.Snippet.Thumbnails?.Default__?.Url ?? string.Empty,
-                PublishedAt = item.Snippet.PublishedAtDateTimeOffset?.UtcDateTime ?? DateTime.MinValue,
+                Title = item.Snippet?.Title ?? string.Empty,
+                ChannelTitle = item.Snippet?.ChannelTitle ?? string.Empty,
+                ThumbnailUrl = item.Snippet?.Thumbnails?.Medium?.Url ?? item.Snippet?.Thumbnails?.Default__?.Url ?? string.Empty,
+                PublishedAt = SafeGetPublishedAt(() => item.Snippet?.PublishedAtDateTimeOffset, item.Snippet?.PublishedAtRaw),
             };
 
             if (statsMap.TryGetValue(item.Id.VideoId, out var stats))
@@ -386,24 +387,31 @@ public class YouTubeAnalyticsService
         {
             foreach (var ch in channelListResp.Items)
             {
-                var viewCount = (long)(ch.Statistics?.ViewCount ?? 0);
-                var subCount = (long)(ch.Statistics?.SubscriberCount ?? 0);
-                var videoCount = (long)(ch.Statistics?.VideoCount ?? 0);
-
-                var info = new YouTubeChannelInfo
+                try
                 {
-                    ChannelId = ch.Id,
-                    Title = ch.Snippet?.Title ?? string.Empty,
-                    Description = ch.Snippet?.Description ?? string.Empty,
-                    ThumbnailUrl = ch.Snippet?.Thumbnails?.Medium?.Url ?? ch.Snippet?.Thumbnails?.Default__?.Url ?? string.Empty,
-                    CustomUrl = ch.Snippet?.CustomUrl ?? string.Empty,
-                    PublishedAt = ch.Snippet?.PublishedAtDateTimeOffset?.UtcDateTime ?? DateTime.MinValue,
-                    SubscriberCount = subCount,
-                    ViewCount = viewCount,
-                    VideoCount = videoCount,
-                    Country = ch.Snippet?.Country ?? "N/A"
-                };
-                channelList.Add(info);
+                    var viewCount = (long)(ch.Statistics?.ViewCount ?? 0);
+                    var subCount = (long)(ch.Statistics?.SubscriberCount ?? 0);
+                    var videoCount = (long)(ch.Statistics?.VideoCount ?? 0);
+
+                    var info = new YouTubeChannelInfo
+                    {
+                        ChannelId = ch.Id,
+                        Title = ch.Snippet?.Title ?? string.Empty,
+                        Description = ch.Snippet?.Description ?? string.Empty,
+                        ThumbnailUrl = ch.Snippet?.Thumbnails?.Medium?.Url ?? ch.Snippet?.Thumbnails?.Default__?.Url ?? string.Empty,
+                        CustomUrl = ch.Snippet?.CustomUrl ?? string.Empty,
+                        PublishedAt = SafeGetPublishedAt(() => ch.Snippet?.PublishedAtDateTimeOffset, ch.Snippet?.PublishedAtRaw),
+                        SubscriberCount = subCount,
+                        ViewCount = viewCount,
+                        VideoCount = videoCount,
+                        Country = ch.Snippet?.Country ?? "N/A"
+                    };
+                    channelList.Add(info);
+                }
+                catch
+                {
+                    // Bỏ qua kênh nếu dữ liệu bị lỗi định dạng bất thường
+                }
             }
         }
 
@@ -434,20 +442,47 @@ public class YouTubeAnalyticsService
         return new YouTubeVideoInfo
         {
             VideoId = v.Id,
-            Title = v.Snippet.Title ?? string.Empty,
-            Description = v.Snippet.Description ?? string.Empty,
-            ThumbnailUrl = v.Snippet.Thumbnails?.Medium?.Url ?? v.Snippet.Thumbnails?.Default__?.Url ?? string.Empty,
-            ChannelTitle = v.Snippet.ChannelTitle ?? string.Empty,
-            ChannelId = v.Snippet.ChannelId ?? string.Empty,
-            PublishedAt = v.Snippet.PublishedAtDateTimeOffset?.UtcDateTime ?? DateTime.MinValue,
+            Title = v.Snippet?.Title ?? string.Empty,
+            Description = v.Snippet?.Description ?? string.Empty,
+            ThumbnailUrl = v.Snippet?.Thumbnails?.Medium?.Url ?? v.Snippet?.Thumbnails?.Default__?.Url ?? string.Empty,
+            ChannelTitle = v.Snippet?.ChannelTitle ?? string.Empty,
+            ChannelId = v.Snippet?.ChannelId ?? string.Empty,
+            PublishedAt = SafeGetPublishedAt(() => v.Snippet?.PublishedAtDateTimeOffset, v.Snippet?.PublishedAtRaw),
             Duration = ParseIsoDuration(v.ContentDetails?.Duration),
             ViewCount = (long)(v.Statistics?.ViewCount ?? 0),
             LikeCount = (long)(v.Statistics?.LikeCount ?? 0),
             CommentCount = (long)(v.Statistics?.CommentCount ?? 0),
-            Tags = v.Snippet.Tags != null ? string.Join(", ", v.Snippet.Tags) : string.Empty,
-            CategoryId = v.Snippet.CategoryId ?? string.Empty,
+            Tags = v.Snippet?.Tags != null ? string.Join(", ", v.Snippet.Tags) : string.Empty,
+            CategoryId = v.Snippet?.CategoryId ?? string.Empty,
             Rank = rank
         };
+    }
+
+    private static DateTime SafeGetPublishedAt(Func<DateTimeOffset?>? getter, string? rawDate = null)
+    {
+        if (getter != null)
+        {
+            try
+            {
+                var dto = getter();
+                if (dto.HasValue) return dto.Value.UtcDateTime;
+            }
+            catch
+            {
+                // Bỏ qua lỗi format của Google.Apis khi chuỗi ngày rỗng hoặc sai định dạng
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(rawDate))
+        {
+            if (DateTimeOffset.TryParse(rawDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsedDto))
+                return parsedDto.UtcDateTime;
+
+            if (DateTime.TryParse(rawDate, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsedDt))
+                return parsedDt.ToUniversalTime();
+        }
+
+        return DateTime.MinValue;
     }
 
     private static TimeSpan ParseIsoDuration(string? iso)

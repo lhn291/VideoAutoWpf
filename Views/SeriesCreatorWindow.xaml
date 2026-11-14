@@ -279,12 +279,40 @@
                         </Border>
                     </Grid>
 
+                    <!-- Nút gợi ý ý tưởng ngẫu nhiên -->
+                    <Grid Margin="0,6,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Background="#1a1f38" CornerRadius="8" Padding="10,8" BorderBrush="#3a3c6a" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="🎲" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <StackPanel>
+                                    <TextBlock Text="Chưa có ý tưởng? Bấm để AI gợi ý ngay!" FontSize="11" FontWeight="Bold" Foreground="#cba6f7"/>
+                                    <TextBlock Text="Tự động điền sẵn: Cốt truyện · Nhân vật · Bối cảnh · Phong cách · Tone" FontSize="10" Foreground="{StaticResource TextMuted}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Button Grid.Column="2"
+                                Content="💡 Gợi ý ý tưởng ngẫu nhiên"
+                                Command="{Binding AutoSuggestSeriesCommand}"
+                                IsEnabled="{Binding IsSuggestingIdea, Converter={StaticResource InverseBoolConverter}}"
+                                Padding="16,10" FontSize="12" FontWeight="Bold"
+                                Background="#2d2a5e" Foreground="#cba6f7"
+                                BorderBrush="#5a4faa" BorderThickness="1"
+                                Cursor="Hand" ToolTip="Chọn ngẫu nhiên 1 trong 8 ý tưởng series hay: trinh thám, kinh dị, cyberpunk, fantasy, cảm xúc...">
+                            <Button.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="8"/></Style></Button.Resources>
+                        </Button>
+                    </Grid>
+
                     <!-- Nút bắt đầu phân tích -->
                     <Button Content="🤖 AI PHÂN TÍCH &amp; LẬP DÀN Ý CHUỖI VIDEO"
                             Command="{Binding PlanSeriesCommand}"
                             IsEnabled="{Binding IsPlanningSeries, Converter={StaticResource InverseBoolConverter}}"
                             Style="{StaticResource HeroSeriesBtn}"
-                            Height="48" Margin="0,6,0,0"/>
+                            Height="48" Margin="0,0,0,0"/>
                 </StackPanel>
             </ScrollViewer>
         </Border>
@@ -300,48 +328,128 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Series Summary Box -->
-                <Border Grid.Row="0" Background="#161726" CornerRadius="8" Padding="12" Margin="0,0,0,10" BorderBrush="#313244" BorderThickness="1">
+                <StackPanel Grid.Row="0" Orientation="Vertical" Margin="0,0,0,10">
+                    <!-- Series Summary Box -->
+                    <Border Background="#161726" CornerRadius="8" Padding="12" Margin="0,0,0,8" BorderBrush="#313244" BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Vertical">
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="🎬 Tên Series:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Text="{Binding CurrentSeriesPlan.SeriesTitle, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="13" FontWeight="Bold" Background="#26273b" Foreground="{StaticResource TextPrimary}"
+                                             Padding="6,3" Margin="8,0,0,0" BorderBrush="#3d4066">
+                                        <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                                    </TextBox>
+                                </Grid>
+                                <TextBlock Text="{Binding CurrentSeriesPlan.OverallPremise}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                            </StackPanel>
+
+                            <!-- Actions on plan -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="10,0,0,0">
+                                <Button Content="💡 Tự Điền Bible" Command="{Binding AutoFillBiblesFromEpisodesCommand}"
+                                        Padding="10,5" Margin="0,0,6,0" FontSize="11" Background="#1e3a5f" Foreground="#38bdf8" FontWeight="SemiBold"
+                                        ToolTip="AI phân tích các tập đã có để tự động điền Tên Series, Character Bible và Setting Bible"/>
+                                <Button Content="➕ Thêm Tập" Command="{Binding AddEpisodeCommand}"
+                                        Padding="10,5" Margin="0,0,6,0" FontSize="11" Background="#2e3860" Foreground="#89b4fa" FontWeight="SemiBold"
+                                        ToolTip="Thêm 1 tập mới vào cuối chuỗi"/>
+                                <Button Content="🔄 Đồng Bộ Cảnh" Command="{Binding ApplySceneCountToAllEpisodesCommand}"
+                                        Padding="10,5" Margin="0,0,6,0" FontSize="11" Background="#282245" Foreground="#cba6f7" FontWeight="SemiBold"
+                                        ToolTip="Gán số cảnh mặc định cho toàn bộ các tập trong danh sách"/>
+                                <Button Content="✏️ Nhập Lại Ý Tưởng" Command="{Binding BackToInputCommand}"
+                                        Padding="10,5" FontSize="11"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- KHỐI ĐỒNG NHẤT SERIES: NHÂN VẬT, BỐI CẢNH, POSTER CHUNG & NHẠC NỀN -->
+                    <Border Background="#161726" CornerRadius="8" Padding="10" BorderBrush="#3d4066" BorderThickness="1.2">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
+                            <!-- Cột 1: Character Bible (36%) -->
+                            <ColumnDefinition Width="36*" />
+                            <ColumnDefinition Width="10" />
+                            <!-- Cột 2: Setting Bible (36%) -->
+                            <ColumnDefinition Width="36*" />
+                            <ColumnDefinition Width="10" />
+                            <!-- Cột 3: Poster Chung & Nhạc Nền (28%) -->
+                            <ColumnDefinition Width="28*" MinWidth="240" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Vertical">
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="🎬 Tên Series:" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AccentYellow}" VerticalAlignment="Center"/>
-                                <TextBox Grid.Column="1" Text="{Binding CurrentSeriesPlan.SeriesTitle, UpdateSourceTrigger=PropertyChanged}"
-                                         FontSize="13" FontWeight="Bold" Background="#26273b" Foreground="{StaticResource TextPrimary}"
-                                         Padding="6,3" Margin="8,0,0,0" BorderBrush="#3d4066">
-                                    <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
-                                </TextBox>
-                            </Grid>
-                            <TextBlock Text="{Binding CurrentSeriesPlan.OverallPremise}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,2,0,4"/>
-                            
-                            <!-- Character Bible preview -->
-                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                <TextBlock Text="👤 Character Bible (Đồng nhất nhân vật): " FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource AccentCyan}"/>
-                                <TextBlock Text="{Binding CurrentSeriesPlan.CharacterBible}" FontSize="10.5" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" MaxWidth="500"/>
+
+                        <!-- CỘT 1: NHÂN VẬT BẤT BIẾN -->
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="👤 Nhân Vật Bất Biến (Character Bible)" FontSize="11.5" FontWeight="Bold" Foreground="#89b4fa"/>
+                                <TextBlock Text=" (Mặt, tóc, áo quần)" FontSize="10" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
                             </StackPanel>
+                            <TextBox Text="{Binding CharacterBibleText, UpdateSourceTrigger=PropertyChanged}" Height="60" TextWrapping="Wrap" AcceptsReturn="True"
+                                     Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="#3d4066" FontSize="10.5" Padding="5,3"
+                                     VerticalScrollBarVisibility="Auto" ToolTip="Mô tả chi tiết ngoại hình nhân vật bằng tiếng Anh để AI vẽ không bị lệch giữa các tập">
+                                <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                            </TextBox>
                         </StackPanel>
 
-                        <!-- Actions on plan -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="10,0,0,0">
-                            <Button Content="➕ Thêm Tập" Command="{Binding AddEpisodeCommand}"
-                                    Padding="10,5" Margin="0,0,6,0" FontSize="11" Background="#2e3860" Foreground="#89b4fa" FontWeight="SemiBold"
-                                    ToolTip="Thêm 1 tập mới vào cuối chuỗi"/>
-                            <Button Content="🔄 Đồng Bộ Cảnh" Command="{Binding ApplySceneCountToAllEpisodesCommand}"
-                                    Padding="10,5" Margin="0,0,6,0" FontSize="11" Background="#282245" Foreground="#cba6f7" FontWeight="SemiBold"
-                                    ToolTip="Gán số cảnh mặc định cho toàn bộ các tập trong danh sách"/>
-                            <Button Content="✏️ Nhập Lại Ý Tưởng" Command="{Binding BackToInputCommand}"
-                                    Padding="10,5" FontSize="11"/>
+                        <!-- CỘT 2: BỐI CẢNH BẤT BIẾN -->
+                        <StackPanel Grid.Column="2">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="🏛️ Bối Cảnh Bất Biến (Setting Bible)" FontSize="11.5" FontWeight="Bold" Foreground="#a6e3a1"/>
+                                <TextBlock Text=" (Không gian, ánh sáng)" FontSize="10" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBox Text="{Binding SettingBibleText, UpdateSourceTrigger=PropertyChanged}" Height="60" TextWrapping="Wrap" AcceptsReturn="True"
+                                     Background="#26273b" Foreground="{StaticResource TextPrimary}" BorderBrush="#3d4066" FontSize="10.5" Padding="5,3"
+                                     VerticalScrollBarVisibility="Auto" ToolTip="Mô tả không gian, kiến trúc, tông màu và ánh sáng chủ đạo của toàn bộ series">
+                                <TextBox.Resources><Style TargetType="Border"><Setter Property="CornerRadius" Value="4"/></Style></TextBox.Resources>
+                            </TextBox>
                         </StackPanel>
+
+                        <!-- CỘT 3: POSTER CHUNG & NHẠC NỀN -->
+                        <Border Grid.Column="4" Background="#1a1b2e" CornerRadius="6" Padding="8,6" BorderBrush="#313244" BorderThickness="1">
+                            <StackPanel>
+                                <!-- Nhạc nền BGM -->
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="🎵 Nhạc Nền (BGM):" FontSize="10.5" FontWeight="Bold" Foreground="#f9e2af" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Content="{Binding BgmPlayIcon}" Command="{Binding TogglePlayBgmCommand}"
+                                            Padding="6,2" FontSize="9.5" Background="#313244" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+                                </Grid>
+                                <ComboBox ItemsSource="{Binding AvailableBgmTracks}" SelectedItem="{Binding SelectedBgmTrack}"
+                                          DisplayMemberPath="Title" FontSize="10" Padding="4,2" Margin="0,0,0,6"/>
+
+                                <!-- Poster đại diện chung -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="🖼️ Ảnh Bìa Chung (Poster):" FontSize="10.5" FontWeight="Bold" Foreground="#cba6f7"/>
+                                        <TextBlock Text="{Binding PosterFileName}" FontSize="9" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding PosterImagePath}"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <Button Content="🎨 Vẽ Bìa" Command="{Binding GeneratePosterImageCommand}"
+                                                IsEnabled="{Binding IsGeneratingPoster, Converter={StaticResource InverseBoolConverter}}"
+                                                Padding="6,2" Margin="0,0,3,0" FontSize="9.5" Style="{StaticResource BtnSuccess}"
+                                                ToolTip="AI tự động vẽ bức ảnh bìa đại diện chung đẹp nhất cho Series"/>
+                                        <Button Content="📁 Chọn" Command="{Binding BrowsePosterImageCommand}"
+                                                Padding="5,2" FontSize="9.5" ToolTip="Chọn ảnh bìa từ máy tính"/>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </Grid>
                 </Border>
+                </StackPanel>
 
                 <!-- Episodes List -->
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">

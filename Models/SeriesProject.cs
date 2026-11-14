@@ -48,8 +48,32 @@ public partial class SeriesProject : ObservableObject
     private string _characterBibleRules = string.Empty;
 
     [ObservableProperty]
+    [JsonPropertyName("setting_bible_rules")]
+    private string _settingBibleRules = string.Empty;
+
+    [ObservableProperty]
+    [JsonPropertyName("poster_prompt")]
+    private string _posterPrompt = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPosterImage))]
+    [JsonPropertyName("poster_image_path")]
+    private string? _posterImagePath;
+
+    [JsonIgnore]
+    public bool HasPosterImage => !string.IsNullOrEmpty(PosterImagePath) && File.Exists(PosterImagePath);
+
+    [ObservableProperty]
+    [JsonPropertyName("enable_global_bgm")]
+    private bool _enableGlobalBgm = true;
+
+    [ObservableProperty]
     [JsonPropertyName("global_bgm_path")]
     private string? _globalBgmPath;
+
+    [ObservableProperty]
+    [JsonPropertyName("global_bgm_volume")]
+    private double _globalBgmVolume = 0.15;
 
     [JsonPropertyName("episodes")]
     public ObservableCollection<EpisodeItem> Episodes { get; set; } = new();

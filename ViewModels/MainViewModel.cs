@@ -619,7 +619,7 @@ public partial class MainViewModel : ObservableObject
     private void OpenSeriesCreator()
     {
         var mainWin = Application.Current.MainWindow;
-        var win = new SeriesCreatorWindow(_geminiService)
+        var win = new SeriesCreatorWindow(_geminiService, _imagenService, _bgmService)
         {
             WindowState = WindowState.Maximized
         };
@@ -655,6 +655,26 @@ public partial class MainViewModel : ObservableObject
 
         if (!string.IsNullOrEmpty(series.GlobalVoice) && AvailableVoices.Contains(series.GlobalVoice))
             SelectedVoice = series.GlobalVoice;
+
+        // Đồng bộ cấu hình Nhạc Nền (BGM) từ Series
+        if (series.EnableGlobalBgm)
+        {
+            EnableBgm = true;
+            if (series.GlobalBgmVolume > 0)
+                BgmVolume = series.GlobalBgmVolume;
+
+            if (!string.IsNullOrEmpty(series.GlobalBgmPath))
+            {
+                BgmPath = series.GlobalBgmPath;
+                var matchTrack = AvailableBgmTracks.FirstOrDefault(t =>
+                    string.Equals(t.FilePath, series.GlobalBgmPath, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(t.Title, Path.GetFileNameWithoutExtension(series.GlobalBgmPath), StringComparison.OrdinalIgnoreCase));
+                if (matchTrack != null)
+                {
+                    SelectedBgmTrack = matchTrack;
+                }
+            }
+        }
 
         if (series.Episodes.Count > 0)
         {
@@ -862,6 +882,82 @@ public partial class MainViewModel : ObservableObject
             catch (Exception ex)
             {
                 MessageBox.Show($"Lỗi khi mở Series:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    [RelayCommand]
+    private async Task SetSeriesPosterAsync()
+    {
+        if (CurrentSeries == null) return;
+
+        var hasPoster = !string.IsNullOrEmpty(CurrentSeries.PosterImagePath) && File.Exists(CurrentSeries.PosterImagePath);
+        var currentPosterName = hasPoster ? Path.GetFileName(CurrentSeries.PosterImagePath) : "Chưa có";
+
+        var result = MessageBox.Show(
+            $"Cấu hình Master Poster (Ảnh bìa đồng nhất cho toàn bộ video khi chưa click xem):\n\n" +
+            $"• Poster hiện tại: {currentPosterName}\n" +
+            $"• Prompt vẽ: {(string.IsNullOrWhiteSpace(CurrentSeries.PosterPrompt) ? "(Trống)" : CurrentSeries.PosterPrompt)}\n\n" +
+            $"Bạn muốn:\n" +
+            $"[Yes] - Chọn file ảnh có sẵn trên máy\n" +
+            $"[No]  - Dùng AI Imagen 3 vẽ ảnh mới theo Prompt\n" +
+            $"[Cancel] - Giữ nguyên",
+            "Thiết Lập Master Poster Cho Toàn Bộ Series",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Question);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "Chọn ảnh Master Poster cho Series",
+                Filter = "Tệp hình ảnh (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp|Tất cả tệp (*.*)|*.*"
+            };
+
+            if (dlg.ShowDialog() == true)
+            {
+                CurrentSeries.PosterImagePath = dlg.FileName;
+                AppendLog($"[Series Poster] 🖼️ Đã gán ảnh Poster Master: {dlg.FileName}");
+                MessageBox.Show($"Đã gán Poster Master thành công!\nTất cả video trong chuỗi sẽ hiển thị ảnh này khi chưa click vào xem.", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        else if (result == MessageBoxResult.No)
+        {
+            if (string.IsNullOrWhiteSpace(CurrentSeries.PosterPrompt))
+            {
+                MessageBox.Show("Series chưa có Poster Prompt để AI vẽ ảnh!\nVui lòng chọn ảnh từ máy hoặc cập nhật prompt.", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                StatusMessage = "Đang vẽ ảnh Master Poster bằng AI Imagen...";
+                AppendLog($"[Series Poster] 🎨 Đang dùng AI Imagen vẽ Master Poster...");
+
+                var safeSeries = MakeSafeFileName(CurrentSeries.SeriesTitle);
+                var posterDir = Path.Combine(OutputDirectory, $"Series_{safeSeries}", "cover");
+                Directory.CreateDirectory(posterDir);
+                var posterPath = Path.Combine(posterDir, $"series_master_poster_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+
+                var resultImg = await _imagenService.GenerateImageAsync(CurrentSeries.PosterPrompt, posterPath, AspectRatio, onLog: msg => AppendLog(msg));
+                if (!string.IsNullOrEmpty(resultImg) && File.Exists(posterPath))
+                {
+                    CurrentSeries.PosterImagePath = posterPath;
+                    AppendLog($"[Series Poster] ✅ Vẽ Master Poster thành công: {posterPath}");
+                    MessageBox.Show($"Vẽ Poster Master thành công!\nĐường dẫn: {posterPath}", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show("Không thể tạo ảnh Poster Master. Vui lòng kiểm tra kết nối mạng và thử lại.", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Lỗi khi vẽ ảnh Poster: {ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                StatusMessage = "Sẵn sàng";
             }
         }
     }
@@ -1406,16 +1502,19 @@ public partial class MainViewModel : ObservableObject
                 MotionEffect = SelectedMotionEffect?.Id ?? "random",
                 EnableFadeTransition = EnableFadeTransition,
                 EnableVignette = EnableVignette,
-                EnableBackgroundMusic = EnableBgm,
-                BackgroundMusicPath = BgmPath,
-                BackgroundMusicVolume = BgmVolume,
+                EnableBackgroundMusic = EnableBgm || (IsSeriesMode && CurrentSeries?.EnableGlobalBgm == true),
+                BackgroundMusicPath = !string.IsNullOrEmpty(BgmPath) ? BgmPath : (IsSeriesMode ? CurrentSeries?.GlobalBgmPath : null),
+                BackgroundMusicVolume = BgmVolume > 0 ? BgmVolume : (IsSeriesMode && CurrentSeries?.GlobalBgmVolume > 0 ? CurrentSeries.GlobalBgmVolume : 0.15),
                 EnableSubtitles = EnableSubtitles,
                 SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
                 SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
                 Voice = SelectedVoice,
                 OutputDirectory = OutputDirectory,
                 OutputFileName = string.IsNullOrWhiteSpace(OutputFileName) ? $"video_{DateTime.Now:yyyyMMdd_HHmmss}.mp4" : OutputFileName,
-                PublishInfo = CurrentPublishInfo
+                PublishInfo = CurrentPublishInfo,
+                CoverPosterImagePath = IsSeriesMode && !string.IsNullOrEmpty(CurrentSeries?.PosterImagePath) && File.Exists(CurrentSeries.PosterImagePath)
+                    ? CurrentSeries.PosterImagePath
+                    : (IsSeriesMode ? Scenes.FirstOrDefault(s => !string.IsNullOrEmpty(s.ImagePath) && File.Exists(s.ImagePath))?.ImagePath : null)
             };
 
             var progress = new Progress<GenerationProgress>(p =>
@@ -1585,6 +1684,32 @@ public partial class MainViewModel : ObservableObject
         var seriesOutputDir = Path.Combine(OutputDirectory, $"Series_{safeSeries}");
         Directory.CreateDirectory(seriesOutputDir);
 
+        // Đảm bảo Master Poster chung cho toàn bộ Series (để tất cả video có cùng 1 ảnh bìa đẹp mắt khi chưa bấm xem)
+        if (string.IsNullOrEmpty(CurrentSeries.PosterImagePath) || !File.Exists(CurrentSeries.PosterImagePath))
+        {
+            var posterDir = Path.Combine(seriesOutputDir, "cover");
+            Directory.CreateDirectory(posterDir);
+            var posterFile = Path.Combine(posterDir, $"series_poster_{safeSeries}.png");
+
+            if (!string.IsNullOrWhiteSpace(CurrentSeries.PosterPrompt))
+            {
+                try
+                {
+                    AppendLog($"[Series Poster] 🎨 Đang tự động vẽ Poster Master cho chuỗi: '{CurrentSeries.SeriesTitle}'...");
+                    var resultImg = await _imagenService.GenerateImageAsync(CurrentSeries.PosterPrompt, posterFile, AspectRatio, onLog: msg => AppendLog(msg), ct: ct);
+                    if (!string.IsNullOrEmpty(resultImg) && File.Exists(posterFile))
+                    {
+                        CurrentSeries.PosterImagePath = posterFile;
+                        AppendLog($"[Series Poster] ✅ Đã tạo Poster Master thành công: {posterFile}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"[Series Poster] ⚠️ Lỗi tạo ảnh Poster: {ex.Message}");
+                }
+            }
+        }
+
         int totalEpisodes = episodesToRender.Count;
         int completedCount = 0;
 
@@ -1619,6 +1744,14 @@ public partial class MainViewModel : ObservableObject
                 // 1. Sinh âm thanh & hình ảnh AI cho tập này
                 await EnsureAssetsForScenesAsync(ep.Scenes.ToList(), epTempAssets, ct);
 
+                // Nếu Series vẫn chưa có Poster Master, lấy ngay ảnh Cảnh 1 của Tập đầu tiên làm Poster Master chung
+                if ((string.IsNullOrEmpty(CurrentSeries.PosterImagePath) || !File.Exists(CurrentSeries.PosterImagePath)) 
+                    && ep.Scenes.Count > 0 && !string.IsNullOrEmpty(ep.Scenes[0].ImagePath) && File.Exists(ep.Scenes[0].ImagePath))
+                {
+                    CurrentSeries.PosterImagePath = ep.Scenes[0].ImagePath;
+                    AppendLog($"[Series Poster] 📌 Sử dụng hình ảnh Cảnh 1 làm Poster Master chung cho toàn bộ {totalEpisodes} tập video.");
+                }
+
                 // 2. Cấu hình xuất video cho tập này
                 var epConfig = new VideoConfig
                 {
@@ -1626,16 +1759,19 @@ public partial class MainViewModel : ObservableObject
                     MotionEffect = SelectedMotionEffect?.Id ?? "random",
                     EnableFadeTransition = EnableFadeTransition,
                     EnableVignette = EnableVignette,
-                    EnableBackgroundMusic = EnableBgm,
-                    BackgroundMusicPath = BgmPath,
-                    BackgroundMusicVolume = BgmVolume,
+                    EnableBackgroundMusic = EnableBgm || CurrentSeries.EnableGlobalBgm,
+                    BackgroundMusicPath = !string.IsNullOrEmpty(BgmPath) ? BgmPath : CurrentSeries.GlobalBgmPath,
+                    BackgroundMusicVolume = BgmVolume > 0 ? BgmVolume : (CurrentSeries.GlobalBgmVolume > 0 ? CurrentSeries.GlobalBgmVolume : 0.15),
                     EnableSubtitles = EnableSubtitles,
                     SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
                     SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
                     Voice = SelectedVoice,
                     OutputDirectory = seriesOutputDir,
                     OutputFileName = $"Tap_{epNum:D2}_{safeTitle}.mp4",
-                    PublishInfo = ep.PublishInfo ?? CurrentPublishInfo
+                    PublishInfo = ep.PublishInfo ?? CurrentPublishInfo,
+                    CoverPosterImagePath = !string.IsNullOrEmpty(CurrentSeries.PosterImagePath) && File.Exists(CurrentSeries.PosterImagePath)
+                        ? CurrentSeries.PosterImagePath
+                        : null
                 };
 
                 var progress = new Progress<GenerationProgress>(p =>
@@ -2251,7 +2387,7 @@ public partial class MainViewModel : ObservableObject
     private void OpenSeriesCreatorWithRequest(CreateVideoFromAnalyticsRequest request)
     {
         var mainWin = Application.Current.MainWindow;
-        var win = new SeriesCreatorWindow(_geminiService, request)
+        var win = new SeriesCreatorWindow(_geminiService, _imagenService, _bgmService, request)
         {
             WindowState = WindowState.Maximized
         };

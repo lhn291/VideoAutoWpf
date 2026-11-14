@@ -10,6 +10,13 @@ public class VideoConfig
     public string? BackgroundMusicPath { get; set; }
     public double BackgroundMusicVolume { get; set; } = 0.15;
     public bool EnableBackgroundMusic { get; set; } = false;
+    
+    /// <summary>
+    /// Đường dẫn ảnh bìa / poster đại diện chung cho video (khi chưa bấm xem).
+    /// Được nhúng trực tiếp vào MP4 metadata container (attached_pic) và xuất file thumbnail kèm theo.
+    /// </summary>
+    public string? CoverPosterImagePath { get; set; }
+
     public string OutputDirectory { get; set; } = string.Empty;
     public string OutputFileName { get; set; } = "output_video.mp4";
     public string? CustomFfmpegPath { get; set; }

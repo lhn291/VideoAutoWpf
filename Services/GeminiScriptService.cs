@@ -288,25 +288,31 @@ public class GeminiScriptService
         var projectId = _authService.ProjectId;
 
         var systemInstruction =
-            "You are an acclaimed showrunner and executive producer for viral short episodic video series on TikTok, YouTube Shorts, and Reels. " +
+            "You are an acclaimed showrunner and viral short episodic video director for TikTok, YouTube Shorts, and Reels. " +
             $"Your task is to take a premise, long story, or topic and divide it into a gripping MULTI-EPISODE series with EXACTLY {totalEpisodes} EPISODES. " +
             $"The desired pacing and tone is: '{toneOrPacing}'. Video format ratio is '{aspectRatio}'. " +
             $"CRITICAL MANDATORY REQUIREMENT: The 'episodes' array MUST CONTAIN EXACTLY {totalEpisodes} EPISODE OBJECTS (from episode_number = 1 to episode_number = {totalEpisodes}). " +
             $"DO NOT return only 1 episode. You must outline ALL {totalEpisodes} episodes sequentially! Each episode MUST have 'suggested_scene_count' set to {defaultScenesPerEpisode}. " +
-            "Every episode must have a strong hook, rising action, and an INTENSE CLIFFHANGER at the end (except the final episode which resolves the series). " +
-            "You MUST also formulate a detailed 'character_bible' in English describing the protagonist and key characters' exact visual features (hair, eyes, face, outfit, colors, accessories) so Imagen 3 can render them identically in every scene of every episode. " +
+            "Every episode must adhere to viral short retention rules: 3-second golden hook, rising high-stakes tension, and a JAW-DROPPING CLIFFHANGER at the end (except the final episode which delivers an epic resolution). " +
+            "To guarantee 100% visual consistency across all episodes, you MUST formulate two detailed consistency bibles in English:\n" +
+            "1. 'character_bible': An exhaustive Character Model Sheet in English detailing exact physical features of the protagonist and key characters (exact age, face shape, hair style & exact color, eye color, distinct facial marks, specific clothing top, bottom, shoes, exact colors and materials, signature accessories). E.g. 'A 28-year-old Vietnamese detective named Minh, sharp defined jawline, messy raven-black undercut hair, focused intense dark obsidian eyes, wearing a dark charcoal wool trench coat over an unbuttoned crisp white dress shirt, silver chronograph wristwatch on left wrist, rugged black combat boots'.\n" +
+            "2. 'setting_bible': An exhaustive World & Setting Model Sheet in English detailing the recurring core environments (architectural style, interior/exterior details, signature color palette, atmospheric weather, distinct volumetric lighting, signature recurring props). E.g. 'A shadowy neon-lit vintage 1990s detective office and misty Saigon back-alleys, peeling textured jade-green wall paint, warm tungsten desk lamp glow casting dramatic chiaroscuro shadows, rain-streaked window panes, lingering wisps of cigarette smoke'.\n" +
+            "3. 'poster_prompt': A master cinematic movie poster prompt in English representing the entire series key visual, featuring the protagonist in the core setting with dramatic cinematic lighting, 8k resolution masterpiece, no text, no logos.\n" +
+            "4. 'suggested_bgm': Choose the single best background music mood from ['dramatic', 'horror', 'epic', 'upbeat', 'chill'] that perfectly matches the emotional heartbeat of the series.\n" +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
             "The JSON structure must exactly match this schema:\n" +
             "{\n" +
             "  \"series_title\": \"Tên Series giật gân, cuốn hút bằng tiếng Việt\",\n" +
-            "  \"overall_premise\": \"Tóm tắt tổng quan mạch truyện toàn bộ series bằng tiếng Việt (3-4 câu)\",\n" +
-            "  \"character_bible\": \"Extremely detailed English visual character description for Imagen 3 consistency (e.g. 'A 28-year-old Vietnamese detective named Minh, short messy black hair, sharp jawline, wearing a charcoal grey trench coat over a white collared shirt, silver wristwatch on left wrist, intense focused dark eyes'). If no character, describe the unified recurring environment.\",\n" +
+            "  \"overall_premise\": \"Tóm tắt tổng quan mạch truyện toàn bộ series bằng tiếng Việt (3-4 câu lôi cuốn)\",\n" +
+            "  \"character_bible\": \"Exhaustive English Character Model Sheet description\",\n" +
+            "  \"setting_bible\": \"Exhaustive English Setting & Environment Model Sheet description\",\n" +
+            "  \"poster_prompt\": \"Cinematic Master Key Visual movie poster prompt in English, 8k resolution, dramatic lighting, no text\",\n" +
             $"  \"suggested_style\": \"{styleKey}\",\n" +
             $"  \"suggested_voice\": \"{voiceKey}\",\n" +
+            "  \"suggested_bgm\": \"dramatic\",\n" +
             "  \"episodes\": [\n" +
-            $"    {{ \"episode_number\": 1, \"episode_title\": \"Tập 1: [Tiêu đề mở màn bí ẩn]\", \"plot_beat\": \"Diễn biến tập 1...\", \"episode_hook\": \"Hook tập 1...\", \"cliffhanger\": \"Kết lửng tập 1...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }},\n" +
-            $"    {{ \"episode_number\": 2, \"episode_title\": \"Tập 2: [Tiêu đề xung đột dâng cao]\", \"plot_beat\": \"Diễn biến tập 2...\", \"episode_hook\": \"Hook tập 2...\", \"cliffhanger\": \"Kết lửng tập 2...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }},\n" +
-            $"    {{ \"episode_number\": 3, \"episode_title\": \"Tập 3: [Tiêu đề nút thắt rúng động]\", \"plot_beat\": \"Diễn biến tập 3...\", \"episode_hook\": \"Hook tập 3...\", \"cliffhanger\": \"Kết lửng tập 3...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }}\n" +
+            $"    {{ \"episode_number\": 1, \"episode_title\": \"Tập 1: [Tiêu đề mở màn giật gân]\", \"plot_beat\": \"Diễn biến tập 1...\", \"episode_hook\": \"Hook 3 giây đầu...\", \"cliffhanger\": \"Kết lửng ngạt thở...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }},\n" +
+            $"    {{ \"episode_number\": 2, \"episode_title\": \"Tập 2: [Tiêu đề xung đột bùng nổ]\", \"plot_beat\": \"Diễn biến tập 2...\", \"episode_hook\": \"Hook tập 2...\", \"cliffhanger\": \"Kết lửng tập 2...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }}\n" +
             $"    // ... MUST include all {totalEpisodes} episodes strictly numbered 1, 2, 3... up to {totalEpisodes}\n" +
             "  ]\n" +
             "}";
@@ -323,7 +329,7 @@ public class GeminiScriptService
     }
 
     /// <summary>
-    /// AI Sinh kịch bản chi tiết cho 1 tập trong Series, đảm bảo đồng bộ Character Bible và Cliffhanger
+    /// AI Sinh kịch bản chi tiết cho 1 tập trong Series, đảm bảo đồng bộ Character Bible, Setting Bible và kỹ thuật biên kịch Shorts/TikTok
     /// </summary>
     public async Task<ScriptWorkspace> GenerateEpisodeScriptAsync(
         SeriesPlan seriesPlan,
@@ -343,9 +349,11 @@ public class GeminiScriptService
         var epNum = episodePlan.EpisodeNumber;
         var isLastEp = epNum >= totalEpisodes;
         var ratio = string.IsNullOrWhiteSpace(aspectRatio) ? "9:16" : aspectRatio;
+        var bgmChoice = string.IsNullOrWhiteSpace(seriesPlan.SuggestedBgm) ? "dramatic" : seriesPlan.SuggestedBgm;
 
         var systemInstruction =
-            "You are an expert short video screenwriter writing a specific episode of a viral video series. " +
+            "You are an elite short video screenwriter and creative director specializing in viral retention on TikTok, YouTube Shorts, and Instagram Reels. " +
+            "You write scripts with punchy pacing, high emotional stakes, irresistible curiosity hooks, and cinematic visual consistency. " +
             "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
             $"CRITICAL REQUIREMENT: You MUST generate EXACTLY {numScenes} scenes inside the 'scenes' array. Do NOT generate fewer than {numScenes} scenes! " +
             "The JSON structure must exactly match this schema:\n" +
@@ -356,7 +364,7 @@ public class GeminiScriptService
             "    \"motion_effect\": \"auto\",\n" +
             "    \"enable_fade\": true,\n" +
             "    \"enable_vignette\": false,\n" +
-            "    \"music\": \"dramatic\",\n" +
+            $"    \"music\": \"{bgmChoice}\",\n" +
             "    \"enable_music\": true,\n" +
             "    \"music_volume\": 0.15,\n" +
             "    \"enable_subtitles\": true,\n" +
@@ -370,26 +378,35 @@ public class GeminiScriptService
             $"    \"hashtags\": \"#series #tap{epNum} #shorts #tiktok #reels #viral #xuhuong\"\n" +
             "  },\n" +
             "  \"scenes\": [\n" +
-            "    { \"text\": \"Vietnamese voiceover scene 1...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" },\n" +
-            "    { \"text\": \"Vietnamese voiceover scene 2...\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"pan_left_right\" }\n" +
+            "    { \"text\": \"Vietnamese voiceover scene 1...\", \"image_prompt\": \"Standard 5-layer English image generation prompt...\", \"motion_effect\": \"zoom_in\" },\n" +
+            "    { \"text\": \"Vietnamese voiceover scene 2...\", \"image_prompt\": \"Standard 5-layer English image generation prompt...\", \"motion_effect\": \"pan_left_right\" }\n" +
             $"    // ... MUST continue until EXACTLY {numScenes} scenes are generated\n" +
             "  ]\n" +
             "}\n\n" +
-            "Guidelines:\n" +
-            $"1. Video ratio {ratio}. Voice is '{seriesPlan.SuggestedVoice}'. {(string.IsNullOrWhiteSpace(toneOrPacing) ? "" : $"Tone: '{toneOrPacing}'.")}\n" +
-            $"2. MANDATORY SCENE COUNT: Generate EXACTLY {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'. The 'scenes' array MUST have length == {numScenes}. Each scene represents 4-8s of video narration.\n" +
-            $"3. Scene 1 hook: {episodePlan.EpisodeHook}. (If Episode > 1, start with a quick 1-sentence recap or immediate escalation).\n" +
-            $"4. Final scene (Scene {numScenes}) MUST end on this cliffhanger: {episodePlan.Cliffhanger}\n" +
-            $"5. CRITICAL: The 'image_prompt' MUST start with this exact style prefix: '{chosenStyle}' AND include the character description: '{seriesPlan.CharacterBible}' in every scene where characters appear.\n";
+            "VIRAL TIKTOK / SHORTS SCREENPLAY RULES:\n" +
+            "1. GOLDEN 3-SECOND HOOK (Scene 1): Start immediately with high-impact narration (in media res, alarming paradox, or urgent question). Absolutely NO greeting or boring intro.\n" +
+            "2. PUNCHY FAST-PACED NARRATION: 8 to 15 Vietnamese words per sentence. Write clear, expressive, suspenseful Vietnamese crafted specifically for natural pauses and dramatic emphasis in Google Cloud Text-to-Speech.\n" +
+            "3. RISING CONFLICT: Every scene must escalate tension, advance the mystery, or reveal a shocking detail.\n" +
+            $"4. INTENSE CLIFFHANGER (Final Scene #{numScenes}): Must end on an unresolved climax that forces viewers to eagerly click Episode {epNum + 1} or follow the channel.\n" +
+            "5. STRICT 5-LAYER IMAGE PROMPT CONSISTENCY:\n" +
+            "To guarantee that characters and environments remain 100% IDENTICAL across all scenes, every 'image_prompt' MUST strictly adhere to this formula:\n" +
+            $"   [STYLE]: {chosenStyle}\n" +
+            $"   [CHARACTER SHEET]: {seriesPlan.CharacterBible}\n" +
+            $"   [SETTING SHEET]: {seriesPlan.SettingBible}\n" +
+            "   [SCENE ACTION & CAMERA]: Specific camera shot (e.g. dramatic close-up, low-angle tracking shot, wide panoramic view), lighting atmosphere, character facial expression, and dynamic action in this exact moment.\n" +
+            "   [NEGATIVE / QUALITY ANCHOR]: Masterpiece 8k resolution, cinematic lighting, perfectly consistent character facial features, hair and attire, no text, no watermark, no duplicate subjects, no style drift.\n";
 
         var userPrompt = $"Series: '{seriesPlan.SeriesTitle}' (Total {totalEpisodes} episodes)\n" +
                          $"Overall Plot: {seriesPlan.OverallPremise}\n" +
+                         $"Character Model Sheet: {seriesPlan.CharacterBible}\n" +
+                         $"Setting Model Sheet: {seriesPlan.SettingBible}\n" +
                          $"Currently writing Episode {epNum}/{totalEpisodes}: '{episodePlan.EpisodeTitle}'\n" +
                          $"Episode Plot Beat: {episodePlan.PlotBeat}\n" +
                          (string.IsNullOrWhiteSpace(previousEpisodeEndingContext) ? "" : $"Context from previous episode ending: {previousEpisodeEndingContext}\n") +
                          $"Episode Cliffhanger ending: {episodePlan.Cliffhanger}\n\n" +
                          $"BẮT BUỘC: Hãy viết kịch bản chi tiết gồm ĐÚNG {numScenes} PHÂN CẢNH (scenes) cho Tập {epNum}. " +
-                         $"Mảng 'scenes' trong JSON PHẢI có đủ đúng {numScenes} phần tử, tuyệt đối không được dừng lại ở ít cảnh hơn!";
+                         $"Lời thoại thuyết minh tiếng Việt cực kỳ lôi cuốn, câu từ súc tích, ngắt nhịp kịch tính. " +
+                         $"Mỗi prompt hình ảnh phải tuân thủ nghiêm ngặt cấu trúc 5 tầng để nhân vật và bối cảnh đồng nhất 100%!";
 
         return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);
     }
@@ -530,9 +547,10 @@ public class GeminiScriptService
         CancellationToken ct) where T : class
     {
         var apiKey = ApiKey;
+        // Danh sách model theo thứ tự ưu tiên (ưu tiên model có Quota dồi dào, ổn định trên Free Tier)
         var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
-            ? new[] { "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash" }
-            : new[] { "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash-001", "gemini-2.0-flash-001" };
+            ? new[] { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.7-flash" }
+            : new[] { "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro", "gemini-1.5-flash-002", "gemini-1.5-flash-001" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
@@ -605,9 +623,21 @@ public class GeminiScriptService
                             if (cleanJson.EndsWith("```")) cleanJson = cleanJson[..^3];
                             cleanJson = cleanJson.Trim();
 
+                            // Chuẩn hóa tự động các thuộc tính camelCase sang snake_case để tương thích 100% với JSON schema C#
+                            cleanJson = System.Text.RegularExpressions.Regex.Replace(
+                                cleanJson,
+                                @"""([a-zA-Z0-9]+)""\s*:",
+                                match =>
+                                {
+                                    var key = match.Groups[1].Value;
+                                    var snakeKey = System.Text.RegularExpressions.Regex.Replace(key, @"([a-z0-9])([A-Z])", "$1_$2").ToLowerInvariant();
+                                    return $"\"{snakeKey}\":";
+                                });
+
                             var result = JsonSerializer.Deserialize<T>(cleanJson, new JsonSerializerOptions
                             {
-                                PropertyNameCaseInsensitive = true
+                                PropertyNameCaseInsensitive = true,
+                                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
                             });
 
                             if (result != null)
@@ -620,6 +650,12 @@ public class GeminiScriptService
                 else
                 {
                     lastError = $"Model {modelName} returned {response.StatusCode}: {responseStr}";
+                    // Nếu gặp 429 hoặc 503, nghỉ ngắn trước khi chuyển sang model dự phòng để tránh dính RPM limit
+                    if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || 
+                        response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
+                    {
+                        await Task.Delay(1000, ct);
+                    }
                 }
             }
             catch (Exception ex)
@@ -630,6 +666,11 @@ public class GeminiScriptService
             {
                 request.Dispose();
             }
+        }
+
+        if (lastError != null && (lastError.Contains("RESOURCE_EXHAUSTED") || lastError.Contains("TooManyRequests") || lastError.Contains("Quota exceeded")))
+        {
+            throw new Exception("Key Gemini AI hiện tại của bạn đã tạm hết hạn mức (Quota Free Tier).\n\n👉 Cách khắc phục nhanh (trong 10 giây):\n1. Truy cập https://aistudio.google.com/app/apikey\n2. Bấm 'Create API key' > Chọn 'Create API key in new project'\n3. Copy mã Key mới và dán vào nút '✏️ Đổi Key' trên ứng dụng để tiếp tục sử dụng ngay lập tức!");
         }
 
         if (lastError != null && lastError.Contains("prepayment credits are depleted"))
