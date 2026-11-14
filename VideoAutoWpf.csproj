@@ -18,6 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Tests\**" />
+    <None Remove="Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="Config\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

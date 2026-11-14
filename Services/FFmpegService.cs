@@ -720,7 +720,11 @@ public partial class FFmpegService : IFFmpegService
             filters.Add(baseFilter);
 
             // Lớp 2: Highlight từng từ — mỗi từ có enable riêng theo timestamp
-            // Sử dụng kỹ thuật: vẽ lại chỉ phần text đã qua bằng màu highlight
+            // Ước tính tọa độ X chính xác theo chiều rộng font chữ để highlight chồng lên đúng vị trí từ
+            var charWidth = karaokeFontSize * 0.52;
+            var estimatedLineWidth = Math.Max(lineText.Length * charWidth, 10);
+            var lineStartX = (width - estimatedLineWidth) / 2.0;
+
             var xAccumulated = 0;
             foreach (var word in line.Words)
             {
@@ -731,39 +735,17 @@ public partial class FFmpegService : IFFmpegService
                 var wordStartStr = word.StartTime.ToString("0.000", CultureInfo.InvariantCulture);
                 var wordEndStr = word.EndTime.ToString("0.000", CultureInfo.InvariantCulture);
 
-                // Tính vị trí X của từ này trong dòng
-                // Sử dụng text_w để tính offset dựa trên vị trí tương đối
                 var prefix = line.GetTextBefore(word);
-                var prefixTxtFile = Path.Combine(tempDir, $"karaoke_{sceneNumber:D3}_line{lineIdx:D2}_pfx{xAccumulated:D4}.txt");
-                File.WriteAllText(prefixTxtFile, string.IsNullOrEmpty(prefix) ? " " : prefix, new UTF8Encoding(false));
-                var safePrefixTxt = prefixTxtFile.Replace('\\', '/').Replace(":", "\\:");
+                var wordX = (int)Math.Max(10, lineStartX + (prefix.Length * charWidth));
 
-                // Vẽ từ highlight với vị trí X = (center offset của dòng) + (chiều rộng prefix)
-                // Dùng kỹ thuật: x = (w - lineTextWidth) / 2 + prefixWidth
-                // FFmpeg expression: x = (w - text_w)/2 nhưng cần biết lineTextWidth trước
-                // → Cách đơn giản hơn: dùng drawtext với text=fullLine nhưng fontcolor theo từ
-                // → Cách thực tế nhất: vẽ từng từ highlight chồng lên đúng vị trí
                 var highlightFilter = $"drawtext=fontfile='{safeFont}':textfile='{safeWordTxt}'"
-                    + $":fontsize={karaokeFontSize}:fontcolor={highlightColor}"
-                    + $":borderw=3:bordercolor=black@0.9"
-                    + $":shadowcolor={highlightColor}@0.4:shadowx=0:shadowy=0"
-                    + $":x=(w-main_w)/2+{(prefix.Length > 0 ? $"tw('{safePrefixTxt}','{safeFont}',{karaokeFontSize})" : "0")}"
-                    + $":y=h-text_h-{yOffset}"
-                    + $":enable='between(t,{wordStartStr},{wordEndStr})'";
-
-                // Fallback đơn giản hơn: sử dụng char offset ratio
-                // x = (w - lineW) / 2 + (charOffset / lineLen) * lineW
-                var charOffset = prefix.Length;
-                var lineLen = Math.Max(lineText.Length, 1);
-                var highlightFilterSimple = $"drawtext=fontfile='{safeFont}':textfile='{safeWordTxt}'"
                     + $":fontsize={karaokeFontSize}:fontcolor={highlightColor}"
                     + $":borderw=4:bordercolor=black@0.95"
                     + $":shadowcolor={highlightColor}@0.3:shadowx=1:shadowy=1"
-                    + $":x='(w-tw(\''{safeLineTxt}\'\'))/2+tw(\''{safePrefixTxt}\'\')'" 
-                    + $":y=h-text_h-{yOffset}"
+                    + $":x={wordX}:y=h-text_h-{yOffset}"
                     + $":enable='between(t,{wordStartStr},{wordEndStr})'";
 
-                filters.Add(highlightFilterSimple);
+                filters.Add(highlightFilter);
                 xAccumulated++;
             }
         }
