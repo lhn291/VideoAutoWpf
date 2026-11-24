@@ -10,6 +10,8 @@
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisConverter" />
         <converters:RatioMatchConverter x:Key="RatioMatchConverter" />
         <converters:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisConverter" />
+        <converters:StepStatusToTextConverter x:Key="StepStatusToTextConverter" />
+        <converters:StepStatusToBrushConverter x:Key="StepStatusToBrushConverter" />
 
         <!-- Base Colors -->
         <SolidColorBrush x:Key="BgDark" Color="#181825" />

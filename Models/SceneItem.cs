@@ -115,24 +115,4 @@ public partial class SceneItem : ObservableObject
     {
         OnPropertyChanged(nameof(DurationFormatted));
     }
-
-    /// <summary>
-    /// Danh sách các Shot (góc quay / khung hình) thuộc phân cảnh này trong Pipeline V2.
-    /// </summary>
-    [ObservableProperty]
-    private System.Collections.ObjectModel.ObservableCollection<VideoAutoWpf.Models.V2.Shot> _shots = new();
-
-    public bool HasMultipleShots => Shots.Count > 1;
-    public int ShotsCount => Shots.Count;
-
-    public void NotifyShotsUpdated()
-    {
-        OnPropertyChanged(nameof(HasMultipleShots));
-        OnPropertyChanged(nameof(ShotsCount));
-    }
-
-    partial void OnShotsChanged(System.Collections.ObjectModel.ObservableCollection<VideoAutoWpf.Models.V2.Shot> value)
-    {
-        NotifyShotsUpdated();
-    }
 }

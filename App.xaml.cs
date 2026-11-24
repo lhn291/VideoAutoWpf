@@ -19,7 +19,7 @@ public partial class App : Application
         if (!isNewInstance)
         {
             MessageBox.Show(
-                "VideoAutoWpf đã đang chạy trong một phiên khác trên máy này.\nChỉ cho phép duy nhất một phiên ứng dụng hoạt động để bảo vệ dữ liệu SQLite và hàng đợi tự động.",
+                "VideoAutoWpf đã đang chạy trong một phiên khác trên máy này.\nChỉ cho phép duy nhất một phiên ứng dụng hoạt động cùng lúc.",
                 "Ứng Dụng Đang Chạy",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);

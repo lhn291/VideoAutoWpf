@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using VideoAutoWpf.Models;
-using VideoAutoWpf.Models.V2;
+using VideoAutoWpf.Models.Minimal;
 
 namespace VideoAutoWpf.Services;
 
@@ -16,22 +16,15 @@ public class GeminiScriptService
 
     public static readonly Dictionary<string, string> StylePrompts = new()
     {
-        ["dark-anime"] = "In a modern dark anime comic illustration style, high-end 2D graphic novel art, clean sharp line art, flat dramatic cel shading, intense cinematic moody lighting, deep shadows, high contrast, mature crime detective aesthetic, no childish cartoons, no random fantasy elements, portrait aspect ratio 9:16. ",
-        ["cinematic-horror"] = "In a cinematic crime thriller movie style, gritty realism, atmospheric cinematic film still, moody and suspenseful shadows, volumetric lighting, dramatic tension, photorealistic textures, no childish elements, portrait aspect ratio 9:16. ",
-        ["cartoon-3d"] = "In a cute 3D cartoon style, Pixar and Disney animated film render style, vibrant colors, soft volumetric lighting, glossy surfaces, round friendly character designs, highly detailed 3D digital art, cheerful atmosphere, no 2D drawings, no photorealism. Portrait aspect ratio 9:16. ",
-        ["cyberpunk"] = "In a futuristic 2D cyberpunk anime style, 2D digital anime art, vibrant neon light highlights, flat cel shading, clean line art, dark shadows, high contrast, cinematic lighting, no realistic skin texture, no 3D render quality. Colors unified: dark indigo, bright magenta, and neon cyan. Clean line art, portrait aspect ratio 9:16. ",
-        ["horror-cartoon"] = "In an eerie dark 2D cartoon style, Tim Burton aesthetic, creepy hand-drawn illustration style, sketchy lines, whimsical but macabre atmosphere, high contrast, dramatic shadows, no photorealism, no 3D elements, no realistic textures. Colors strictly unified: charcoal black, venom green, deep violet, and dark red. Clean line art, portrait aspect ratio 9:16. ",
-        ["oil-painting"] = "In a classical textured oil painting style, expressive thick paint brushstrokes, texture of paint on canvas, chiaroscuro lighting, dramatic shadow and light contrast, historical and moody atmosphere, no digital animation style, no photorealism. Colors unified: deep brown, burnt orange, and pale warm yellow. Portrait aspect ratio 9:16. ",
-        ["watercolor"] = "In a beautiful fluid watercolor painting style, wet-on-wet technique, soft pastel washes, bleeding paint edges, subtle ink sketch outline details, artistic and dreamy atmosphere, light and airy lighting, no photorealism, no digital animation style. Portrait aspect ratio 9:16. ",
-        ["cartoon-2d"] = "In a classic 2D cartoon style, retro flat illustration, solid colors, clean black line art, vintage cartoon vibes, nostalgic simple shading, no gradients, no photorealism, no 3D elements. Portrait aspect ratio 9:16. ",
-        ["realistic-photo"] = "In a hyper-realistic photographic style, DSLR quality, shallow depth of field, natural lighting, professional cinematic photography, highly detailed, lifelike textures, 8K resolution quality. Portrait aspect ratio 9:16. ",
-        ["pixel-art"] = "In a retro pixel art style, 16-bit game aesthetic, limited color palette, clean pixel placement, nostalgic retro gaming vibes, no anti-aliasing, sharp pixel edges. Portrait aspect ratio 9:16. "
+        ["realistic-photo"] = "In a hyper-realistic photographic style, DSLR quality, natural cinematic lighting, highly detailed textures, 8K resolution, photorealistic. ",
+        ["dark-anime"] = "In a modern dark anime comic illustration style, high-end 2D graphic novel art, sharp line art, dramatic cel shading, moody lighting, deep shadows. ",
+        ["cinematic-horror"] = "In a cinematic crime thriller movie style, atmospheric cinematic film still, moody and suspenseful shadows, volumetric lighting, dramatic tension. ",
+        ["cartoon-3d"] = "In a cute 3D cartoon style, Pixar and Disney animated film render style, vibrant colors, soft volumetric lighting, friendly character designs. ",
+        ["cyberpunk"] = "In a futuristic cyberpunk style, vibrant neon lights, dark shadows, high contrast, cinematic moody lighting, neon cyan and magenta accents. ",
+        ["oil-painting"] = "In a classical textured oil painting style, expressive thick paint brushstrokes, texture of paint on canvas, chiaroscuro lighting, dramatic atmosphere. ",
+        ["watercolor"] = "In a beautiful fluid watercolor painting style, wet-on-wet technique, soft pastel washes, bleeding paint edges, subtle ink sketch outline details. ",
+        ["pixel-art"] = "In a retro pixel art style, 16-bit game aesthetic, limited color palette, clean pixel placement, sharp pixel edges. "
     };
-
-    /// <summary>
-    /// Danh sách style keys có sẵn, dùng cho AI chọn
-    /// </summary>
-    public static readonly string AvailableStyleKeys = string.Join(", ", StylePrompts.Keys);
 
     private string? _apiKey;
 
@@ -46,11 +39,9 @@ public class GeminiScriptService
 
     public static string? LoadApiKey()
     {
-        // 1. Biến môi trường GEMINI_API_KEY
         var env = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
         if (!string.IsNullOrWhiteSpace(env)) return env.Trim();
 
-        // 2. File Config/gemini_api_key.txt
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
         var paths = new[]
         {
@@ -95,10 +86,8 @@ public class GeminiScriptService
         _authService = authService;
     }
 
-    /// <summary>
-    /// Project ID Google Cloud từ google_credentials.json.
-    /// Dùng bởi các service phụ thuộc như VisualDirectorService để tránh hardcode.
-    /// </summary>
+    public string ProjectId => _authService.ProjectId ?? string.Empty;
+
     private static readonly JsonSerializerOptions _geminiJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -116,14 +105,12 @@ public class GeminiScriptService
         if (string.IsNullOrWhiteSpace(rawText)) return string.Empty;
         var text = rawText.Trim();
 
-        // 1. Bóc tách markdown ```json ... ``` hoặc ``` ... ```
         var match = System.Text.RegularExpressions.Regex.Match(text, @"```(?:json)?\s*([\s\S]*?)\s*```", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         if (match.Success)
         {
             text = match.Groups[1].Value.Trim();
         }
 
-        // 2. Tìm vị trí ngoặc JSON ngoài cùng { } hoặc [ ]
         int firstBrace = text.IndexOf('{');
         int firstBracket = text.IndexOf('[');
 
@@ -149,9 +136,6 @@ public class GeminiScriptService
         return text.Trim();
     }
 
-    /// <summary>
-    /// Lấy token xác thực: nếu đã có Gemini API Key thì không cần gọi Service Account token để tránh lỗi/treo
-    /// </summary>
     private async Task<(string token, string projectId)> ResolveAuthCredentialsAsync()
     {
         var projectId = _authService.ProjectId;
@@ -163,810 +147,95 @@ public class GeminiScriptService
         return (token, projectId);
     }
 
-    public string ProjectId => _authService.ProjectId ?? string.Empty;
-
     /// <summary>
-    /// Bước 0 V2: Phân tích nội dung nguồn (YouTube/Transcript/Cốt truyện) thành ContentAnalysis và StoryBlueprint.
-    /// Giúp định hình cấu trúc sự kiện, tuyến nhân vật (Character Bible), hồ sơ bối cảnh (Location Bible),
-    /// và phân chia ranh giới các tập tự nhiên trước khi tạo kịch bản chi tiết.
+    /// BƯỚC 2: AI Lập dàn ý video từ chủ đề (Minimal Workflow)
     /// </summary>
-    public async Task<(ContentAnalysis Analysis, StoryBlueprint Blueprint)> AnalyzeContentAndCreateBlueprintAsync(
-        string topicOrContent,
-        VideoTranscriptResult? transcript = null,
-        string location = "us-central1",
-        CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(topicOrContent))
-            throw new ArgumentException("Nội dung hoặc chủ đề không được để trống.", nameof(topicOrContent));
-
-        var (token, projectId) = await ResolveAuthCredentialsAsync();
-        
-        //
-
-        var systemInstruction =
-            "You are a master investigative documentary director, narrative architect, and screenplay consultant. " +
-            "Your task is to analyze raw content / YouTube transcript, extract verified factual events, " +
-            "and build a unified STORY BLUEPRINT and CONTENT ANALYSIS for a high-production video series.\n" +
-            "CRITICAL RULES:\n" +
-            "1. NO FICTIONAL FILLER: Do not invent events, suspects, or dates that contradict the source or have no basis. Mark unverified claims clearly.\n" +
-            "2. CHRONOLOGICAL TIMELINE: Order key events strictly by time sequence. If timestamps exist in transcript, retain them.\n" +
-            "3. CHARACTER BIBLE: Define distinct character profiles with permanent facial, hair, and clothing features to prevent character confusion.\n" +
-            "4. LOCATION BIBLE: Define distinct location profiles with permanent architectural style, spatial layout, interior/exterior details, lighting, and palette anchors.\n" +
-            "5. DYNAMIC EPISODE OUTLINES: Break into natural narrative episodes based on emotional hooks, turning points, and cliffhangers (DO NOT simply divide minutes evenly).\n" +
-            "6. You MUST return ONLY the raw JSON block matching this exact schema:\n" +
-            "{\n" +
-            "  \"content_analysis\": {\n" +
-            "    \"main_topic\": \"...\",\n" +
-            "    \"core_message\": \"...\",\n" +
-            "    \"summary\": \"...\",\n" +
-            "    \"events\": [\n" +
-            "      { \"order\": 1, \"time_marker\": \"...\", \"timestamp_seconds\": 12.5, \"title\": \"...\", \"description\": \"...\", \"cause\": \"...\", \"effect\": \"...\", \"is_verified\": true, \"source_quote\": \"...\" }\n" +
-            "    ],\n" +
-            "    \"detected_characters\": [\n" +
-            "      { \"name\": \"...\", \"role_or_function\": \"...\", \"description\": \"...\" }\n" +
-            "    ],\n" +
-            "    \"detected_locations\": [\n" +
-            "      { \"name\": \"...\", \"role_or_function\": \"...\", \"description\": \"...\" }\n" +
-            "    ],\n" +
-            "    \"verified_facts\": [\"...\"],\n" +
-            "    \"unverified_claims\": [\"...\"]\n" +
-            "  },\n" +
-            "  \"story_blueprint\": {\n" +
-            "    \"title\": \"...\",\n" +
-            "    \"core_theme\": \"...\",\n" +
-            "    \"main_message\": \"...\",\n" +
-            "    \"narrative_arc\": \"...\",\n" +
-            "    \"characters\": [\n" +
-            "      {\n" +
-            "        \"id\": \"char_001\",\n" +
-            "        \"name\": \"...\",\n" +
-            "        \"role\": \"...\",\n" +
-            "        \"gender_age\": \"...\",\n" +
-            "        \"appearance_vn\": \"...\",\n" +
-            "        \"outfit_vn\": \"...\",\n" +
-            "        \"visual_prompt\": \"...\",\n" +
-            "        \"distinguishing_marker\": \"...\"\n" +
-            "      }\n" +
-            "    ],\n" +
-            "    \"locations\": [\n" +
-            "      {\n" +
-            "        \"id\": \"loc_001\",\n" +
-            "        \"name\": \"...\",\n" +
-            "        \"function_or_purpose\": \"...\",\n" +
-            "        \"architectural_style\": \"...\",\n" +
-            "        \"spatial_layout\": \"...\",\n" +
-            "        \"interior_details\": \"...\",\n" +
-            "        \"exterior_details\": \"...\",\n" +
-            "        \"signature_colors\": \"...\",\n" +
-            "        \"lighting_default\": \"...\",\n" +
-            "        \"visual_prompt_anchor\": \"...\"\n" +
-            "      }\n" +
-            "    ],\n" +
-            "    \"must_keep_details\": [\"...\"],\n" +
-            "    \"suggested_episodes\": [\n" +
-            "      {\n" +
-            "        \"episode_number\": 1,\n" +
-            "        \"title\": \"...\",\n" +
-            "        \"story_segment\": \"...\",\n" +
-            "        \"objective\": \"...\",\n" +
-            "        \"hook\": \"...\",\n" +
-            "        \"climax\": \"...\",\n" +
-            "        \"cliffhanger\": \"...\",\n" +
-            "        \"key_location_ids\": [\"loc_001\"],\n" +
-            "        \"key_character_ids\": [\"char_001\"]\n" +
-            "      }\n" +
-            "    ],\n" +
-            "    \"unresolved_points\": [\"...\"]\n" +
-            "  }\n" +
-            "}";
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"Raw Content / Dossier to Analyze:\n'{topicOrContent}'\n");
-
-        if (transcript != null && transcript.Lines.Count > 0)
-        {
-            sb.AppendLine("Transcript Segments with Timestamps (sample):");
-            int sampleCount = Math.Min(60, transcript.Lines.Count);
-            for (int i = 0; i < sampleCount; i++)
-            {
-                var line = transcript.Lines[i];
-                sb.AppendLine($"[{line.StartSeconds:F1}s - {line.StartSeconds + line.DurationSeconds:F1}s]: {line.Text}");
-            }
-        }
-
-        var response = await CallGeminiForJson<ContentAndBlueprintResponse>(
-            systemInstruction, 
-            sb.ToString(), 
-            projectId, 
-            location, 
-            token, 
-            ct);
-
-        var analysis = new ContentAnalysis
-        {
-            MainTopic = response?.ContentAnalysis?.MainTopic ?? string.Empty,
-            CoreMessage = response?.ContentAnalysis?.CoreMessage ?? string.Empty,
-            Summary = response?.ContentAnalysis?.Summary ?? string.Empty,
-            Events = response?.ContentAnalysis?.Events ?? new(),
-            DetectedCharacters = response?.ContentAnalysis?.DetectedCharacters ?? new(),
-            DetectedLocations = response?.ContentAnalysis?.DetectedLocations ?? new(),
-            VerifiedFacts = response?.ContentAnalysis?.VerifiedFacts ?? new(),
-            UnverifiedClaims = response?.ContentAnalysis?.UnverifiedClaims ?? new(),
-            HasTranscriptTimestamps = transcript?.HasTimestamps ?? false
-        };
-
-        var blueprint = new StoryBlueprint
-        {
-            Title = response?.StoryBlueprint?.Title ?? "Untitled Story Blueprint",
-            CoreTheme = response?.StoryBlueprint?.CoreTheme ?? string.Empty,
-            MainMessage = response?.StoryBlueprint?.MainMessage ?? string.Empty,
-            NarrativeArc = response?.StoryBlueprint?.NarrativeArc ?? string.Empty,
-            EventsTimeline = analysis.Events,
-            MustKeepDetails = response?.StoryBlueprint?.MustKeepDetails ?? new(),
-            SuggestedEpisodes = response?.StoryBlueprint?.SuggestedEpisodes ?? new(),
-            UnresolvedPoints = response?.StoryBlueprint?.UnresolvedPoints ?? new()
-        };
-
-        if (response?.StoryBlueprint?.Characters != null)
-        {
-            foreach (var ch in response.StoryBlueprint.Characters)
-                blueprint.Characters.Add(ch);
-        }
-
-        if (response?.StoryBlueprint?.Locations != null)
-        {
-            foreach (var loc in response.StoryBlueprint.Locations)
-                blueprint.Locations.Add(loc);
-        }
-
-        return (analysis, blueprint);
-    }
-
-    /// <summary>
-    /// Bước 1: AI lên kế hoạch (plan) cho video dựa trên chủ đề
-    /// </summary>
-    public async Task<ScriptPlan> GeneratePlanAsync(
+    public async Task<VideoOutline> GenerateMinimalOutlineAsync(
         string topic,
+        string style = "realistic-photo",
+        string tone = "Kịch tính, cuốn hút",
         string location = "us-central1",
-        Action<string>? onStatus = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Action<string>? onStatus = null)
     {
         if (string.IsNullOrWhiteSpace(topic))
             throw new ArgumentException("Chủ đề không được để trống.", nameof(topic));
 
         var (token, projectId) = await ResolveAuthCredentialsAsync();
-        
-        //
 
         var systemInstruction =
-            "You are an expert creative video planning consultant. " +
-            "Given a video topic or content description, analyze the topic and suggest the BEST creative plan for making a short video. " +
-            "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
-            "The JSON structure must exactly match this schema:\n" +
+            "Bạn là một chuyên gia sáng tạo nội dung video ngắn chuyên nghiệp (Shorts / Reels / TikTok). " +
+            "Nhiệm vụ: Phân tích chủ đề và lập dàn ý video ngắn hấp dẫn, có hook mở màn, phát triển mạch lạc và kết thúc ấn tượng. " +
+            "BẮT BUỘC trả về duy nhất một khối JSON thô, không kèm markdown backticks, theo schema:\n" +
             "{\n" +
-            "  \"suggested_scenes\": 5,\n" +
-            "  \"suggested_style\": \"dark-anime\",\n" +
-            "  \"style_description\": \"Mô tả ngắn gọn bằng tiếng Việt về phong cách được chọn\",\n" +
-            "  \"tone\": \"Tone giọng đọc phù hợp (Rùng rợn / Vui nhộn / Trang nghiêm / Nhẹ nhàng / Hào hùng / Bí ẩn / Cảm xúc...)\",\n" +
-            "  \"ratio\": \"9:16\",\n" +
-            "  \"voice\": \"vi-VN-Neural2-D\",\n" +
-            "  \"motion_effect\": \"auto\",\n" +
-            "  \"enable_fade\": true,\n" +
-            "  \"enable_vignette\": false,\n" +
-            "  \"suggested_bgm\": \"dramatic\",\n" +
-            "  \"enable_subtitles\": true,\n" +
-            "  \"subtitle_style\": \"cinematic\",\n" +
-            "  \"subtitle_font\": \"Segoe UI Bold\",\n" +
-            "  \"subtitle_reason\": \"Lý do ngắn gọn bằng tiếng Việt chọn kiểu chữ chạy/phụ đề này\",\n" +
-            "  \"summary\": \"Tóm tắt kế hoạch video bằng tiếng Việt (3-5 câu): nội dung chính, cách kể chuyện, điểm nhấn\",\n" +
-            "  \"character_hint\": \"Tóm tắt nhanh tuyến nhân vật chính bằng tiếng Việt\",\n" +
-            "  \"characters\": [\n" +
-            "    {\n" +
-            "      \"id\": \"victim\",\n" +
-            "      \"name\": \"Lan (Nạn nhân)\",\n" +
-            "      \"role\": \"Nạn nhân\",\n" +
-            "      \"gender_age\": \"Nữ, 22 tuổi\",\n" +
-            "      \"appearance_vn\": \"Dáng người gầy, tóc đen thẳng ngang vai, mắt to hoang mang\",\n" +
-            "      \"outfit_vn\": \"Áo len vàng nhạt pastel, quần jeans xanh nhạt, đeo túi tote vải be\",\n" +
-            "      \"visual_prompt\": \"A 22-year-old Vietnamese woman, slender build, shoulder-length straight black hair, anxious expressive eyes, wearing a pastel yellow knitted sweater and carrying a beige canvas tote bag\",\n" +
-            "      \"distinguishing_marker\": \"Áo len vàng nhạt pastel, túi vải be (Dấu hiệu nhận diện cố định)\"\n" +
-            "    }\n" +
-            "  ]\n" +
-            "}\n\n" +
-            "Rules:\n" +
-            "1. 'suggested_scenes': For short videos, recommend between 4 and 8 scenes. Each scene should represent a substantial narrative beat of 8-15 seconds. DO NOT create too many rapid-fire fragmented scenes that cause visual fatigue and unnecessary image generation.\n" +
-            $"2. 'suggested_style' MUST be one of these exact keys: [{AvailableStyleKeys}]. Choose the BEST style that matches the topic's mood and theme.\n" +
-            "3. 'voice' should default to 'vi-VN-Neural2-D' (nam cao cấp - trầm ấm, truyền cảm, tự nhiên) or 'vi-VN-Neural2-A' (nữ cao cấp - truyền cảm). Highly recommended over older robotic voices.\n" +
-            "4. 'ratio' is always '9:16' for short video.\n" +
-            "5. 'motion_effect' default is 'auto' (AI analyzes and assigns the best camera movement to each individual scene).\n" +
-            "6. 'enable_vignette': set to true for dark fantasy, horror, noir, historical drama; false for bright anime, cartoon, commercial.\n" +
-            "7. 'enable_fade': always true for smooth transitions.\n" +
-            "8. 'suggested_bgm': must be one of ['dramatic', 'chill', 'epic', 'horror', 'upbeat']. Choose according to the emotional tone of the video.\n" +
-            "9. 'subtitle_style': MUST be one of ['cinematic', 'boxed', 'viral_yellow', 'neon', 'gold', 'ticker']. Select the style that best enhances the video's mood, pacing, and platform appeal (e.g. 'viral_yellow' or 'boxed' for TikTok/Shorts hooks, 'cinematic' for documentaries/drama, 'neon' for cyberpunk/tech, 'gold' for luxury/history, 'ticker' for news crawl).\n" +
-            "10. 'subtitle_font': choose from ['Segoe UI Bold', 'Arial Bold', 'Impact', 'Tahoma Bold', 'Consolas', 'Times New Roman'].\n" +
-            "11. 'subtitle_reason': Giải thích ngắn gọn bằng tiếng Việt lý do đề xuất kiểu phụ đề này.\n" +
-            "12. All Vietnamese text must be natural and compelling.\n" +
-            "13. 'characters' (RÀ SOÁT VÀ THIẾT KẾ TOÀN BỘ TUYẾN NHÂN VẬT ĐỘC NHẤT TRƯỚC KHI TẠO CẢNH):\n" +
-            "    - Quét toàn bộ nội dung chủ đề và bóc tách đầy đủ tất cả các nhân vật xuất hiện: Nạn nhân, Nghi phạm/Kẻ tình nghi, Điều tra viên/Thám tử, Nhân chứng, v.v.\n" +
-            "    - TUYỆT ĐỐI KHÔNG để các nhân vật nhìn giống nhau! Mỗi nhân vật PHẢI có tạo hình và trang phục HOÀN TOÀN TÁCH BIỆT:\n" +
-            "      * Khác biệt rõ rệt về độ tuổi, giới tính, vóc dáng, kiểu tóc.\n" +
-            "      * Trang phục và màu sắc tương phản mạnh (ví dụ: Nạn nhân áo len vàng nhạt; Thám tử áo măng tô xám; Kẻ lạ mặt áo khoác đen trùm đầu) để người xem nhận biết tức thì.\n" +
-            "      * Viết 'visual_prompt' tiếng Anh cực kỳ chi tiết cho từng nhân vật để Imagen 3 vẽ nhất quán.\n" +
-            "    - Nếu nội dung không có nhân vật người (chủ đề thiên nhiên, vũ trụ), để mảng 'characters' rỗng [].\n" +
-            "14. 'character_hint': Tóm tắt ngắn gọn các nhân vật chính bằng tiếng Việt.\n";
-
-        var userPrompt = $"Hãy lên kế hoạch chi tiết cho video về chủ đề sau:\n'{topic}'\n\n" +
-                         "Phân tích chủ đề và đề xuất số cảnh, phong cách hình ảnh, tone giọng đọc, hiệu ứng camera phù hợp nhất.";
-
-        return await CallGeminiForJson<ScriptPlan>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
-    }
-
-    /// <summary>
-    /// Bước 2: Sinh kịch bản chi tiết dựa trên plan đã duyệt
-    /// </summary>
-    public async Task<ScriptWorkspace> GenerateScriptAsync(
-        string topic,
-        ScriptPlan plan,
-        string characterRules = "",
-        string location = "us-central1",
-        CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(topic))
-            throw new ArgumentException("Chủ đề hoặc nội dung kịch bản không được để trống.", nameof(topic));
-
-        var (token, projectId) = await ResolveAuthCredentialsAsync();
-        
-        //
-
-        var chosenStyle = StylePrompts.TryGetValue(plan.SuggestedStyle, out var styleVal) ? styleVal : StylePrompts["dark-anime"];
-        var numScenes = plan.SuggestedScenes > 0 ? plan.SuggestedScenes : 5;
-
-        var systemInstruction =
-            "You are an expert creative writer and short video director. " +
-            "Your task is to take a video topic or raw content description and generate a complete structured video script in JSON format. " +
-            "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
-            "The JSON structure must exactly match this schema:\n" +
-            "{\n" +
-            "  \"metadata\": {\n" +
-            $"    \"ratio\": \"{plan.Ratio}\",\n" +
-            $"    \"voice\": \"{plan.Voice}\",\n" +
-            $"    \"enable_fade\": {plan.EnableFadeTransition.ToString().ToLower()},\n" +
-            $"    \"enable_vignette\": {plan.EnableVignette.ToString().ToLower()},\n" +
-            $"    \"music\": \"{plan.SuggestedBgm}\",\n" +
-            "    \"enable_music\": true,\n" +
-            "    \"music_volume\": 0.15,\n" +
-            $"    \"enable_subtitles\": {plan.EnableSubtitles.ToString().ToLower()},\n" +
-            $"    \"subtitle_style\": \"{plan.SubtitleStyle}\",\n" +
-            $"    \"subtitle_font\": \"{plan.SubtitleFont}\"\n" +
-            "  },\n" +
-            "  \"publish_info\": {\n" +
-            "    \"title\": \"Tiêu đề video cực giật gân, cuốn hút cho TikTok/Shorts/Reels (dưới 80 ký tự)\",\n" +
-            "    \"alternative_titles\": \"- Gợi ý tiêu đề 2 (tò mò)\\n- Gợi ý tiêu đề 3 (kịch tính)\",\n" +
-            "    \"description\": \"Đoạn mô tả ngắn 2-3 câu khơi gợi sự tò mò của video, kèm kêu gọi hành động\",\n" +
-            "    \"hashtags\": \"#chude #bian #kienthuc #xuhuong #fyp #shorts #tiktok #viral\"\n" +
-            "  },\n" +
-            "  \"scenes\": [\n" +
-            "    { \"text\": \"Vietnamese voiceover text...\", \"characters_present\": [\"Tên nhân vật\"], \"character_ids_present\": [\"char_001\"], \"image_prompt\": \"Detailed English prompt...\", \"motion_effect\": \"zoom_in\", \"story_beat\": \"Setup\", \"pacing_type\": \"Normal\", \"pacing_note\": \"Calm establishing tone\", \"estimated_duration_hint\": 10.0 }\n" +
-            "  ]\n" +
-            "}\n\n" +
-            "Guidelines:\n" +
-            $"1. The video ratio is {plan.Ratio} (vertical). Voice is '{plan.Voice}'.\n" +
-            $"2. Generate exactly {numScenes} scenes. Their visual weight differs by 'story_beat' — NOT divided uniformly by time.\n" +
-            $"3. The tone of voice should be: {plan.Tone}.\n" +
-            "4. NARRATION PACING & WORD COUNT:\n" +
-            "   - The 'text' must be natural, engaging, and compelling Vietnamese voiceover. Start with a strong hook in Scene 1.\n" +
-            "   - Each scene's 'text' should be a complete, coherent narrative beat with 18-35 words. DO NOT split into tiny 3-word fragments!\n" +
-            "   - 'estimated_duration_hint': estimate target seconds. Hook ~5-7s. Setup/Normal ~8-12s. Suspense/Climax ~12-18s. Leave 0 if unknown.\n" +
-            $"5. CRITICAL VISUAL RELEVANCE (ĂN KHỚP 100% VỚI NỘI DUNG TỪNG PHÂN CẢNH):\n" +
-            "   - The 'image_prompt' MUST strictly illustrate the exact situation, setting, objects, or actions described in that scene's 'text'.\n" +
-            "   - REAL-WORLD GROUNDING: If the story/case is about real life, crime investigation, urban mystery, or history, ALL visual elements (buildings, streets, cars, police tape, clothes) MUST strictly reflect the real modern world. NEVER generate fantasy elements (cloaked wizards, magic staffs, glowing orbs, swamp ruins, ancient shrines/torii gates) unless the topic explicitly demands fantasy!\n" +
-            "   - For example, if narration mentions 'không có dấu hiệu giằng co trên đường phố' (no struggle on the street), the prompt MUST illustrate a quiet, dimly lit modern asphalt street at night with streetlights and pavement — NOT a fantasy shaman or mysterious pagoda!\n" +
-            "   - ENVIRONMENT / CLUE SHOTS: When a scene discusses an environment, crime scene, or evidence (e.g. empty street, vehicle, phone, window, footprints), focus the visual strictly on that environment or clue. Set 'characters_present': []. DO NOT force characters into the shot if they are not actively present in that moment.\n" +
-            $"   - You MUST prepend this exact style prefix to the beginning of EVERY single 'image_prompt': '{chosenStyle}'\n" +
-            "6. CHARACTER ROSTER & SCENE MAPPING (TUÂN THỦ TUYẾN NHÂN VẬT ĐÃ THIẾT KẾ):\n" +
-            "   - For each scene, specify 'characters_present': ['Tên nhân vật'] if any character is actively on screen, or [] if it is an environment/clue scene.\n" +
-            "   - 'character_ids_present': array of character 'id' strings from the established roster (e.g. ['char_001']). Leave [] for environment/clue-only shots.\n" +
-            "   - IF 'characters_present' is empty: DO NOT draw any human characters! Focus entirely on the location, props, clues, or atmosphere.\n" +
-            "   - IF 'characters_present' has a character: Insert ONLY that specific character's exact Visual Prompt Snippet from the established roster into 'image_prompt'.\n" +
-            "   - NEVER mix up characters (e.g. NEVER draw the detective when the scene is talking about the victim)!\n" +
-            "   - NEVER reuse the same generic character template for different people; adhere strictly to their distinct established outfits, hair, and age.\n" +
-            "7. STORY BEAT ASSIGNMENT (CRITICAL FOR NON-UNIFORM PACING):\n" +
-            "   - Assign each scene a 'story_beat' from: Hook | Setup | Rising_Action | Clue_Reveal | Confrontation | Climax | Resolution | Cliffhanger.\n" +
-            "   - The beat drives shot allocation: Hook=1 fast shot, Setup=1-2, Rising_Action=2, Clue_Reveal=2-3, Climax/Confrontation=3-4 intense shots.\n" +
-            "   - 'pacing_type': Hook | Normal | Suspense | Climax.\n" +
-            "   - 'pacing_note': One short English sentence for the visual director (e.g. 'Slow dread-building; camera lingers on empty corridor').\n" +
-            "8. 'motion_effect': Assign the most fitting camera movement per scene:\n" +
-            "   - 'zoom_in': intense moments, emotional climax, dialogue, dramatic realization, focusing on face or clue\n" +
-            "   - 'zoom_out': establishing shots, revealing expansive world/landscape, pulling back to show full scene\n" +
-            "   - 'pan_left_right': character walking/moving across, tracking action, sweeping landscape\n" +
-            "   - 'pan_right_left': alternating horizontal sweep\n" +
-            "   - 'pan_up': revealing character outfit to face, tall structures, trees, sky (ideal for vertical 9:16 format)\n" +
-            "   - 'pan_down': looking down from above, descending, gravity, shock\n" +
-            "   - 'zoom_pan_right': dynamic corner focus, building tension\n" +
-            "   - 'zoom_pan_left': dynamic left focus\n" +
-            "9. 'publish_info': Provide an outstanding social media publishing kit for TikTok, YouTube Shorts, and Reels in Vietnamese: catchiest hook 'title', 2 'alternative_titles', engaging 'description' with call-to-action, and 10-15 trending 'hashtags'.\n";
-
-        var userPrompt = $"Topic/Raw content to transform into a {numScenes}-scene video script:\n'{topic}'\n\n";
-
-        // Nạp tuyến nhân vật đã thiết kế trước vào User Prompt
-        if (plan.Characters != null && plan.Characters.Count > 0)
-        {
-            userPrompt += "--- ESTABLISHED CHARACTER ROSTER (TUYẾN NHÂN VẬT ĐÃ THIẾT KẾ SẴN) ---\n";
-            foreach (var ch in plan.Characters)
-            {
-                userPrompt += $"- [{ch.Id}] {ch.Name} ({ch.Role}, {ch.GenderAge}):\n" +
-                              $"  + Tạo hình & Trang phục: {ch.AppearanceVn} | {ch.OutfitVn}\n" +
-                              $"  + Visual Prompt Snippet (English): \"{ch.VisualPrompt}\"\n";
-            }
-            userPrompt += "--------------------------------------------------------------------\n\n";
-        }
-
-        // Thêm character rules từ plan hint + user rules
-        var allCharacterRules = "";
-        if (!string.IsNullOrWhiteSpace(plan.CharacterHint))
-            allCharacterRules += plan.CharacterHint + "\n";
-        if (!string.IsNullOrWhiteSpace(characterRules))
-            allCharacterRules += characterRules;
-
-        if (!string.IsNullOrWhiteSpace(allCharacterRules))
-        {
-            userPrompt += $"CRITICAL CHARACTER & COLOR SYNC RULES:\n{allCharacterRules.Trim()}\nEnsure every scene featuring the characters strictly includes these identical features and colors in English.\n\n";
-        }
-        userPrompt += $"Please generate the complete JSON script with exactly {numScenes} scenes.";
-
-        return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);
-    }
-
-    /// <summary>
-    /// Sinh hoặc tạo lại bộ Tiêu đề, Mô tả, Hashtags đăng mạng xã hội (TikTok, Shorts, Reels)
-    /// </summary>
-    public async Task<VideoPublishInfo> GeneratePublishInfoAsync(
-        string topicOrSummary,
-        string scenesContent,
-        string location = "us-central1",
-        CancellationToken ct = default)
-    {
-        var (token, projectId) = await ResolveAuthCredentialsAsync();
-        
-        //
-
-        var systemInstruction =
-            "You are a top-tier viral content marketing expert and social media strategist specializing in TikTok, YouTube Shorts, and Facebook/Instagram Reels. " +
-            "Your job is to analyze the video's topic and scene scripts, and produce a viral, high-converting social media publishing kit in Vietnamese. " +
-            "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
-            "The JSON schema must exactly match:\n" +
-            "{\n" +
-            "  \"title\": \"Tiêu đề giật gân, siêu cuốn hút (dưới 80 ký tự), có thể kèm emoji gây tò mò\",\n" +
-            "  \"alternative_titles\": \"- Tiêu đề thay thế 1 (Dạng câu hỏi bí ẩn)\\n- Tiêu đề thay thế 2 (Dạng giật gân A/B test)\",\n" +
-            "  \"description\": \"Mô tả ngắn gọn (2-3 câu) tóm tắt kịch tính nội dung video, kèm lời kêu gọi hành động (CTA) kích thích bình luận\",\n" +
-            "  \"hashtags\": \"#chude #bian #kienthuc #xuhuong #fyp #shorts #tiktok #viral (khoảng 10-15 thẻ hashtag có dấu và không dấu cách nhau bằng khoảng trắng)\"\n" +
-            "}";
-
-        var userPrompt = $"Nội dung chủ đề video:\n{topicOrSummary}\n\n" +
-                         $"Các phân cảnh / lời thoại trong video:\n{scenesContent}\n\n" +
-                         "Hãy tạo bộ tiêu đề, mô tả và hashtags bùng nổ tương tác cho video này.";
-
-        return await CallGeminiForJson<VideoPublishInfo>(systemInstruction, userPrompt, projectId, location, token, ct);
-    }
-
-    /// <summary>
-    /// AI Lập kế hoạch Series nhiều tập: Phân chia các hồi, xác định cliffhangers và Tuyến nhân vật (Character Roster)
-    /// </summary>
-    public async Task<SeriesPlan> GenerateSeriesPlanAsync(
-        string topicOrPremise,
-        int totalEpisodes = 3,
-        int defaultScenesPerEpisode = 6,
-        string styleKey = "dark-anime",
-        string voiceKey = "vi-VN-Neural2-D",
-        string toneOrPacing = "Kịch tính, dồn dập, giật gân (Dramatic / Thriller)",
-        string aspectRatio = "9:16",
-        string location = "us-central1",
-        Action<string>? onStatus = null,
-        CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(topicOrPremise))
-            throw new ArgumentException("Chủ đề hoặc cốt truyện không được để trống.", nameof(topicOrPremise));
-
-        var (token, projectId) = await ResolveAuthCredentialsAsync();
-        
-        //
-
-        var systemInstruction =
-            "You are an acclaimed showrunner, executive producer, and investigative crime documentary director. " +
-            $"Your task is to take a premise, long story, or factual case investigation and divide it into a gripping, comprehensive MULTI-EPISODE series with EXACTLY {totalEpisodes} EPISODES. " +
-            "The source content may be adapted from a detailed 30-minute to 1-hour documentary or investigation, so ensure every episode deeply develops a specific phase (initial mystery, clues, suspect interrogations, twists, forensic breakthrough, and trial) without rushing or skipping crucial facts. " +
-            $"The desired pacing and tone is: '{toneOrPacing}'. Video format ratio is '{aspectRatio}'. " +
-            $"CRITICAL MANDATORY REQUIREMENT: The 'episodes' array MUST CONTAIN EXACTLY {totalEpisodes} EPISODE OBJECTS (from episode_number = 1 to episode_number = {totalEpisodes}). " +
-            $"DO NOT return only 1 episode. You must outline ALL {totalEpisodes} episodes sequentially! Each episode MUST have 'suggested_scene_count' set to {defaultScenesPerEpisode}. " +
-            "Every episode must have a captivating opening hook, substantive investigative progression, rising tension, and an INTENSE CLIFFHANGER at the end (except the final episode which resolves the verdict). " +
-            "You MUST also formulate a comprehensive 'characters' array (RÀ SOÁT VÀ THIẾT KẾ TOÀN BỘ TUYẾN NHÂN VẬT CỦA SERIES) describing every key person (Victims, Suspects, Investigators, Key Witnesses). Every character MUST have a completely distinct visual appearance, age, hairstyle, and signature outfit with high-contrast colors so they NEVER look the same or generic across episodes! " +
-            "You MUST also formulate a comprehensive 'locations' array (RÀ SOÁT VÀ THIẾT KẾ TOÀN BỘ BỐI CẢNH/HIỆN TRƯỜNG CHÍNH CỦA SERIES) describing key locations (Crime scenes, Interrogation rooms, Evidence labs, Streets, Residences). Each location MUST have an id, name, architectural_style, interior_or_exterior, lighting_default, and visual_prompt for consistent spatial geography across episodes! " +
-            "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
-            "The JSON structure must exactly match this schema:\n" +
-            "{\n" +
-            "  \"series_title\": \"Tên Series giật gân, cuốn hút bằng tiếng Việt\",\n" +
-            "  \"overall_premise\": \"Tóm tắt tổng quan mạch truyện toàn bộ series bằng tiếng Việt (3-4 câu)\",\n" +
-            "  \"character_bible\": \"Extremely detailed English visual character description summary for Imagen 3 consistency.\",\n" +
-            "  \"characters\": [\n" +
-            "    {\n" +
-            "      \"id\": \"victim\",\n" +
-            "      \"name\": \"Lan (Nạn nhân)\",\n" +
-            "      \"role\": \"Nạn nhân\",\n" +
-            "      \"gender_age\": \"Nữ, 22 tuổi\",\n" +
-            "      \"appearance_vn\": \"Dáng người gầy, tóc đen thẳng ngang vai, mắt to hoang mang\",\n" +
-            "      \"outfit_vn\": \"Áo len vàng nhạt pastel, quần jeans xanh nhạt, đeo túi vải canvas be\",\n" +
-            "      \"visual_prompt\": \"A 22-year-old Vietnamese woman, slender build, shoulder-length straight black hair, wearing a pastel yellow knit sweater and beige canvas tote bag\",\n" +
-            "      \"distinguishing_marker\": \"Áo len vàng nhạt, túi canvas be (Dấu hiệu nhận diện cố định)\"\n" +
-            "    }\n" +
-            "  ],\n" +
-            "  \"locations\": [\n" +
-            "    {\n" +
-            "      \"id\": \"crime_scene_alley\",\n" +
-            "      \"name\": \"Hiện trường con hẻm\",\n" +
-            "      \"description\": \"Con hẻm nhỏ ngoại ô nơi phát hiện manh mối\",\n" +
-            "      \"architectural_style\": \"Narrow dark suburban asphalt alley, damp brick walls, cracked pavement\",\n" +
-            "      \"interior_or_exterior\": \"Exterior\",\n" +
-            "      \"lighting_default\": \"Dim flickering yellow sodium streetlight with deep ominous shadows\",\n" +
-            "      \"fixed_elements\": [\"damp brick wall\", \"flickering streetlight\", \"rusted chain-link fence\"],\n" +
-            "      \"visual_prompt\": \"A narrow dark asphalt alley at night, damp brick walls, dim flickering yellow streetlight, cinematic shadows\"\n" +
-            "    }\n" +
-            "  ],\n" +
-            $"  \"suggested_style\": \"{styleKey}\",\n" +
-            $"  \"suggested_voice\": \"{voiceKey}\",\n" +
-            "  \"episodes\": [\n" +
-            $"    {{ \"episode_number\": 1, \"episode_title\": \"Tập 1: [Tiêu đề mở màn bí ẩn]\", \"plot_beat\": \"Diễn biến tập 1...\", \"episode_hook\": \"Hook tập 1...\", \"cliffhanger\": \"Kết lửng tập 1...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }},\n" +
-            $"    {{ \"episode_number\": 2, \"episode_title\": \"Tập 2: [Tiêu đề xung đột dâng cao]\", \"plot_beat\": \"Diễn biến tập 2...\", \"episode_hook\": \"Hook tập 2...\", \"cliffhanger\": \"Kết lửng tập 2...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }},\n" +
-            $"    {{ \"episode_number\": 3, \"episode_title\": \"Tập 3: [Tiêu đề nút thắt rúng động]\", \"plot_beat\": \"Diễn biến tập 3...\", \"episode_hook\": \"Hook tập 3...\", \"cliffhanger\": \"Kết lửng tập 3...\", \"suggested_scene_count\": {defaultScenesPerEpisode} }}\n" +
-            $"    // ... MUST include all {totalEpisodes} episodes strictly numbered 1, 2, 3... up to {totalEpisodes}\n" +
+            "  \"title\": \"Tiêu đề video cuốn hút\",\n" +
+            "  \"summary\": \"Tóm tắt 1-2 câu về nội dung cốt lõi của video\",\n" +
+            "  \"sections\": [\n" +
+            "    { \"heading\": \"Tên phần (ví dụ: Hook mở màn, Diễn biến bí ẩn, Sự thật ngỡ ngàng)\", \"description\": \"Ý chính của phần này\", \"estimated_seconds\": 8 }\n" +
             "  ]\n" +
             "}";
 
-        var userPrompt = $"BẮT BUỘC: Bạn PHẢI tạo dàn ý ĐÚNG {totalEpisodes} TẬP cho chuỗi video này, đánh số tuần tự từ 1 đến {totalEpisodes}.\n" +
-                         $"Mỗi tập đặt mục tiêu khoảng {defaultScenesPerEpisode} phân cảnh phù hợp với nhịp truyện.\n\n" +
-                         $"Chủ đề / Cốt truyện:\n'{topicOrPremise}'\n\n" +
-                         $"Thể loại & Nhịp điệu: {toneOrPacing}\n" +
-                         $"Định dạng: {aspectRatio}\n" +
-                         $"Yêu cầu định dạng tiêu đề: Mảng 'episodes' BẮT BUỘC gồm {totalEpisodes} phần tử, đánh số episode_number lần lượt là 1, 2, 3, 4, 5... " +
-                         $"Tiêu đề mỗi tập PHẢI đặt theo mẫu: 'Tập 1: [Tên tập]', 'Tập 2: [Tên tập]', ..., 'Tập {totalEpisodes}: [Tên tập]'.\n" +
-                         $"Đồng thời thiết lập đầy đủ mảng 'characters' và 'locations' chuẩn xác để các tập sau giữ trọn tính nhất quán!";
+        var userPrompt = $"Chủ đề video:\n{topic}\n\nTông giọng / Phong cách: {tone}\nPhong cách hình ảnh: {style}\nHãy tạo dàn ý gồm 4-6 phần rõ ràng cho video này.";
 
-        return await CallGeminiForJson<SeriesPlan>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
+        onStatus?.Invoke("AI đang phân tích chủ đề và lập dàn ý...");
+        return await CallGeminiForJson<VideoOutline>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
     }
 
     /// <summary>
-    /// AI Sinh kịch bản chi tiết cho 1 tập trong Series, đảm bảo đồng bộ Character Bible và Cliffhanger
+    /// BƯỚC 3: AI Viết kịch bản phân cảnh chi tiết dựa trên dàn ý đã xác nhận (Minimal Workflow)
     /// </summary>
-    public async Task<ScriptWorkspace> GenerateEpisodeScriptAsync(
-        SeriesPlan seriesPlan,
-        EpisodePlanItem episodePlan,
-        int totalEpisodes,
-        string previousEpisodeEndingContext = "",
-        string aspectRatio = "9:16",
-        string toneOrPacing = "",
-        string sourceStoryContext = "",
-        string location = "us-central1",
-        CancellationToken ct = default)
-    {
-        var (token, projectId) = await ResolveAuthCredentialsAsync();
-        
-        //
-
-        var chosenStyle = StylePrompts.TryGetValue(seriesPlan.SuggestedStyle, out var styleVal) ? styleVal : StylePrompts["dark-anime"];
-        var numScenes = episodePlan.SuggestedSceneCount > 0 ? episodePlan.SuggestedSceneCount : 6;
-        var epNum = episodePlan.EpisodeNumber;
-        var isLastEp = epNum >= totalEpisodes;
-        var ratio = string.IsNullOrWhiteSpace(aspectRatio) ? "9:16" : aspectRatio;
-
-        var systemInstruction =
-            "You are an expert investigative documentary screenwriter writing a specific episode of a high-production video series. " +
-            "You MUST return ONLY the raw JSON block without markdown formatting or code block wrappers. " +
-            $"CRITICAL REQUIREMENT: You MUST generate approximately {numScenes} scenes inside the 'scenes' array corresponding to narrative beats. " +
-            "The JSON structure must exactly match this schema:\n" +
-            "{\n" +
-            "  \"metadata\": {\n" +
-            $"    \"ratio\": \"{ratio}\",\n" +
-            $"    \"voice\": \"{seriesPlan.SuggestedVoice}\",\n" +
-            "    \"motion_effect\": \"auto\",\n" +
-            "    \"enable_fade\": true,\n" +
-            "    \"enable_vignette\": false,\n" +
-            "    \"music\": \"dramatic\",\n" +
-            "    \"enable_music\": true,\n" +
-            "    \"music_volume\": 0.15,\n" +
-            "    \"enable_subtitles\": true,\n" +
-            "    \"subtitle_style\": \"cinematic\",\n" +
-            "    \"subtitle_font\": \"Segoe UI Bold\"\n" +
-            "  },\n" +
-            "  \"publish_info\": {\n" +
-            $"    \"title\": \"🔥 {seriesPlan.SeriesTitle} - [TẬP {epNum}]: {episodePlan.EpisodeTitle}\",\n" +
-            "    \"alternative_titles\": \"- Gợi ý tiêu đề 2\\n- Gợi ý tiêu đề 3\",\n" +
-            $"    \"description\": \"Tóm tắt tập {epNum}. " + (isLastEp ? "Đại kết cục của series!" : $"Đón xem TẬP {epNum + 1} tiếp theo! Hãy bấm Đăng ký kênh ngay nhé!") + "\",\n" +
-            $"    \"hashtags\": \"#series #tap{epNum} #tailieu #khampha #xuhuong #youtube\"\n" +
-            "  },\n" +
-            "  \"scenes\": [\n" +
-            "    { \"text\": \"Vietnamese voiceover scene 1...\", \"characters_present\": [\"Tên nhân vật có mặt (hoặc để trống nếu là cảnh hiện trường/vật chứng)\"], \"location_id\": \"crime_scene_alley\", \"location_name\": \"Hiện trường con hẻm\", \"pacing_type\": \"fast\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"zoom_in\" },\n" +
-            "    { \"text\": \"Vietnamese voiceover scene 2...\", \"characters_present\": [], \"location_id\": \"crime_scene_alley\", \"location_name\": \"Hiện trường con hẻm\", \"pacing_type\": \"moderate\", \"image_prompt\": \"Detailed English Imagen 3 image generation prompt...\", \"motion_effect\": \"pan_left_right\" }\n" +
-            $"    // ... MUST continue until {numScenes} narrative scenes are generated\n" +
-            "  ]\n" +
-            "}\n\n" +
-            "Guidelines:\n" +
-            $"1. Video ratio {ratio}. Voice is '{seriesPlan.SuggestedVoice}'. {(string.IsNullOrWhiteSpace(toneOrPacing) ? "" : $"Tone: '{toneOrPacing}'.")}\n" +
-            $"2. DYNAMIC NARRATIVE PACING (THỜI LƯỢNG & NHỊP ĐIỆU ĐA DẠNG, TỰ NHIÊN): Generate {numScenes} scenes for Episode {epNum}: '{episodePlan.EpisodeTitle}'. Do NOT make all scenes have the same length! Vary the word count dynamically based on dramatic beat:\n" +
-            "   - Hook / Climax / Quick Twist ('fast' or 'climactic'): 8-16 concise, punchy Vietnamese words (approx 3-6s duration).\n" +
-            "   - Narrative / Investigation / Dialogue ('moderate'): 20-35 vivid, storytelling words (approx 8-14s duration).\n" +
-            "   - Suspense / Mystery / Atmosphere ('slow'): 14-22 atmospheric, gripping words (approx 6-9s duration).\n" +
-            "   Faithfully utilize real facts, dates, clues, suspect statements, and forensics from the provided source dossier without inventing fictitious filler.\n" +
-            $"3. Scene 1 hook: {episodePlan.EpisodeHook}. (If Episode > 1, start with a quick 1-sentence recap or immediate escalation).\n" +
-            $"4. Final scene (Scene {numScenes}) MUST end on this cliffhanger: {episodePlan.Cliffhanger}\n" +
-            $"5. CRITICAL VISUAL RELEVANCE (ĂN KHỚP 100% VỚI NỘI DUNG TỪNG PHÂN CẢNH):\n" +
-            "   - The 'image_prompt' MUST strictly depict the exact situation, setting, objects, or actions described in that scene's 'text'.\n" +
-            "   - REAL-WORLD GROUNDING: All visual elements (streets, rooms, cars, evidence, clothing) MUST strictly reflect the real modern investigative setting. NEVER generate fantasy elements (cloaked shamans, magic staffs, glowing orbs, swamp ruins, ancient shrines/torii gates) unless the topic explicitly demands fantasy!\n" +
-            "   - ENVIRONMENT / CLUE SHOTS: When a scene discusses an environment, crime scene, or evidence, focus the visual strictly on that setting or object. Set 'characters_present': []. DO NOT force characters into the shot if they are not actively present.\n" +
-            $"   - You MUST prepend this exact style prefix to the beginning of EVERY single 'image_prompt': '{chosenStyle}'\n" +
-            "6. CHARACTER ROSTER & SCENE MAPPING (TUÂN THỦ TUYẾN NHÂN VẬT SERIES):\n" +
-            "   - For each scene, declare 'characters_present': ['Tên nhân vật'] if any character actively appears, or [] if it is an environment/clue scene.\n" +
-            "   - IF 'characters_present' is empty: DO NOT draw any human characters! Focus 100% on the setting or clue.\n" +
-            "   - IF 'characters_present' has a character: Insert ONLY that specific character's exact Visual Prompt Snippet from the established series roster into 'image_prompt'. NEVER draw the wrong character or mix them up!\n" +
-            "7. LOCATION ROSTER & SPATIAL CONTINUITY (TUÂN THỦ BỐI CẢNH SERIES):\n" +
-            "   - Assign 'location_id' and 'location_name' from the established location roster for each scene.\n" +
-            "   - Seamlessly blend the location's visual anchor (architecture, lighting) into the 'image_prompt' for visual continuity.\n";
-
-        var userPrompt = $"Series: '{seriesPlan.SeriesTitle}' (Total {totalEpisodes} episodes)\n" +
-                         $"Overall Plot: {seriesPlan.OverallPremise}\n" +
-                         (!string.IsNullOrWhiteSpace(sourceStoryContext) ? $"\n--- TƯ LIỆU GỐC / HỒ SƠ VỤ ÁN THỰC TẾ (Nguồn chi tiết từ video gốc 1 tiếng) ---\n{sourceStoryContext}\n--------------------------------------------------------------------------------\n\n" : "");
-
-        if (seriesPlan.Characters != null && seriesPlan.Characters.Count > 0)
-        {
-            userPrompt += "--- ESTABLISHED CHARACTER ROSTER CHO TOÀN BỘ SERIES (BẮT BUỘC DÙNG ĐÚNG) ---\n";
-            foreach (var ch in seriesPlan.Characters)
-            {
-                userPrompt += $"- [{ch.Id}] {ch.Name} ({ch.Role}, {ch.GenderAge}):\n" +
-                              $"  + Tạo hình & Trang phục: {ch.AppearanceVn} | {ch.OutfitVn}\n" +
-                              $"  + Visual Prompt Snippet (English): \"{ch.VisualPrompt}\"\n";
-            }
-            userPrompt += "-----------------------------------------------------------------------------\n\n";
-        }
-
-        if (seriesPlan.Locations != null && seriesPlan.Locations.Count > 0)
-        {
-            userPrompt += "--- ESTABLISHED LOCATION ROSTER CHO TOÀN BỘ SERIES (BẮT BUỘC DÙNG ĐÚNG) ---\n";
-            foreach (var loc in seriesPlan.Locations)
-            {
-                userPrompt += $"- [{loc.Id}] {loc.Name} ({loc.InteriorOrExterior}):\n" +
-                              $"  + Kiến trúc & Chi tiết: {loc.ArchitecturalStyle}\n" +
-                              $"  + Ánh sáng mặc định: {loc.LightingDefault}\n" +
-                              $"  + Visual Prompt Anchor: \"{loc.VisualPrompt ?? loc.VisualPromptAnchor}\"\n";
-            }
-            userPrompt += "-----------------------------------------------------------------------------\n\n";
-        }
-
-        userPrompt += $"Currently writing Episode {epNum}/{totalEpisodes}: '{episodePlan.EpisodeTitle}'\n" +
-                      $"Episode Plot Beat: {episodePlan.PlotBeat}\n" +
-                      (string.IsNullOrWhiteSpace(previousEpisodeEndingContext) ? "" : $"Context from previous episode ending: {previousEpisodeEndingContext}\n") +
-                      $"Episode Cliffhanger ending: {episodePlan.Cliffhanger}\n\n" +
-                      $"BẮT BUỘC: Hãy viết kịch bản chi tiết gồm {numScenes} PHÂN CẢNH (scenes) cho Tập {epNum} với nhịp điệu phong phú (ngắn dài đan xen tự nhiên). " +
-                      $"Hãy bám sát các tình tiết có thật, nhân vật thật, hiện trường và manh mối trong tư liệu hồ sơ gốc ở trên để kể chi tiết từng diễn biến, không lược bỏ hay rút ngắn qua loa.";
-
-        return await CallGeminiForJson<ScriptWorkspace>(systemInstruction, userPrompt, projectId, location, token, ct);
-    }
-
-    /// <summary>
-    /// Overload cũ để backward-compatible với code gọi trực tiếp (nếu cần)
-    /// </summary>
-    public async Task<ScriptWorkspace> GenerateScriptAsync(
+    public async Task<VideoScript> GenerateMinimalScriptAsync(
         string topic,
-        string styleKey = "dark-anime",
+        VideoOutline outline,
+        string styleKey = "realistic-photo",
+        string aspectRatio = "9:16",
         int numScenes = 5,
-        string characterRules = "",
-        string location = "us-central1",
-        CancellationToken ct = default)
-    {
-        var plan = new ScriptPlan
-        {
-            SuggestedScenes = numScenes,
-            SuggestedStyle = styleKey,
-            Tone = "Phù hợp với nội dung",
-            Ratio = "9:16",
-            Voice = "vi-VN-Wavenet-B"
-        };
-        return await GenerateScriptAsync(topic, plan, characterRules, location, ct);
-    }
-
-    /// <summary>
-    /// AI bóc tách công thức tiêu đề, chiến lược hook và tâm lý khán giả của kênh đối thủ dựa trên top video
-    /// </summary>
-    public async Task<CompetitorAiAnalysis> AnalyzeCompetitorFormulasAsync(
-        string channelTitle,
-        string channelDescription,
-        IEnumerable<YouTubeVideoInfo> topVideos,
         string location = "us-central1",
         CancellationToken ct = default,
         Action<string>? onStatus = null)
     {
-        var (token, projectId) = await ResolveAuthCredentialsAsync();
-        
-        //
+        if (outline == null || string.IsNullOrWhiteSpace(outline.Title))
+            throw new ArgumentException("Dàn ý không hợp lệ.", nameof(outline));
 
-        var videoListSummary = new StringBuilder();
-        int idx = 1;
-        foreach (var v in topVideos.Take(15))
+        var (token, projectId) = await ResolveAuthCredentialsAsync();
+
+        var chosenStyle = StylePrompts.TryGetValue(styleKey, out var promptPrefix)
+            ? promptPrefix
+            : StylePrompts["realistic-photo"];
+
+        var sectionsText = new StringBuilder();
+        if (outline.Sections != null)
         {
-            videoListSummary.AppendLine($"{idx}. Tiêu đề: \"{v.Title}\" | Views: {v.ViewCountDisplay} | Likes: {v.LikeCountDisplay} | Thời lượng: {v.DurationDisplay}");
-            if (!string.IsNullOrWhiteSpace(v.Description))
+            foreach (var s in outline.Sections)
             {
-                var shortDesc = v.Description.Length > 150 ? v.Description[..150] + "..." : v.Description;
-                videoListSummary.AppendLine($"   Mô tả: {shortDesc.Replace('\n', ' ')}");
+                sectionsText.AppendLine($"- {s.Heading}: {s.Description} (~{s.EstimatedSeconds}s)");
             }
-            if (!string.IsNullOrWhiteSpace(v.Tags))
-            {
-                videoListSummary.AppendLine($"   Tags: {v.Tags}");
-            }
-            idx++;
         }
 
         var systemInstruction =
-            "Bạn là một chuyên gia hàng đầu về Viral YouTube Algorithm, Phân tích Kỹ thuật Đặt Tiêu đề (Title Blueprint) và Kỹ thuật Hook tâm lý (Retention Hook). " +
-            "Nhiệm vụ của bạn là bóc tách chính xác vì sao các video của kênh này lại đạt hàng triệu view, chỉ ra công thức đặt tiêu đề, cách mở màn (hook), và tạo ra các ý tưởng video tương tự để áp dụng. " +
-            "Bạn PHẢI trả về duy nhất khối JSON thô, không bọc trong markdown hay codeblock, đúng schema sau:\n" +
+            "Bạn là biên kịch video tài ba. Dựa vào dàn ý đã duyệt, hãy viết kịch bản phân cảnh chi tiết cho video.\n" +
+            $"Tạo đúng {numScenes} phân cảnh (scenes). Mỗi phân cảnh tương ứng một câu thuyết minh và một bức ảnh minh họa.\n" +
+            "Quy tắc vàng:\n" +
+            "1. 'narration_text': Lời thoại tiếng Việt tự nhiên, lôi cuốn, độ dài từ 15 đến 30 từ mỗi cảnh. Không viết rời rạc.\n" +
+            "2. 'visual_prompt': Mô tả hình ảnh chi tiết BẰNG TIẾNG ANH. BẮT BUỘC bắt đầu bằng tiền tố phong cách sau: '" + chosenStyle + "'. Mô tả đối tượng, bối cảnh, ánh sáng, góc máy cụ thể, khớp 100% với lời thoại.\n" +
+            "3. 'duration_seconds': Ước tính từ 6 đến 12 giây.\n" +
+            "BẮT BUỘC trả về duy nhất khối JSON theo schema:\n" +
             "{\n" +
-            "  \"channel_name\": \"Tên kênh\",\n" +
-            "  \"summary\": \"Tóm tắt 2-3 câu về phong cách cốt lõi và chiến lược thành công của kênh\",\n" +
-            "  \"core_audience\": \"Mô tả đối tượng khán giả mục tiêu của kênh (độ tuổi, tâm lý, nỗi đau, sở thích)\",\n" +
-            "  \"title_formulas\": [\n" +
+            "  \"title\": \"Tiêu đề kịch bản\",\n" +
+            "  \"scenes\": [\n" +
             "    {\n" +
-            "      \"name\": \"Tên công thức (ví dụ: POV + Hoài niệm quá khứ)\",\n" +
-            "      \"formula\": \"Cấu trúc cú pháp (ví dụ: POV: Bạn thức dậy ở [Năm cũ])\",\n" +
-            "      \"why_it_works\": \"Lý giải tâm lý học khiến người xem tò mò bấm vào\",\n" +
-            "      \"example\": \"Ví dụ tiêu đề thực tế từ kênh\"\n" +
-            "    }\n" +
-            "  ],\n" +
-            "  \"hook_strategies\": [\n" +
-            "    {\n" +
-            "      \"hook_type\": \"Tên chiến thuật hook (ví dụ: In Media Res / Tình huống hoang mang)\",\n" +
-            "      \"description\": \"Cách họ giữ chân người xem trong 5-15 giây đầu tiên\",\n" +
-            "      \"example_script\": \"Đoạn thoại mở màn mẫu giả định phù hợp phong cách kênh\"\n" +
-            "    }\n" +
-            "  ],\n" +
-            "  \"psychology_triggers\": [\n" +
-            "    \"Trigger 1 (ví dụ: Nỗi sợ bị bỏ lại phía sau / FOMO)\",\n" +
-            "    \"Trigger 2 (ví dụ: Cảm xúc hoài niệm tuổi thơ/thời học sinh)\"\n" +
-            "  ],\n" +
-            "  \"suggested_ideas\": [\n" +
-            "    {\n" +
-            "      \"title\": \"Gợi ý tiêu đề video mới áp dụng đúng công thức trên\",\n" +
-            "      \"hook_opening\": \"Câu hook mở đầu video 5-10s\",\n" +
-            "      \"target_emotion\": \"Cảm xúc nhắm đến\"\n" +
+            "      \"scene_number\": 1,\n" +
+            "      \"narration_text\": \"Lời đọc tiếng Việt...\",\n" +
+            "      \"visual_prompt\": \"Style prefix + Detailed visual description in English...\",\n" +
+            "      \"duration_seconds\": 8.0\n" +
             "    }\n" +
             "  ]\n" +
             "}";
 
-        var userPrompt = $"Phân tích kênh YouTube sau:\n" +
-                         $"Tên kênh: {channelTitle}\n" +
-                         $"Mô tả kênh: {channelDescription}\n\n" +
-                         $"Danh sách Top video nhiều lượt xem nhất:\n{videoListSummary}\n\n" +
-                         $"Hãy bóc tách thật sâu các công thức đặt tiêu đề, kỹ thuật hook mở đầu, tâm lý khán giả, và đưa ra 5 ý tưởng video mới siêu hấp dẫn chuẩn bị làm nội dung.";
+        var userPrompt = $"Chủ đề gốc:\n{topic}\n\nTiêu đề dàn ý: {outline.Title}\nTóm tắt: {outline.Summary}\nCác phần dàn ý:\n{sectionsText}\nTỷ lệ video: {aspectRatio}\nHãy viết kịch bản hoàn chỉnh gồm đúng {numScenes} cảnh.";
 
-        CompetitorAiAnalysis result;
-        try
-        {
-            result = await CallGeminiForJson<CompetitorAiAnalysis>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
-        }
-        catch
-        {
-            result = CompetitorPatternAnalyzer.AnalyzeChannel(channelTitle, channelDescription, topVideos);
-        }
-
-        if (string.IsNullOrWhiteSpace(result.Summary))
-        {
-            result.Summary = $"Kênh \"{channelTitle}\" sở hữu chiến lược nội dung viral tập trung vào cảm xúc và kích thích tò mò.";
-        }
-        if (string.IsNullOrWhiteSpace(result.ChannelName))
-        {
-            result.ChannelName = channelTitle;
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// AI bóc tách chi tiết tiêu đề, hook và tối ưu SEO cho 1 video cụ thể
-    /// </summary>
-    public async Task<CompetitorAiAnalysis> AnalyzeSingleVideoAsync(
-        YouTubeVideoInfo video,
-        string location = "us-central1",
-        CancellationToken ct = default,
-        Action<string>? onStatus = null)
-    {
-        var (token, projectId) = await ResolveAuthCredentialsAsync();
-
-        var systemInstruction =
-            "Bạn là một chuyên gia hàng đầu về Viral YouTube Algorithm, Phân tích Kỹ thuật Đặt Tiêu đề (Title Blueprint) và Kỹ thuật Hook tâm lý (Retention Hook). " +
-            "Nhiệm vụ của bạn là bóc tách chính xác vì sao video YouTube này lại thu hút người xem, chỉ ra công thức đặt tiêu đề, cách mở màn (hook), tâm lý khán giả, và đưa ra 5 ý tưởng video tương tự để áp dụng. " +
-            "Bạn PHẢI trả về duy nhất khối JSON thô, không bọc trong markdown hay codeblock, đúng schema sau:\n" +
-            "{\n" +
-            "  \"channel_name\": \"Tên kênh hoặc tác giả video\",\n" +
-            "  \"summary\": \"Tóm tắt 2-3 câu về lý do thành công, phong cách nội dung và công thức của video này\",\n" +
-            "  \"core_audience\": \"Mô tả đối tượng khán giả mục tiêu (độ tuổi, tâm lý, nỗi đau, sở thích)\",\n" +
-            "  \"title_formulas\": [\n" +
-            "    {\n" +
-            "      \"name\": \"Tên công thức tiêu đề (ví dụ: Tò mò bí ẩn + Con số gây sốc)\",\n" +
-            "      \"formula\": \"Cấu trúc cú pháp (ví dụ: Sự Thật Về [Sự kiện] Mà [Đối tượng] Không Muốn Bạn Biết)\",\n" +
-            "      \"why_it_works\": \"Lý giải tâm lý học khiến người xem bấm vào\",\n" +
-            "      \"example\": \"Tiêu đề thực tế hoặc biến thể phù hợp\"\n" +
-            "    }\n" +
-            "  ],\n" +
-            "  \"hook_strategies\": [\n" +
-            "    {\n" +
-            "      \"hook_type\": \"Tên chiến thuật hook mở đầu (ví dụ: Câu hỏi mở màn gây sốc / Kịch tính cao trào)\",\n" +
-            "      \"description\": \"Cách giữ chân người xem trong 5-15 giây đầu tiên\",\n" +
-            "      \"example_script\": \"Đoạn thoại mở màn mẫu giả định (15-30 từ)\"\n" +
-            "    }\n" +
-            "  ],\n" +
-            "  \"psychology_triggers\": [\n" +
-            "    \"Trigger 1 (ví dụ: Nỗi sợ bị bỏ rơi / Bí mật cấm kỵ)\",\n" +
-            "    \"Trigger 2 (ví dụ: Tò mò về kết cục)\"\n" +
-            "  ],\n" +
-            "  \"suggested_ideas\": [\n" +
-            "    {\n" +
-            "      \"title\": \"Gợi ý tiêu đề video mới áp dụng đúng công thức trên\",\n" +
-            "      \"hook_opening\": \"Câu hook mở đầu video 5-10s\",\n" +
-            "      \"target_emotion\": \"Cảm xúc nhắm đến\"\n" +
-            "    }\n" +
-            "  ]\n" +
-            "}";
-
-        var userPrompt = $"Phân tích video YouTube sau:\n" +
-                         $"Tiêu đề: {video.Title}\n" +
-                         $"Kênh: {video.ChannelTitle}\n" +
-                         $"Lượt xem: {video.ViewCountDisplay} | Likes: {video.LikeCountDisplay} | Tương tác: {video.EngagementRate:F2}%\n" +
-                         $"Thời lượng: {video.DurationDisplay}\n" +
-                         $"Tags: {video.Tags}\n" +
-                         $"Mô tả: {video.Description}\n\n" +
-                         $"Hãy bóc tách thật sâu công thức đặt tiêu đề, kỹ thuật hook mở đầu, tâm lý khán giả, và đưa ra 5 ý tưởng video tương tự siêu hấp dẫn.";
-
-        CompetitorAiAnalysis result;
-        try
-        {
-            result = await CallGeminiForJson<CompetitorAiAnalysis>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
-        }
-        catch
-        {
-            result = CompetitorPatternAnalyzer.AnalyzeSingleVideo(video);
-        }
-
-        if (string.IsNullOrWhiteSpace(result.Summary))
-        {
-            result.Summary = $"Phân tích video \"{video.Title}\": Đạt {video.ViewCountDisplay} lượt xem với tỷ lệ tương tác {video.EngagementRateDisplay}. Tiêu đề áp dụng nghệ thuật kích thích tâm lý tò mò kết hợp góc nhìn sâu sắc.";
-        }
-        if (string.IsNullOrWhiteSpace(result.ChannelName))
-        {
-            result.ChannelName = video.ChannelTitle;
-        }
-        if (result.TitleFormulas == null || result.TitleFormulas.Count == 0)
-        {
-            result.TitleFormulas = new List<TitleFormulaItem>
-            {
-                new()
-                {
-                    Name = "Công thức tiêu đề trọng tâm",
-                    Formula = video.Title,
-                    WhyItWorks = "Tập trung vào yếu tố khơi gợi tò mò hoặc hoài niệm.",
-                    Example = video.Title
-                }
-            };
-        }
-        if (result.SuggestedIdeas == null || result.SuggestedIdeas.Count == 0)
-        {
-            result.SuggestedIdeas = new List<SuggestedVideoIdea>
-            {
-                new()
-                {
-                    Title = $"[BÍ MẬT CHƯA KỂ] Sự Thật Về: {video.Title}",
-                    HookOpening = "Bạn có biết đằng sau câu chuyện này còn một chi tiết kinh ngạc ít ai ngờ tới?",
-                    TargetEmotion = "Tò mò và bất ngờ"
-                }
-            };
-        }
-
-        return result;
+        onStatus?.Invoke("AI đang viết kịch bản chi tiết theo dàn ý...");
+        return await CallGeminiForJson<VideoScript>(systemInstruction, userPrompt, projectId, location, token, ct, onStatus);
     }
 
     /// <summary>
@@ -1021,14 +290,12 @@ public class GeminiScriptService
 
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
-                // Gọi qua Google AI Studio (Free Tier, không cần Billing/Credit card)
                 endpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{modelName}:generateContent?key={apiKey}";
                 request = new HttpRequestMessage(HttpMethod.Post, endpoint);
                 request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
             }
             else
             {
-                // Gọi qua Google Cloud Vertex AI (Cần liên kết Billing Account)
                 endpoint = $"https://{location}-aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{modelName}:generateContent";
                 request = new HttpRequestMessage(HttpMethod.Post, endpoint);
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -1038,9 +305,8 @@ public class GeminiScriptService
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(TimeSpan.FromSeconds(25));
+                cts.CancelAfter(TimeSpan.FromSeconds(30));
 
-                onStatus?.Invoke($"AI ({modelName}) đang phân tích và lên dàn ý...");
                 using var response = await _httpClient.SendAsync(request, cts.Token);
                 var responseStr = await response.Content.ReadAsStringAsync(ct);
 
@@ -1095,8 +361,8 @@ public class GeminiScriptService
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                lastError = $"Model {modelName} phản hồi chậm quá 60s.";
-                onStatus?.Invoke($"Model {modelName} quá thời gian 60s, thử model khác...");
+                lastError = $"Model {modelName} phản hồi chậm quá 30s.";
+                onStatus?.Invoke($"Model {modelName} quá thời gian 30s, thử model khác...");
             }
             catch (Exception ex)
             {
@@ -1110,7 +376,7 @@ public class GeminiScriptService
 
         if (lastError != null && lastError.Contains("prepayment credits are depleted"))
         {
-            throw new Exception("Key Gemini của bạn đang gắn với một dự án Google Cloud đã hết hạn mức trả trước (prepayment credits are depleted).\n\n👉 Cách lấy Key Miễn Phí (Free Tier): Vào aistudio.google.com/app/apikey > Bấm 'Create API key' > Chọn 'Create API key in new project' để nhận Key Miễn Phí không cần credit hay thẻ!");
+            throw new Exception("Key Gemini của bạn đang gắn với một dự án Google Cloud đã hết hạn mức trả trước.\n\n👉 Cách lấy Key Miễn Phí (Free Tier): Vào aistudio.google.com/app/apikey > Bấm 'Create API key' > Chọn 'Create API key in new project' để nhận Key Miễn Phí không cần thẻ!");
         }
 
         if (lastError != null && (lastError.Contains("BILLING_DISABLED") || lastError.Contains("billing to be enabled")))
@@ -1118,48 +384,11 @@ public class GeminiScriptService
             throw new Exception("Dự án Google Cloud Vertex AI chưa bật Billing. Vui lòng bật Billing trên Google Cloud Console hoặc nhập Gemini API Key miễn phí từ Google AI Studio (aistudio.google.com).");
         }
 
-        if (string.IsNullOrWhiteSpace(apiKey) && lastError != null && (lastError.Contains("PERMISSION_DENIED") || lastError.Contains("aiplatform.endpoints.predict") || lastError.Contains("was not found or your project does not have access to it")))
-        {
-            throw new Exception($"Service Account trong file google_credentials.json (project: {projectId}) chưa được cấp quyền Vertex AI trên Google Cloud.\n\n👉 Cách cấp quyền: Vào Google Cloud Console > IAM > Gán quyền 'Vertex AI User' (roles/aiplatform.user) cho service account 'tts-app@{projectId}.iam.gserviceaccount.com'.\nHoặc lấy Gemini API Key miễn phí từ aistudio.google.com.");
-        }
-
         throw new Exception($"Không thể gọi Gemini AI: {lastError}");
     }
 
     /// <summary>
-    /// AI Tra cứu và phục dựng hồ sơ vụ án thực tế, các tình tiết có thật để không bịa chuyện
-    /// </summary>
-    public async Task<string> ResearchCaseFactsAsync(
-        string topicOrTitle,
-        string description = "",
-        string location = "us-central1",
-        CancellationToken ct = default)
-    {
-        var (token, projectId) = await ResolveAuthCredentialsAsync();
-        
-        //
-
-        var systemInstruction =
-            "Bạn là chuyên gia điều tra tội phạm học và nghiên cứu hồ sơ kỳ án thực tế. " +
-            "Nhiệm vụ tối thượng: Tra cứu và phục dựng lại toàn bộ các TÌNH TIẾT CÓ THẬT của vụ án hoặc sự kiện được nhắc tới. " +
-            "TUYỆT ĐỐI KHÔNG HƯ CẤU HAY BỊA ĐẶT CỐT TRUYỆN GIẢ TƯỞNG! Nếu chi tiết nào chưa rõ hoặc cơ quan điều tra chưa công bố thì phải ghi nhận trung thực. " +
-            "Trình bày chi tiết, mạch lạc, hấp dẫn để làm tư liệu kịch bản video nhiều tập.";
-
-        var userPrompt =
-            $"Chủ đề / Tiêu đề vụ án:\n'{topicOrTitle}'\n\n" +
-            (!string.IsNullOrWhiteSpace(description) ? $"Mô tả / Tóm tắt ban đầu từ nguồn tham khảo:\n'{description}'\n\n" : "") +
-            "Hãy tra cứu và cung cấp bản tóm tắt hồ sơ vụ án thật theo cấu trúc chuẩn xác sau:\n" +
-            "1. 📌 TÊN VỤ ÁN & BỐI CẢNH THỰC TẾ: Thời gian, địa điểm cụ thể, các nhân vật chính liên quan (nạn nhân, nghi phạm/hung thủ, mối quan hệ thực tế).\n" +
-            "2. 🔍 KHỞI ĐẦU BẤT THƯỜNG: Dấu hiệu đầu tiên phát hiện sự việc hoặc chuyến công tác/sự kiện thực tế bắt đầu thế nào.\n" +
-            "3. ⚠️ TÌNH TIẾT TỘI ÁC & HIỆN TRƯỜNG THỰC TẾ: Diễn biến có thật đã diễn ra, hiện trường cảnh sát ghi nhận.\n" +
-            "4. 🕵️ QUÁ TRÌNH PHÁ ÁN CỦA CẢNH SÁT: Manh mối mấu chốt nào đã lật tẩy hung thủ, lời khai và động cơ thực tế.\n" +
-            "5. ⚖️ KẾT QUẢ ĐIỀU TRA & BẢN ÁN CUỐI CÙNG: Bản án của tòa án, số phận các nhân vật và bài học cảnh tỉnh xã hội.";
-
-        return await CallGeminiForRawText(systemInstruction, userPrompt, projectId, location, token, ct);
-    }
-
-    /// <summary>
-    /// Generic helper gọi Gemini API và lấy raw text trả về (dùng cho Research, Tra cứu tư liệu vụ án)
+    /// Generic helper gọi Gemini API và lấy raw text trả về
     /// </summary>
     public async Task<string> CallGeminiForRawText(
         string systemInstruction,
@@ -1171,8 +400,8 @@ public class GeminiScriptService
     {
         var apiKey = ApiKey;
         var modelsToTry = !string.IsNullOrWhiteSpace(apiKey)
-            ? new[] { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.5-flash" }
-            : new[] { "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash" };
+            ? new[] { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-3.8-flash" }
+            : new[] { "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash" };
         string? lastError = null;
 
         foreach (var modelName in modelsToTry)
@@ -1199,7 +428,7 @@ public class GeminiScriptService
                 generationConfig = new
                 {
                     maxOutputTokens = 8192,
-                    temperature = 0.3
+                    temperature = 0.7
                 }
             };
 
@@ -1222,7 +451,7 @@ public class GeminiScriptService
             try
             {
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(TimeSpan.FromSeconds(25));
+                cts.CancelAfter(TimeSpan.FromSeconds(30));
 
                 using var response = await _httpClient.SendAsync(request, cts.Token);
                 var responseStr = await response.Content.ReadAsStringAsync(ct);
@@ -1230,33 +459,31 @@ public class GeminiScriptService
                 if (response.IsSuccessStatusCode)
                 {
                     using var doc = JsonDocument.Parse(responseStr);
-                    var candidates = doc.RootElement.GetProperty("candidates");
-                    if (candidates.GetArrayLength() > 0)
+                    if (doc.RootElement.TryGetProperty("candidates", out var candidates) && candidates.GetArrayLength() > 0)
                     {
-                        var text = candidates[0]
-                            .GetProperty("content")
-                            .GetProperty("parts")[0]
-                            .GetProperty("text")
-                            .GetString();
-
-                        if (!string.IsNullOrWhiteSpace(text))
+                        var firstCandidate = candidates[0];
+                        if (firstCandidate.TryGetProperty("content", out var content) &&
+                            content.TryGetProperty("parts", out var parts) &&
+                            parts.GetArrayLength() > 0)
                         {
-                            return text.Trim();
+                            foreach (var part in parts.EnumerateArray())
+                            {
+                                if (part.TryGetProperty("text", out var tProp))
+                                {
+                                    var text = tProp.GetString();
+                                    if (!string.IsNullOrEmpty(text))
+                                    {
+                                        return text.Trim();
+                                    }
+                                }
+                            }
                         }
                     }
                 }
                 else
                 {
                     lastError = $"Model {modelName} returned {response.StatusCode}: {responseStr}";
-                    if ((int)response.StatusCode == 503 || (int)response.StatusCode == 429)
-                    {
-                        await Task.Delay(800, ct);
-                    }
                 }
-            }
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-            {
-                lastError = $"Model {modelName} phản hồi chậm quá 25s.";
             }
             catch (Exception ex)
             {
@@ -1270,70 +497,4 @@ public class GeminiScriptService
 
         throw new Exception($"Không thể gọi Gemini AI: {lastError}");
     }
-}
-
-public class ContentAndBlueprintResponse
-{
-    [JsonPropertyName("content_analysis")]
-    public ContentAnalysisData ContentAnalysis { get; set; } = new();
-
-    [JsonPropertyName("story_blueprint")]
-    public StoryBlueprintData StoryBlueprint { get; set; } = new();
-}
-
-public class ContentAnalysisData
-{
-    [JsonPropertyName("main_topic")]
-    public string MainTopic { get; set; } = string.Empty;
-
-    [JsonPropertyName("core_message")]
-    public string CoreMessage { get; set; } = string.Empty;
-
-    [JsonPropertyName("summary")]
-    public string Summary { get; set; } = string.Empty;
-
-    [JsonPropertyName("events")]
-    public List<ChronologicalEvent> Events { get; set; } = new();
-
-    [JsonPropertyName("detected_characters")]
-    public List<DetectedEntity> DetectedCharacters { get; set; } = new();
-
-    [JsonPropertyName("detected_locations")]
-    public List<DetectedEntity> DetectedLocations { get; set; } = new();
-
-    [JsonPropertyName("verified_facts")]
-    public List<string> VerifiedFacts { get; set; } = new();
-
-    [JsonPropertyName("unverified_claims")]
-    public List<string> UnverifiedClaims { get; set; } = new();
-}
-
-public class StoryBlueprintData
-{
-    [JsonPropertyName("title")]
-    public string Title { get; set; } = string.Empty;
-
-    [JsonPropertyName("core_theme")]
-    public string CoreTheme { get; set; } = string.Empty;
-
-    [JsonPropertyName("main_message")]
-    public string MainMessage { get; set; } = string.Empty;
-
-    [JsonPropertyName("narrative_arc")]
-    public string NarrativeArc { get; set; } = string.Empty;
-
-    [JsonPropertyName("characters")]
-    public List<CharacterProfile> Characters { get; set; } = new();
-
-    [JsonPropertyName("locations")]
-    public List<LocationProfile> Locations { get; set; } = new();
-
-    [JsonPropertyName("must_keep_details")]
-    public List<string> MustKeepDetails { get; set; } = new();
-
-    [JsonPropertyName("suggested_episodes")]
-    public List<BlueprintEpisodeOutline> SuggestedEpisodes { get; set; } = new();
-
-    [JsonPropertyName("unresolved_points")]
-    public List<string> UnresolvedPoints { get; set; } = new();
 }

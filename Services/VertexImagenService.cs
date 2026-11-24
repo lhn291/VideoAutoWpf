@@ -288,62 +288,6 @@ public class VertexImagenService
     }
 
     /// <summary>
-    /// Sinh ảnh cho một Shot cụ thể trong kiến trúc V2.
-    /// Cập nhật trực tiếp trạng thái của Shot: Generating -> Ready hoặc Failed.
-    /// TUYỆT ĐỐI KHÔNG COPY ẢNH CỦA SCENE/SHOT TRƯỚC NẾU THẤT BẠI.
-    /// </summary>
-    public async Task<string> GenerateShotImageAsync(
-        VideoAutoWpf.Models.V2.Shot shot,
-        string prompt,
-        string outputPath,
-        string aspectRatio = "9:16",
-        string location = "global",
-        Action<string>? onLog = null,
-        string? referenceImagePath = null,
-        CancellationToken ct = default)
-    {
-        if (shot == null) throw new ArgumentNullException(nameof(shot));
-
-        var promptToUse = !string.IsNullOrWhiteSpace(prompt)
-            ? prompt
-            : (!string.IsNullOrWhiteSpace(shot.CompiledImagePrompt) ? shot.CompiledImagePrompt : shot.VisualDescription);
-
-        if (string.IsNullOrWhiteSpace(promptToUse))
-            throw new ArgumentException($"Shot {shot.ShotCode} chưa có prompt hoặc mô tả để vẽ ảnh.");
-
-        shot.IsGenerating = true;
-        shot.Status = "Generating";
-        shot.ErrorMessage = null;
-
-        try
-        {
-            string savedPath;
-            if (!string.IsNullOrEmpty(referenceImagePath) && File.Exists(referenceImagePath))
-            {
-                onLog?.Invoke($"[V2 Continuity] Shot {shot.ShotCode}: Đang dùng ảnh tham chiếu nhân vật/bối cảnh để duy trì tính nhất quán...");
-                savedPath = await GenerateImageWithReferenceAsync(promptToUse, referenceImagePath, outputPath, aspectRatio, location, onLog, ct: ct);
-            }
-            else
-            {
-                savedPath = await GenerateImageAsync(promptToUse, outputPath, aspectRatio, location, onLog, ct);
-            }
-            shot.ImagePath = savedPath;
-            shot.Status = "Ready";
-            return savedPath;
-        }
-        catch (Exception ex)
-        {
-            shot.Status = "Failed";
-            shot.ErrorMessage = ex.Message;
-            throw;
-        }
-        finally
-        {
-            shot.IsGenerating = false;
-        }
-    }
-
-    /// <summary>
     /// Sinh ảnh với ảnh tham chiếu (Reference Image) để duy trì tính nhất quán nhân vật/bối cảnh.
     /// Gửi ảnh tham chiếu dưới dạng inlineData trong Gemini multimodal request.
     /// Nếu ảnh tham chiếu không đọc được, tự động fallback về GenerateImageAsync thông thường.

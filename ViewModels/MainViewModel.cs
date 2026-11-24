@@ -1,132 +1,119 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using VideoAutoWpf.Models;
-using VideoAutoWpf.Models.Automation;
-using VideoAutoWpf.Models.V2;
+using VideoAutoWpf.Models.Minimal;
 using VideoAutoWpf.Services;
-using VideoAutoWpf.Services.Automation;
-using VideoAutoWpf.Views;
 
 namespace VideoAutoWpf.ViewModels;
 
+/// <summary>
+/// MainViewModel Minimal - Điều phối luồng sản xuất video duy nhất 8 bước.
+/// Tuyệt đối không chứa automation ngầm, không shutdown, không background scheduler.
+/// </summary>
 public partial class MainViewModel : ObservableObject
 {
-    private readonly IFFmpegService _ffmpegService;
-    private readonly BgmService _bgmService;
     private readonly GoogleAuthService _authService;
+    private readonly GeminiScriptService _geminiService;
     private readonly GoogleTtsService _ttsService;
     private readonly VertexImagenService _imagenService;
-    private readonly GeminiScriptService _geminiService;
-    private readonly YouTubeAnalyticsService _youtubeService;
-    private readonly GoogleDriveService _driveService;
-
-    // ── VideoAuto V2 Core Services ──
-    private readonly ShotPlannerService _shotPlannerService;
-    private readonly VisualDirectorService _visualDirectorService;
-    private readonly GenerationQueue _generationQueue;
-    private readonly ContinuityEngine _continuityEngine;
-
-    // ── Auto Run & Safe Shutdown Services ──
-    private readonly DatabaseService _automationDb;
-    private readonly QualityCheckService _qualityChecker;
-    private readonly TelegramApprovalService _telegramService;
-    private readonly YouTubePublishService _youtubePublishService;
-    private readonly TikTokPublishService _tiktokPublishService;
-    private readonly PublishingStateMachine _publishingStateMachine;
-    private readonly ShutdownCoordinator _shutdownCoordinator;
-    private readonly RecoveryService _recoveryService;
-    private readonly PersistentJobScheduler _jobScheduler;
+    private readonly GoogleSttService _sttService;
+    private readonly IFFmpegService _ffmpegService;
+    private readonly BgmService _bgmService;
 
     private CancellationTokenSource? _cts;
-    private MediaPlayer? _bgmPlayer;
+    private MediaPlayer? _previewPlayer;
 
-    public ObservableCollection<SceneItem> Scenes { get; } = new();
+    // ══════════════════════════════════════════════════════════════
+    //  TRẠNG THÁI TOÀN CỤC & TIẾN ĐỘ
+    // ══════════════════════════════════════════════════════════════
+
+    [ObservableProperty]
+    private bool _isBusy;
+
+    [ObservableProperty]
+    private double _progressPercentage;
+
+    [ObservableProperty]
+    private string _statusMessage = "Sẵn sàng tạo video mới";
+
+    [ObservableProperty]
+    private string _errorMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasError;
+
+    [ObservableProperty]
+    private string _currentStepName = "Bước 1: Nhập chủ đề";
+
+    [ObservableProperty]
+    private string _projectDirectory = string.Empty;
+
+    [ObservableProperty]
+    private string _projectName = string.Empty;
+
+    [ObservableProperty]
+    private string _geminiApiKey = string.Empty;
+
+    // Trạng thái các bước
+    [ObservableProperty] private StepStatus _step1Status = StepStatus.Waiting;
+    [ObservableProperty] private StepStatus _step2Status = StepStatus.Waiting;
+    [ObservableProperty] private StepStatus _step3Status = StepStatus.Waiting;
+    [ObservableProperty] private StepStatus _step4Status = StepStatus.Waiting;
+    [ObservableProperty] private StepStatus _step5Status = StepStatus.Waiting;
+    [ObservableProperty] private StepStatus _step6Status = StepStatus.Waiting;
+    [ObservableProperty] private StepStatus _step7Status = StepStatus.Waiting;
+    [ObservableProperty] private StepStatus _step8Status = StepStatus.Waiting;
+
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 1: CẤU HÌNH ĐẦU VÀO (TOPIC & STYLES)
+    // ══════════════════════════════════════════════════════════════
+
+    [ObservableProperty]
+    private string _topic = string.Empty;
+
+    public ObservableCollection<StyleCard> AvailableStyles { get; } = new(StyleCard.GetDefaultStyles());
+
+    [ObservableProperty]
+    private StyleCard? _selectedStyle;
 
     public IReadOnlyList<string> AvailableVoices => GoogleTtsService.AvailableVoices;
 
     [ObservableProperty]
     private string _selectedVoice = "vi-VN-Neural2-D";
 
-    public record SpeakingRateOption(double Value, string DisplayName);
-    public IReadOnlyList<SpeakingRateOption> AvailableSpeakingRates { get; } = new List<SpeakingRateOption>
+    public IReadOnlyList<string> AvailableAspectRatios { get; } = new[] { "9:16 (Dọc - Shorts/TikTok)", "16:9 (Ngang - YouTube)" };
+
+    [ObservableProperty]
+    private string _selectedAspectRatioDisplay = "9:16 (Dọc - Shorts/TikTok)";
+
+    public string ActualAspectRatio => SelectedAspectRatioDisplay.StartsWith("16:9") ? "16:9" : "9:16";
+
+    public IReadOnlyList<string> AvailableTones { get; } = new[]
     {
-        new(0.80, "0.80x (Bí ẩn, chậm)"),
-        new(0.85, "0.85x (Chậm, truyền cảm)"),
-        new(0.90, "0.90x (Kể chuyện chuẩn ⭐)"),
-        new(0.95, "0.95x (Tự nhiên)"),
-        new(1.00, "1.00x (Gốc)")
+        "Kịch tính, gay cấn, lôi cuốn",
+        "Bí ẩn, trinh thám, rùng rợn",
+        "Hài hước, vui tươi, dí dỏm",
+        "Truyền cảm hứng, bài học sâu sắc",
+        "Kiến thức khoa học, tài liệu giải mã"
     };
 
     [ObservableProperty]
-    private double _speakingRate = 0.90;
+    private string _selectedTone = "Kịch tính, gay cấn, lôi cuốn";
 
     [ObservableProperty]
-    private SceneItem? _selectedScene;
-
-    [ObservableProperty]
-    private string _aspectRatio = "9:16";
-
-    [ObservableProperty]
-    private bool _enableKenBurns = true;
-
-    [ObservableProperty]
-    private List<MotionEffectOption> _availableMotionEffects = MotionEffectOption.GetAllOptions();
-
-    [ObservableProperty]
-    private MotionEffectOption? _selectedMotionEffect;
-
-    [ObservableProperty]
-    private bool _enableFadeTransition = true;
-
-    [ObservableProperty]
-    private bool _enableVignette = false;
-
-    // ── VideoAuto V2 Pipeline Configuration ──
-    [ObservableProperty]
-    private bool _useV2Pipeline = true;
-
-    [ObservableProperty]
-    private string _renderQualityMode = "Production";
-
-    public IReadOnlyList<string> AvailableQualityModes { get; } = new List<string>
-    {
-        "Production",
-        "Preview",
-        "Draft"
-    };
-
-    // ── Cấu Hình Chữ Chạy / Phụ Đề Video ──
-    [ObservableProperty]
-    private bool _enableSubtitles = true;
-
-    public ObservableCollection<SubtitleStyleOption> AvailableSubtitleStyles { get; } = new(SubtitleStyleOption.GetAllOptions());
-
-    [ObservableProperty]
-    private SubtitleStyleOption? _selectedSubtitleStyle;
-
-    public ObservableCollection<SubtitleFontOption> AvailableSubtitleFonts { get; } = new(SubtitleFontOption.GetAllFonts());
-
-    [ObservableProperty]
-    private SubtitleFontOption? _selectedSubtitleFont;
-
-    [ObservableProperty]
-    private bool _enableBgm = false;
-
-    [ObservableProperty]
-    private string? _bgmPath;
-
-    [ObservableProperty]
-    private double _bgmVolume = 0.15; // 15%
-
-    public string BgmVolumePercentageText => $"{(int)(BgmVolume * 100)}%";
+    private bool _enableBgm = true;
 
     public ObservableCollection<BgmTrack> AvailableBgmTracks { get; } = new();
 
@@ -134,136 +121,76 @@ public partial class MainViewModel : ObservableObject
     private BgmTrack? _selectedBgmTrack;
 
     [ObservableProperty]
-    private bool _isPlayingBgm;
+    private double _bgmVolume = 0.15;
 
     [ObservableProperty]
-    private string _playingBgmTitle = string.Empty;
+    private bool _enableSubtitles = true;
 
-    public string BgmPlayButtonIcon => IsPlayingBgm ? "⏹" : "🎧";
-    public string BgmPlayButtonText => IsPlayingBgm ? "Dừng" : "Nghe thử";
-
-    [ObservableProperty]
-    private string _outputDirectory;
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 2: DÀN Ý (OUTLINE)
+    // ══════════════════════════════════════════════════════════════
 
     [ObservableProperty]
-    private string _outputFileName = "video_thanh_pham.mp4";
-
-    // ── Quản Lý Chuỗi Video Nhiều Tập (Series Mode) ──
-    [ObservableProperty]
-    private SeriesProject? _currentSeries;
+    private string _outlineTitle = string.Empty;
 
     [ObservableProperty]
-    private bool _isSeriesMode;
+    private string _outlineSummary = string.Empty;
+
+    public ObservableCollection<OutlineSection> OutlineSections { get; } = new();
 
     [ObservableProperty]
-    private EpisodeItem? _selectedEpisode;
+    private bool _isOutlineConfirmed;
+
+    public bool HasOutline => !string.IsNullOrWhiteSpace(OutlineTitle) && OutlineSections.Count > 0;
+
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 3: KỊCH BẢN (SCRIPT & SCENES)
+    // ══════════════════════════════════════════════════════════════
 
     [ObservableProperty]
-    private bool _isBatchRenderingSeries;
+    private string _scriptTitle = string.Empty;
+
+    public ObservableCollection<VideoSceneItem> Scenes { get; } = new();
 
     [ObservableProperty]
-    private double _batchRenderProgress;
+    private VideoSceneItem? _selectedScene;
 
     [ObservableProperty]
-    private string _batchRenderStatusText = string.Empty;
+    private bool _isScriptConfirmed;
+
+    public bool HasScript => Scenes.Count > 0;
+
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 4, 5, 6, 7, 8: ASSETS & HOÀN THÀNH
+    // ══════════════════════════════════════════════════════════════
 
     [ObservableProperty]
-    private bool _isRendering;
+    private bool _isVoiceReady;
 
     [ObservableProperty]
-    private double _progressPercentage;
+    private bool _isImagesReady;
 
     [ObservableProperty]
-    private string _statusMessage = "Sẵn sàng tạo video";
+    private bool _isSubtitlesReady;
 
     [ObservableProperty]
-    private string _logText = string.Empty;
+    private string _finalVideoPath = string.Empty;
 
     [ObservableProperty]
-    private string? _lastGeneratedVideoPath;
+    private string _finalVideoSizeMb = string.Empty;
 
     [ObservableProperty]
-    private string _ffmpegStatusText = "Đang kiểm tra FFmpeg...";
+    private string _finalVideoDurationText = string.Empty;
 
     [ObservableProperty]
-    private string _googleStatusText = "Đang kiểm tra Google Cloud...";
-
-    public bool HasGeneratedVideo => !string.IsNullOrEmpty(LastGeneratedVideoPath) && File.Exists(LastGeneratedVideoPath);
-
-    // ── Bộ Công Cụ Đăng Bài Mạng Xã Hội (Publish Info) ──
-    [ObservableProperty]
-    private VideoPublishInfo _currentPublishInfo = new();
+    private bool _isPlayingVoicePreview;
 
     [ObservableProperty]
-    private string _lastGeneratedTxtPath = string.Empty;
+    private string _voicePreviewText = string.Empty;
 
-    [ObservableProperty]
-    private string _copyFeedbackMessage = string.Empty;
-
-    [ObservableProperty]
-    private bool _isGeneratingPublishInfo;
-
-    public bool HasPublishInfo => !string.IsNullOrWhiteSpace(CurrentPublishInfo?.Title) || !string.IsNullOrWhiteSpace(CurrentPublishInfo?.Hashtags);
-
-    // ── Ước Tính Chi Phí Google Cloud API ──
-    public const double ImagenCostPerImageUsd = 0.030; // $0.03 / ảnh Imagen 3
-    public const double TtsCostPerCharUsd = 0.000016;  // $16 / 1M ký tự WaveNet/Neural2
-    public const double GeminiCostPerScriptUsd = 0.0005; // ~$0.0005 Gemini Flash
-    public const double UsdToVndRate = 25400.0; // 1 USD ≈ 25,400 VND
-
-    [ObservableProperty]
-    private string _estimatedTotalCostDisplay = "$0.00";
-
-    [ObservableProperty]
-    private string _estimatedTotalCostVndDisplay = "(0đ)";
-
-    [ObservableProperty]
-    private string _estimatedImagenCostText = "0 ảnh • $0.00";
-
-    [ObservableProperty]
-    private string _estimatedTtsCostText = "0 ký tự • $0.00";
-
-    [ObservableProperty]
-    private string _estimatedCostTooltip = "Chưa có phân cảnh nào để ước tính chi phí.";
-
-    [ObservableProperty]
-    private bool _hasEstimatedCost;
-
-    // ── Tự Động Tải Lên Google Drive (Auto Upload Drive) ──
-    [ObservableProperty]
-    private bool _autoUploadToDrive = true;
-
-    [ObservableProperty]
-    private string _driveFolderId = string.Empty;
-
-    [ObservableProperty]
-    private string _driveServiceAccountEmail = string.Empty;
-
-    [ObservableProperty]
-    private bool _isUploadingToDrive;
-
-    [ObservableProperty]
-    private double _driveUploadProgress;
-
-    [ObservableProperty]
-    private string _driveStatusText = "Sẵn sàng tải lên Google Drive";
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasLastDriveLink))]
-    private string? _lastDriveVideoLink;
-
-    [ObservableProperty]
-    private string? _lastDriveFolderLink;
-
-    public bool HasLastDriveLink => !string.IsNullOrEmpty(LastDriveVideoLink);
-
-    // ── Cấu Hình Tự Động Vận Hành & Điều Phối An Toàn ──
-    [ObservableProperty]
-    private AutomationConfig _automationConfig = new();
-
-    public PersistentJobScheduler JobScheduler => _jobScheduler;
-    public ShutdownCoordinator ShutdownCoordinator => _shutdownCoordinator;
-    public DatabaseService AutomationDb => _automationDb;
+    // ══════════════════════════════════════════════════════════════
+    //  KHỞI TẠO SERVICES
+    // ══════════════════════════════════════════════════════════════
 
     public MainViewModel() : this(new FFmpegService())
     {
@@ -273,166 +200,25 @@ public partial class MainViewModel : ObservableObject
     {
         _ffmpegService = ffmpegService;
         _authService = new GoogleAuthService();
+        _geminiService = new GeminiScriptService(_authService);
         _ttsService = new GoogleTtsService(_authService);
         _imagenService = new VertexImagenService(_authService);
-        _geminiService = new GeminiScriptService(_authService);
-        _youtubeService = new YouTubeAnalyticsService(_authService);
-        _driveService = new GoogleDriveService(_authService);
-        _driveFolderId = GoogleDriveService.LoadTargetFolderId() ?? string.Empty;
-        _driveServiceAccountEmail = _driveService.GetServiceAccountEmail() ?? string.Empty;
-
-        // ── Khởi tạo các dịch vụ VideoAuto V2 ──
-        _shotPlannerService = new ShotPlannerService();
-        _visualDirectorService = new VisualDirectorService(_geminiService);
-        _generationQueue = new GenerationQueue();
-        _continuityEngine = new ContinuityEngine();
-
-        // ── Khởi tạo các dịch vụ Auto Run, Telegram & Safe Shutdown ──
-        _automationDb = new DatabaseService();
-        _qualityChecker = new QualityCheckService();
-        _telegramService = new TelegramApprovalService(_automationDb);
-        _youtubePublishService = new YouTubePublishService(_authService);
-        _tiktokPublishService = new TikTokPublishService();
-        _publishingStateMachine = new PublishingStateMachine(_automationDb, _youtubePublishService, _tiktokPublishService);
-        _shutdownCoordinator = new ShutdownCoordinator(_automationDb, _telegramService, _automationConfig);
-        _recoveryService = new RecoveryService(_automationDb, _qualityChecker, _telegramService, _youtubePublishService, _tiktokPublishService);
-        _jobScheduler = new PersistentJobScheduler(
-            _automationDb,
-            _qualityChecker,
-            _telegramService,
-            _publishingStateMachine,
-            _shutdownCoordinator,
-            _recoveryService,
-            _automationConfig);
-
-        // Chuyển tiếp log kiểm toán vào giao diện ConsoleLog
-        _jobScheduler.LogMessage += AppendLog;
-        _telegramService.LogMessage += AppendLog;
-        _publishingStateMachine.LogMessage += AppendLog;
-        _shutdownCoordinator.LogMessage += AppendLog;
-        _recoveryService.LogMessage += AppendLog;
-
-        // Đăng ký pipeline tạo video thực tế cho PersistentJobScheduler
-        _jobScheduler.VideoRenderAction = ExecuteRenderPipelineForJobAsync;
-
-        var defaultOut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput");
-        _outputDirectory = defaultOut;
-        _selectedMotionEffect = _availableMotionEffects.FirstOrDefault();
-        _selectedSubtitleStyle = AvailableSubtitleStyles.FirstOrDefault();
-        _selectedSubtitleFont = AvailableSubtitleFonts.FirstOrDefault();
+        _sttService = new GoogleSttService(_authService);
         _bgmService = new BgmService(_ffmpegService);
 
-        Scenes.CollectionChanged += (s, e) =>
-        {
-            if (e.NewItems != null)
-            {
-                foreach (SceneItem item in e.NewItems)
-                {
-                    item.PropertyChanged += OnSceneItemPropertyChanged;
-                }
-            }
-            if (e.OldItems != null)
-            {
-                foreach (SceneItem item in e.OldItems)
-                {
-                    item.PropertyChanged -= OnSceneItemPropertyChanged;
-                }
-            }
-            UpdateCostEstimation();
-        };
+        _selectedStyle = AvailableStyles.FirstOrDefault(s => s.Key == "realistic-photo") ?? AvailableStyles.FirstOrDefault();
+        _geminiApiKey = _geminiService.ApiKey ?? string.Empty;
 
-        CheckServicesAvailability();
         InitializeBgmTracksAsync();
-        UpdateCostEstimation();
-        InitializeAutomationAsync();
+        InitializeDefaultProject();
     }
 
-    private void OnSceneItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void InitializeDefaultProject()
     {
-        if (e.PropertyName is nameof(SceneItem.ImagePath) or nameof(SceneItem.AudioPath) or nameof(SceneItem.Text))
-        {
-            UpdateCostEstimation();
-        }
-    }
-
-    public void UpdateCostEstimation()
-    {
-        if (Scenes.Count == 0)
-        {
-            EstimatedTotalCostDisplay = "$0.00";
-            EstimatedTotalCostVndDisplay = "(0đ)";
-            EstimatedImagenCostText = "0 ảnh • $0.00";
-            EstimatedTtsCostText = "0 ký tự • $0.00";
-            HasEstimatedCost = false;
-            EstimatedCostTooltip = "Chưa có phân cảnh nào. Hãy bấm '✨ Soạn & Nạp Kịch Bản' để lên kịch bản và ước tính chi phí.";
-            return;
-        }
-
-        HasEstimatedCost = true;
-        int totalScenes = Scenes.Count;
-        int imagesNeeded = Scenes.Count(s => !s.HasImage);
-        int totalChars = Scenes.Sum(s => s.Text?.Trim().Length ?? 0);
-        int charsNeeded = Scenes.Where(s => !s.HasAudio).Sum(s => s.Text?.Trim().Length ?? 0);
-
-        // Chi phí cho các tài nguyên chưa có và cần sinh khi bấm nút
-        double imagenCostUsd = imagesNeeded * ImagenCostPerImageUsd;
-        double ttsCostUsd = charsNeeded * TtsCostPerCharUsd;
-        double totalNeededUsd = imagenCostUsd + ttsCostUsd;
-        double totalNeededVnd = totalNeededUsd * UsdToVndRate;
-
-        // Chi phí chuẩn của toàn bộ kịch bản từ A-Z
-        double fullVideoUsd = (totalScenes * ImagenCostPerImageUsd) + (totalChars * TtsCostPerCharUsd) + GeminiCostPerScriptUsd;
-        double fullVideoVnd = fullVideoUsd * UsdToVndRate;
-
-        if (imagesNeeded == 0 && charsNeeded == 0)
-        {
-            EstimatedTotalCostDisplay = "$0.00";
-            EstimatedTotalCostVndDisplay = "(Đã có đủ ảnh & audio)";
-            EstimatedImagenCostText = $"{totalScenes} ảnh • Đã tạo sẵn";
-            EstimatedTtsCostText = $"{totalChars:N0} ký tự • Đã tạo sẵn";
-        }
-        else
-        {
-            EstimatedTotalCostDisplay = $"~${totalNeededUsd:F2} USD";
-            EstimatedTotalCostVndDisplay = $"(~{totalNeededVnd:N0} đ)";
-
-            if (imagesNeeded == totalScenes)
-            {
-                EstimatedImagenCostText = $"{imagesNeeded} ảnh • ~${imagenCostUsd:F2}";
-            }
-            else
-            {
-                EstimatedImagenCostText = $"{imagesNeeded}/{totalScenes} ảnh cần vẽ • ~${imagenCostUsd:F2}";
-            }
-
-            if (charsNeeded == totalChars)
-            {
-                EstimatedTtsCostText = $"{charsNeeded:N0} ký tự • ~${ttsCostUsd:F3}";
-            }
-            else
-            {
-                EstimatedTtsCostText = $"{charsNeeded:N0}/{totalChars:N0} ký tự • ~${ttsCostUsd:F3}";
-            }
-        }
-
-        EstimatedCostTooltip = 
-            $"📊 BẢNG TÍNH CHI PHÍ GOOGLE CLOUD CHO VIDEO NÀY:\n\n" +
-            $"1. 🎨 Vertex AI Imagen 3 (Vẽ ảnh minh họa):\n" +
-            $"   • Cần vẽ mới: {imagesNeeded}/{totalScenes} ảnh\n" +
-            $"   • Đơn giá: $0.030 USD / ảnh (~{0.030 * UsdToVndRate:N0} đ)\n" +
-            $"   • Tạm tính: ~${imagenCostUsd:F3} USD (~{imagenCostUsd * UsdToVndRate:N0} đ)\n\n" +
-            $"2. 🎙️ Google Cloud Text-to-Speech (Thuyết minh):\n" +
-            $"   • Cần đọc: {charsNeeded:N0}/{totalChars:N0} ký tự\n" +
-            $"   • Đơn giá WaveNet/Neural2: $0.000016 USD / ký tự ($16/1M ký tự)\n" +
-            $"   • Tạm tính: ~${ttsCostUsd:F4} USD (~{ttsCostUsd * UsdToVndRate:N0} đ)\n" +
-            $"   *(Lưu ý: Google Cloud miễn phí 1.000.000 ký tự TTS đầu tiên mỗi tháng!)\n\n" +
-            $"3. 🤖 Gemini 2.5 Flash (Kịch bản & Lập kế hoạch):\n" +
-            $"   • Tạm tính: ~$0.0005 USD (~13 đ)\n\n" +
-            $"4. 🎞️ FFmpeg dựng video & Nhạc nền BGM:\n" +
-            $"   • Hoàn toàn miễn phí 0đ (Xử lý offline trực tiếp trên máy tính)\n\n" +
-            $"═══════════════════════════════════════════════════\n" +
-            $"👉 CHI PHÍ CẦN TẠO NGAY: ~${totalNeededUsd:F3} USD (~{totalNeededVnd:N0} VNĐ)\n" +
-            $"(Chi phí trọn gói cả video từ đầu: ~${fullVideoUsd:F3} USD ≈ {fullVideoVnd:N0} VNĐ)";
+        var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        ProjectName = $"Video_{timestamp}";
+        var baseDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "VideoAutoOutput");
+        ProjectDirectory = Path.Combine(baseDir, ProjectName);
     }
 
     private async void InitializeBgmTracksAsync()
@@ -440,2570 +226,883 @@ public partial class MainViewModel : ObservableObject
         try
         {
             await _bgmService.EnsureBuiltInTracksAsync();
-            ReloadBgmTracks();
-            SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id == "none") 
-                               ?? AvailableBgmTracks.FirstOrDefault();
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"[BGM] Lỗi khởi tạo thư viện nhạc: {ex.Message}");
-        }
-    }
-
-    partial void OnIsPlayingBgmChanged(bool value)
-    {
-        OnPropertyChanged(nameof(BgmPlayButtonIcon));
-        OnPropertyChanged(nameof(BgmPlayButtonText));
-    }
-
-    partial void OnSelectedMotionEffectChanged(MotionEffectOption? value)
-    {
-        EnableKenBurns = value != null && value.Id != "none";
-    }
-
-    partial void OnSelectedBgmTrackChanged(BgmTrack? value)
-    {
-        if (IsPlayingBgm)
-        {
-            StopBgmPreview();
-        }
-
-        if (value == null || value.Id == "none")
-        {
-            EnableBgm = false;
-            BgmPath = null;
-        }
-        else
-        {
-            EnableBgm = true;
-            BgmPath = value.FilePath;
-        }
-    }
-
-    partial void OnEnableBgmChanged(bool value)
-    {
-        if (!value && IsPlayingBgm)
-        {
-            StopBgmPreview();
-        }
-        else if (value && (SelectedBgmTrack == null || SelectedBgmTrack.Id == "none"))
-        {
-            SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id != "none") 
-                               ?? AvailableBgmTracks.FirstOrDefault();
-        }
-    }
-
-    partial void OnBgmVolumeChanged(double value)
-    {
-        OnPropertyChanged(nameof(BgmVolumePercentageText));
-        if (_bgmPlayer != null)
-        {
-            _bgmPlayer.Volume = value;
-        }
-    }
-
-    partial void OnLastGeneratedVideoPathChanged(string? value)
-    {
-        OnPropertyChanged(nameof(HasGeneratedVideo));
-    }
-
-    private void CheckServicesAvailability()
-    {
-        try
-        {
-            var path = _ffmpegService.LocateFfmpeg();
-            if (!string.IsNullOrEmpty(path))
+            var tracks = _bgmService.GetAvailableTracks();
+            AvailableBgmTracks.Clear();
+            foreach (var t in tracks)
             {
-                FfmpegStatusText = $"FFmpeg: Đã kết nối ({Path.GetFileName(path)})";
-                AppendLog($"[Hệ thống] Đã tìm thấy FFmpeg: {path}");
+                AvailableBgmTracks.Add(t);
             }
-            else
-            {
-                FfmpegStatusText = "FFmpeg: Chưa tìm thấy!";
-                AppendLog("[Cảnh báo] Không tìm thấy FFmpeg trên máy tính.");
-            }
-        }
-        catch (Exception ex)
-        {
-            FfmpegStatusText = "Lỗi FFmpeg";
-            AppendLog($"[Lỗi FFmpeg] {ex.Message}");
-        }
-
-        try
-        {
-            if (_authService.IsAuthenticated)
-            {
-                GoogleStatusText = $"Google Cloud: {_authService.ProjectId}";
-                AppendLog($"[Hệ thống] Xác thực Google Cloud thành công: {_authService.ProjectId}");
-            }
-            else
-            {
-                GoogleStatusText = "Google Cloud: Chưa có Key JSON";
-                AppendLog("[Cảnh báo] Chưa tìm thấy Google Service Account key. Hãy đặt file google_credentials.json trong thư mục app.");
-            }
-        }
-        catch (Exception ex)
-        {
-            GoogleStatusText = "Lỗi xác thực Google";
-            AppendLog($"[Lỗi Google Cloud] {ex.Message}");
-        }
-    }
-
-    private readonly System.Text.StringBuilder _logBuffer = new();
-    private readonly object _logLock = new();
-    private DateTime _lastLogFlush = DateTime.MinValue;
-    private bool _logFlushPending;
-
-    private void AppendLog(string message)
-    {
-        var time = DateTime.Now.ToString("HH:mm:ss");
-        string line = $"[{time}] {message}\n";
-
-        lock (_logLock)
-        {
-            _logBuffer.Append(line);
-            // Giới hạn buffer tối đa ~70,000 ký tự để bảo vệ RAM
-            if (_logBuffer.Length > 70000)
-            {
-                _logBuffer.Remove(0, _logBuffer.Length - 50000);
-            }
-        }
-
-        FlushLogThrottled();
-    }
-
-    private void FlushLogThrottled(bool force = false)
-    {
-        var now = DateTime.Now;
-        if (!force && (now - _lastLogFlush).TotalMilliseconds < 120)
-        {
-            if (!_logFlushPending)
-            {
-                _logFlushPending = true;
-                _ = Task.Delay(120).ContinueWith(_ =>
-                {
-                    _logFlushPending = false;
-                    System.Windows.Application.Current?.Dispatcher?.InvokeAsync(() => FlushLogThrottled(true));
-                });
-            }
-            return;
-        }
-
-        _lastLogFlush = now;
-        string currentText;
-        lock (_logLock)
-        {
-            currentText = _logBuffer.ToString();
-        }
-
-        if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() == true)
-        {
-            LogText = currentText;
-        }
-        else
-        {
-            System.Windows.Application.Current?.Dispatcher?.InvokeAsync(() => LogText = currentText);
-        }
-    }
-
-    private void ShowException(string title, Exception ex)
-    {
-        AppendLog($"[{title}] {ex.Message}");
-        try
-        {
-            MessageBox.Show($"{title}:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+            SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id == "chill") ?? AvailableBgmTracks.FirstOrDefault();
         }
         catch { }
     }
 
-    [RelayCommand]
-    private void OpenScriptGenerator()
+    // ══════════════════════════════════════════════════════════════
+    //  QUẢN LÝ DỰ ÁN & LƯU TRẠNG THÁI SAU MỖI BƯỚC
+    // ══════════════════════════════════════════════════════════════
+
+    public void SaveCurrentProjectState()
     {
-        var mainWin = Application.Current.MainWindow;
         try
         {
-            var win = new ScriptGeneratorWindow(_geminiService, _ttsService, _bgmService)
+            if (string.IsNullOrWhiteSpace(ProjectDirectory)) return;
+
+            Directory.CreateDirectory(ProjectDirectory);
+            var projectData = new VideoProjectData
             {
-                WindowState = WindowState.Maximized,
-                Owner = mainWin
+                ProjectName = ProjectName,
+                ProjectDir = ProjectDirectory,
+                Topic = Topic,
+                Style = SelectedStyle?.Key ?? "realistic-photo",
+                Voice = SelectedVoice,
+                AspectRatio = ActualAspectRatio,
+                EnableBgm = EnableBgm,
+                BgmTrackId = SelectedBgmTrack?.Id,
+                BgmVolume = BgmVolume,
+                EnableSubtitles = EnableSubtitles,
+                Outline = new VideoOutline
+                {
+                    Title = OutlineTitle,
+                    Summary = OutlineSummary,
+                    Sections = OutlineSections.ToList()
+                },
+                Script = new VideoScript
+                {
+                    Title = ScriptTitle,
+                    Scenes = Scenes.ToList()
+                },
+                FinalVideoPath = FinalVideoPath
             };
 
-            if (win.ShowDialog() == true && win.ResultWorkspace != null)
+            projectData.Save(ProjectDirectory);
+
+            // Lưu riêng outline.json và script.txt để người dùng xem trực tiếp
+            if (HasOutline)
             {
-                ApplyWorkspace(win.ResultWorkspace);
+                var outlineJson = JsonSerializer.Serialize(projectData.Outline, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(Path.Combine(ProjectDirectory, "outline.json"), outlineJson, Encoding.UTF8);
+            }
+
+            if (HasScript)
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine($"# {ScriptTitle}");
+                sb.AppendLine($"Chủ đề: {Topic}\n");
+                foreach (var sc in Scenes)
+                {
+                    sb.AppendLine($"--- PHÂN CẢNH {sc.SceneNumber} ---");
+                    sb.AppendLine($"[Lời đọc]: {sc.NarrationText}");
+                    sb.AppendLine($"[Visual Prompt]: {sc.VisualPrompt}");
+                    sb.AppendLine();
+                }
+                File.WriteAllText(Path.Combine(ProjectDirectory, "script.txt"), sb.ToString(), Encoding.UTF8);
             }
         }
         catch (Exception ex)
         {
-            ShowException("Lỗi mở Trình Soạn Kịch Bản", ex);
-        }
-        finally
-        {
-            if (mainWin != null)
-            {
-                Application.Current.MainWindow = mainWin;
-                mainWin.Activate();
-                mainWin.Focus();
-            }
+            AppendLog($"Lỗi lưu trạng thái dự án: {ex.Message}");
         }
     }
 
-    private void ApplyWorkspace(ScriptWorkspace workspace)
+    public void LoadFromProjectData(VideoProjectData data)
     {
-        if (workspace.Scenes == null || workspace.Scenes.Count == 0) return;
+        ProjectName = data.ProjectName;
+        ProjectDirectory = data.ProjectDir;
+        Topic = data.Topic;
+        SelectedStyle = AvailableStyles.FirstOrDefault(s => s.Key == data.Style) ?? AvailableStyles.FirstOrDefault();
+        if (AvailableVoices.Contains(data.Voice)) SelectedVoice = data.Voice;
+        SelectedAspectRatioDisplay = data.AspectRatio == "16:9" ? "16:9 (Ngang - YouTube)" : "9:16 (Dọc - Shorts/TikTok)";
+        EnableBgm = data.EnableBgm;
+        SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id == data.BgmTrackId) ?? AvailableBgmTracks.FirstOrDefault();
+        BgmVolume = data.BgmVolume;
+        EnableSubtitles = data.EnableSubtitles;
 
-        if (!string.IsNullOrEmpty(workspace.Metadata?.Ratio))
-            AspectRatio = workspace.Metadata.Ratio;
-
-        if (!string.IsNullOrEmpty(workspace.Metadata?.Voice) && AvailableVoices.Contains(workspace.Metadata.Voice))
-            SelectedVoice = workspace.Metadata.Voice;
-
-        if (workspace.Metadata?.SpeakingRate > 0)
-            SpeakingRate = workspace.Metadata.SpeakingRate;
-
-        if (workspace.Metadata != null)
+        if (data.Outline != null)
         {
-            if (!string.IsNullOrEmpty(workspace.Metadata.MotionEffect))
-            {
-                var opt = AvailableMotionEffects.FirstOrDefault(m => m.Id == workspace.Metadata.MotionEffect)
-                          ?? AvailableMotionEffects.FirstOrDefault(m => m.Id == "random");
-                if (opt != null) SelectedMotionEffect = opt;
-            }
-            EnableFadeTransition = workspace.Metadata.EnableFade;
-            EnableVignette = workspace.Metadata.EnableVignette;
-            EnableSubtitles = workspace.Metadata.EnableSubtitles;
-
-            if (!string.IsNullOrEmpty(workspace.Metadata.SubtitleStyle))
-            {
-                var subStyle = AvailableSubtitleStyles.FirstOrDefault(s => s.Id.Equals(workspace.Metadata.SubtitleStyle, StringComparison.OrdinalIgnoreCase));
-                if (subStyle != null) SelectedSubtitleStyle = subStyle;
-            }
-
-            if (!string.IsNullOrEmpty(workspace.Metadata.SubtitleFont))
-            {
-                var subFont = AvailableSubtitleFonts.FirstOrDefault(f => 
-                    f.Id.Equals(workspace.Metadata.SubtitleFont, StringComparison.OrdinalIgnoreCase) || 
-                    f.Name.Equals(workspace.Metadata.SubtitleFont, StringComparison.OrdinalIgnoreCase));
-                if (subFont != null) SelectedSubtitleFont = subFont;
-            }
-
-            if (workspace.Metadata.EnableMusic)
-            {
-                EnableBgm = true;
-                BgmVolume = workspace.Metadata.MusicVolume > 0 ? workspace.Metadata.MusicVolume : 0.15;
-                if (!string.IsNullOrEmpty(workspace.Metadata.Music))
-                {
-                    var match = AvailableBgmTracks.FirstOrDefault(t =>
-                        t.Id.Equals(workspace.Metadata.Music, StringComparison.OrdinalIgnoreCase) ||
-                        t.Mood.Equals(workspace.Metadata.Music, StringComparison.OrdinalIgnoreCase) ||
-                        (File.Exists(workspace.Metadata.Music) && t.FilePath.Equals(workspace.Metadata.Music, StringComparison.OrdinalIgnoreCase)));
-
-                    if (match != null)
-                    {
-                        SelectedBgmTrack = match;
-                    }
-                    else if (File.Exists(workspace.Metadata.Music))
-                    {
-                        BgmPath = workspace.Metadata.Music;
-                    }
-                }
-                else
-                {
-                    SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id != "none") 
-                                       ?? AvailableBgmTracks.FirstOrDefault();
-                }
-            }
-            else
-            {
-                EnableBgm = false;
-                SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.Id == "none");
-                BgmPath = null;
-            }
+            OutlineTitle = data.Outline.Title;
+            OutlineSummary = data.Outline.Summary;
+            OutlineSections.Clear();
+            foreach (var s in data.Outline.Sections) OutlineSections.Add(s);
+            IsOutlineConfirmed = true;
+            Step2Status = StepStatus.Completed;
         }
 
-        Scenes.Clear();
-        int idx = 1;
-        foreach (var sc in workspace.Scenes)
+        if (data.Script != null && data.Script.Scenes.Count > 0)
         {
-            var item = new SceneItem
-            {
-                Index = idx++,
-                Text = sc.Text,
-                ImagePrompt = sc.ImagePrompt,
-                CharactersPresentText = sc.CharactersPresent != null && sc.CharactersPresent.Count > 0
-                    ? string.Join(", ", sc.CharactersPresent)
-                    : "🏙️ Ngoại cảnh / Hiện trường",
-                LocationId = sc.LocationId,
-                LocationName = sc.LocationName ?? string.Empty,
-                MotionEffect = string.IsNullOrEmpty(sc.MotionEffect) ? "zoom_in" : sc.MotionEffect,
-                // Story Beat fields (Phase B)
-                StoryBeat = string.IsNullOrEmpty(sc.StoryBeat) ? "Setup" : sc.StoryBeat,
-                PacingType = string.IsNullOrEmpty(sc.PacingType) ? "Normal" : sc.PacingType,
-                PacingNote = sc.PacingNote ?? string.Empty,
-                EstimatedDurationHint = sc.EstimatedDurationHint,
-                Status = "Kịch bản mới"
-            };
-
-            // Propagate character ID references
-            if (sc.CharacterIdsPresent?.Count > 0)
-                item.CharacterIdsPresent.AddRange(sc.CharacterIdsPresent);
-
-            Scenes.Add(item);
-        }
-
-
-        // Áp dụng thông tin đăng bài (Tiêu đề, Mô tả, Hashtags)
-        if (workspace.PublishInfo != null)
-        {
-            CurrentPublishInfo = workspace.PublishInfo;
-            OnPropertyChanged(nameof(CurrentPublishInfo));
-            OnPropertyChanged(nameof(HasPublishInfo));
-
-            if (!string.IsNullOrWhiteSpace(workspace.PublishInfo.Title))
-            {
-                var safeTitle = workspace.PublishInfo.Title;
-                foreach (var c in Path.GetInvalidFileNameChars())
-                    safeTitle = safeTitle.Replace(c, '_');
-                safeTitle = safeTitle.Replace(' ', '_').Trim('_');
-                if (safeTitle.Length > 45) safeTitle = safeTitle.Substring(0, 45);
-                OutputFileName = $"{safeTitle}.mp4";
-            }
-        }
-        else
-        {
-            EnsureBasicPublishInfo();
-        }
-
-        if (IsSeriesMode && SelectedEpisode != null)
-        {
-            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
-            SelectedEpisode.PublishInfo = CurrentPublishInfo;
-            SelectedEpisode.Status = "Kịch bản sẵn sàng";
-        }
-
-        AppendLog($"[Kịch bản] Đã nạp thành công {Scenes.Count} phân cảnh vào dự án!");
-        MessageBox.Show($"Đã nạp thành công {Scenes.Count} phân cảnh vào dự án!", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
-    }
-
-    // ══════════════════════════════════════════════════════════════
-    // QUẢN LÝ CHUỖI VIDEO NHIỀU TẬP (MULTI-EPISODE SERIES MODE)
-    // ══════════════════════════════════════════════════════════════
-
-    [RelayCommand]
-    private void OpenSeriesCreator()
-    {
-        var mainWin = Application.Current.MainWindow;
-        try
-        {
-            var win = new SeriesCreatorWindow(_geminiService, _youtubeService)
-            {
-                WindowState = WindowState.Maximized,
-                Owner = mainWin
-            };
-
-            if (win.ShowDialog() == true && win.ResultSeriesProject != null)
-            {
-                LoadSeriesProject(win.ResultSeriesProject);
-            }
-        }
-        catch (Exception ex)
-        {
-            ShowException("Lỗi mở Trình Tạo Series", ex);
-        }
-        finally
-        {
-            if (mainWin != null)
-            {
-                Application.Current.MainWindow = mainWin;
-                mainWin.Activate();
-                mainWin.Focus();
-            }
-        }
-    }
-
-    public void LoadSeriesProject(SeriesProject series)
-    {
-        CurrentSeries = series;
-        IsSeriesMode = true;
-
-        if (!string.IsNullOrEmpty(series.AspectRatio))
-            AspectRatio = series.AspectRatio;
-
-        if (!string.IsNullOrEmpty(series.GlobalVoice) && AvailableVoices.Contains(series.GlobalVoice))
-            SelectedVoice = series.GlobalVoice;
-
-        if (series.Episodes.Count > 0)
-        {
-            SelectEpisode(series.Episodes[0]);
-        }
-        else
-        {
+            ScriptTitle = data.Script.Title;
             Scenes.Clear();
-            SelectedEpisode = null;
+            foreach (var sc in data.Script.Scenes) Scenes.Add(sc);
+            IsScriptConfirmed = true;
+            Step3Status = StepStatus.Completed;
+
+            IsVoiceReady = Scenes.All(s => s.IsAudioReady && File.Exists(s.AudioPath));
+            if (IsVoiceReady) Step4Status = StepStatus.Completed;
+
+            IsImagesReady = Scenes.All(s => s.IsImageReady && File.Exists(s.ImagePath));
+            if (IsImagesReady) Step5Status = StepStatus.Completed;
         }
 
-        StatusMessage = $"Đang làm việc trên Series: {series.SeriesTitle} ({series.Episodes.Count} tập)";
-        AppendLog($"[Series] Đã nạp thành công series '{series.SeriesTitle}' ({series.Episodes.Count} tập).");
+        if (!string.IsNullOrEmpty(data.FinalVideoPath) && File.Exists(data.FinalVideoPath))
+        {
+            FinalVideoPath = data.FinalVideoPath;
+            Step7Status = StepStatus.Completed;
+            Step8Status = StepStatus.Completed;
+        }
+
+        StatusMessage = $"Đã tải thành công dự án: {ProjectName}";
     }
 
-    [RelayCommand]
-    private void SelectEpisode(EpisodeItem? ep)
-    {
-        if (ep == null) return;
-
-        // Lưu trạng thái của tập hiện tại trước khi chuyển sang tập mới
-        if (SelectedEpisode != null && SelectedEpisode != ep)
-        {
-            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
-            SelectedEpisode.PublishInfo = CurrentPublishInfo;
-        }
-
-        SelectedEpisode = ep;
-
-        // Cập nhật trạng thái IsSelected cho tất cả các tập
-        if (CurrentSeries != null)
-        {
-            foreach (var item in CurrentSeries.Episodes)
-            {
-                item.IsSelected = (item == ep);
-            }
-        }
-
-        // Nạp danh sách cảnh của tập được chọn
-        Scenes.Clear();
-        foreach (var sc in ep.Scenes)
-        {
-            Scenes.Add(sc);
-        }
-
-        // Nạp thông tin đăng bài của tập
-        if (ep.PublishInfo != null)
-        {
-            CurrentPublishInfo = ep.PublishInfo;
-        }
-        else
-        {
-            EnsureBasicPublishInfo();
-            CurrentPublishInfo.Title = $"{CurrentSeries?.SeriesTitle ?? "Series"} - Tập {ep.EpisodeNumber}: {ep.EpisodeTitle}";
-            CurrentPublishInfo.Description = $"Xem trọn bộ {CurrentSeries?.SeriesTitle}!\nTập {ep.EpisodeNumber}: {ep.EpisodeTitle}\n{ep.EpisodeHook}\n{ep.Cliffhanger}";
-            ep.PublishInfo = CurrentPublishInfo;
-        }
-        OnPropertyChanged(nameof(CurrentPublishInfo));
-        OnPropertyChanged(nameof(HasPublishInfo));
-
-        // Cập nhật tên file video dự kiến
-        var safeTitle = MakeSafeFileName(ep.EpisodeTitle);
-        OutputFileName = $"Tap_{ep.EpisodeNumber:D2}_{safeTitle}.mp4";
-
-        StatusMessage = $"Đang chọn Tập {ep.EpisodeNumber}: {ep.EpisodeTitle}";
-        AppendLog($"[Series] Đã chuyển sang Tập {ep.EpisodeNumber}: {ep.EpisodeTitle} ({Scenes.Count} phân cảnh).");
-    }
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 2: AI LẬP DÀN Ý
+    // ══════════════════════════════════════════════════════════════
 
     [RelayCommand]
-    private void AddNewEpisode()
+    private async Task GenerateOutlineAsync()
     {
-        if (CurrentSeries == null) return;
-
-        var nextNum = CurrentSeries.Episodes.Count + 1;
-        var newEp = new EpisodeItem
+        if (string.IsNullOrWhiteSpace(Topic))
         {
-            EpisodeNumber = nextNum,
-            EpisodeTitle = $"Tập {nextNum}: Tiếp nối câu chuyện",
-            EpisodeHook = "Tiếp nối phần trước...",
-            Cliffhanger = "Chuyện gì sẽ xảy ra tiếp theo?",
-            Status = "Chưa dựng"
-        };
-        CurrentSeries.Episodes.Add(newEp);
-        SelectEpisode(newEp);
-        AppendLog($"[Series] Đã thêm Tập {nextNum} vào chuỗi.");
-    }
+            ShowError("Vui lòng nhập chủ đề video ở Bước 1!");
+            return;
+        }
 
-    [RelayCommand]
-    private void RemoveEpisode(EpisodeItem? ep)
-    {
-        if (CurrentSeries == null || ep == null) return;
+        ClearError();
+        IsBusy = true;
+        Step2Status = StepStatus.Processing;
+        StatusMessage = "⏳ Bước 2: AI đang nghiên cứu và lập dàn ý...";
+        _cts = new CancellationTokenSource();
 
-        if (MessageBox.Show($"Bạn có chắc chắn muốn xóa Tập {ep.EpisodeNumber}: {ep.EpisodeTitle} khỏi Series?", "Xác nhận", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        try
         {
-            var idx = CurrentSeries.Episodes.IndexOf(ep);
-            CurrentSeries.Episodes.Remove(ep);
+            EnsureProjectFolder();
+            var styleKey = SelectedStyle?.Key ?? "realistic-photo";
+            var outline = await _geminiService.GenerateMinimalOutlineAsync(
+                Topic.Trim(),
+                styleKey,
+                SelectedTone,
+                location: "us-central1",
+                ct: _cts.Token,
+                onStatus: msg => StatusMessage = msg);
 
-            // Đánh lại số thứ tự các tập
-            for (int i = 0; i < CurrentSeries.Episodes.Count; i++)
+            if (outline == null || string.IsNullOrWhiteSpace(outline.Title))
             {
-                CurrentSeries.Episodes[i].EpisodeNumber = i + 1;
+                throw new Exception("AI không trả về dàn ý hợp lệ. Vui lòng bấm tạo lại.");
             }
 
-            if (SelectedEpisode == ep)
+            OutlineTitle = outline.Title;
+            OutlineSummary = outline.Summary;
+            OutlineSections.Clear();
+            foreach (var s in outline.Sections)
             {
-                if (CurrentSeries.Episodes.Count > 0)
-                {
-                    var newIdx = Math.Min(idx, CurrentSeries.Episodes.Count - 1);
-                    SelectEpisode(CurrentSeries.Episodes[newIdx]);
-                }
-                else
-                {
-                    SelectedEpisode = null;
-                    Scenes.Clear();
-                }
+                OutlineSections.Add(s);
             }
-            AppendLog($"[Series] Đã xóa tập phim khỏi series.");
+
+            IsOutlineConfirmed = false;
+            Step2Status = StepStatus.Waiting;
+            StatusMessage = "✅ Đã tạo dàn ý xong! Bạn có thể xem, chỉnh sửa nội dung bên dưới rồi bấm 'Xác Nhận Dàn Ý'.";
+            SaveCurrentProjectState();
+        }
+        catch (OperationCanceledException)
+        {
+            Step2Status = StepStatus.Waiting;
+            StatusMessage = "Đã hủy lập dàn ý bởi người dùng.";
+        }
+        catch (Exception ex)
+        {
+            Step2Status = StepStatus.Failed;
+            ShowError($"Lỗi khi lập dàn ý:\n{ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+            _cts?.Dispose();
+            _cts = null;
         }
     }
 
     [RelayCommand]
-    private async Task ExitSeriesModeAsync()
+    private void ConfirmOutline()
     {
-        if (SelectedEpisode != null)
+        if (!HasOutline)
         {
-            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
-            SelectedEpisode.PublishInfo = CurrentPublishInfo;
+            ShowError("Chưa có dàn ý để xác nhận. Vui lòng bấm 'AI Lập Dàn Ý' trước!");
+            return;
         }
 
-        var result = MessageBox.Show(
-            "Bạn có muốn lưu dự án Series (.series.json) trước khi thoát về chế độ video đơn lẻ không?",
-            "Thoát chế độ Series",
-            MessageBoxButton.YesNoCancel,
-            MessageBoxImage.Question);
+        IsOutlineConfirmed = true;
+        Step2Status = StepStatus.Completed;
+        StatusMessage = "✅ Đã xác nhận dàn ý! Sẵn sàng cho Bước 3: Bấm 'Tạo Kịch Bản'.";
+        SaveCurrentProjectState();
+    }
 
-        if (result == MessageBoxResult.Cancel) return;
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 3: AI VIẾT KỊCH BẢN CHI TIẾT
+    // ══════════════════════════════════════════════════════════════
 
-        if (result == MessageBoxResult.Yes && CurrentSeries != null)
+    [RelayCommand]
+    private async Task GenerateScriptAsync()
+    {
+        if (!IsOutlineConfirmed)
         {
-            await SaveSeriesProjectAsync();
+            ShowError("Vui lòng xác nhận dàn ý ở Bước 2 trước khi tạo kịch bản!");
+            return;
         }
 
-        IsSeriesMode = false;
-        StatusMessage = "Đã thoát chế độ Series. Trở lại chế độ video đơn lẻ.";
-        AppendLog("[Series] Đã thoát chế độ Series.");
+        ClearError();
+        IsBusy = true;
+        Step3Status = StepStatus.Processing;
+        StatusMessage = "⏳ Bước 3: AI đang viết kịch bản phân cảnh chi tiết...";
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            EnsureProjectFolder();
+            var outline = new VideoOutline
+            {
+                Title = OutlineTitle,
+                Summary = OutlineSummary,
+                Sections = OutlineSections.ToList()
+            };
+
+            int sceneCount = Math.Max(3, Math.Min(10, OutlineSections.Count));
+            var script = await _geminiService.GenerateMinimalScriptAsync(
+                Topic.Trim(),
+                outline,
+                SelectedStyle?.Key ?? "realistic-photo",
+                ActualAspectRatio,
+                numScenes: sceneCount,
+                location: "us-central1",
+                ct: _cts.Token,
+                onStatus: msg => StatusMessage = msg);
+
+            if (script == null || script.Scenes == null || script.Scenes.Count == 0)
+            {
+                throw new Exception("AI không trả về phân cảnh kịch bản nào. Vui lòng thử lại.");
+            }
+
+            ScriptTitle = script.Title;
+            Scenes.Clear();
+            for (int i = 0; i < script.Scenes.Count; i++)
+            {
+                var sc = script.Scenes[i];
+                sc.SceneNumber = i + 1;
+                Scenes.Add(sc);
+            }
+
+            IsScriptConfirmed = false;
+            Step3Status = StepStatus.Waiting;
+            StatusMessage = $"✅ Đã tạo kịch bản gồm {Scenes.Count} phân cảnh! Bạn có thể chỉnh sửa lời thoại hoặc mô tả ảnh từng cảnh rồi bấm 'Xác Nhận Kịch Bản'.";
+            SaveCurrentProjectState();
+        }
+        catch (OperationCanceledException)
+        {
+            Step3Status = StepStatus.Waiting;
+            StatusMessage = "Đã hủy tạo kịch bản bởi người dùng.";
+        }
+        catch (Exception ex)
+        {
+            Step3Status = StepStatus.Failed;
+            ShowError($"Lỗi khi tạo kịch bản:\n{ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+            _cts?.Dispose();
+            _cts = null;
+        }
     }
 
     [RelayCommand]
-    private async Task SaveSeriesProjectAsync()
+    private void ConfirmScript()
     {
-        if (CurrentSeries == null) return;
-
-        if (SelectedEpisode != null)
+        if (!HasScript)
         {
-            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
-            SelectedEpisode.PublishInfo = CurrentPublishInfo;
+            ShowError("Chưa có kịch bản để xác nhận!");
+            return;
         }
 
-        var safeName = MakeSafeFileName(CurrentSeries.SeriesTitle);
-        var dlg = new SaveFileDialog
-        {
-            Title = "Lưu dự án Series",
-            Filter = "Series Project (*.series.json)|*.series.json|JSON File (*.json)|*.json",
-            FileName = $"{safeName}.series.json"
-        };
-
-        if (dlg.ShowDialog() == true)
-        {
-            try
-            {
-                await CurrentSeries.SaveToFileAsync(dlg.FileName);
-                AppendLog($"[Series] Đã lưu dự án Series vào: {dlg.FileName}");
-                MessageBox.Show("Đã lưu dự án Series thành công!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Lỗi khi lưu Series:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-    }
-
-    [RelayCommand]
-    private async Task LoadSeriesProjectFromFileAsync()
-    {
-        var dlg = new OpenFileDialog
-        {
-            Title = "Mở dự án Series",
-            Filter = "Series Project (*.series.json;*.json)|*.series.json;*.json|Tất cả tệp (*.*)|*.*"
-        };
-
-        if (dlg.ShowDialog() == true)
-        {
-            try
-            {
-                var series = await SeriesProject.LoadFromFileAsync(dlg.FileName);
-                if (series != null)
-                {
-                    LoadSeriesProject(series);
-                }
-                else
-                {
-                    MessageBox.Show("Không thể đọc dữ liệu dự án Series từ tệp được chọn!", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Lỗi khi mở Series:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-    }
-
-    private static string MakeSafeFileName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return "video";
-        var safe = name;
-        foreach (var c in Path.GetInvalidFileNameChars())
-            safe = safe.Replace(c, '_');
-        safe = safe.Replace(' ', '_').Trim('_');
-        return safe.Length > 40 ? safe.Substring(0, 40) : safe;
+        IsScriptConfirmed = true;
+        Step3Status = StepStatus.Completed;
+        StatusMessage = "✅ Đã xác nhận kịch bản! Sẵn sàng cho Bước 4: Bấm 'Tạo Giọng Đọc'.";
+        SaveCurrentProjectState();
     }
 
     [RelayCommand]
     private void AddScene()
     {
-        var nextIndex = Scenes.Count + 1;
-        var scene = new SceneItem
+        var newScene = new VideoSceneItem
         {
-            Index = nextIndex,
-            Status = "Chờ nhập kịch bản"
+            SceneNumber = Scenes.Count + 1,
+            NarrationText = "Nhập lời thoại thuyết minh tiếng Việt cho cảnh này...",
+            VisualPrompt = $"{SelectedStyle?.Key}: Detailed description of the scene in English...",
+            DurationSeconds = 8.0
         };
-        Scenes.Add(scene);
-        SelectedScene = scene;
-        ReindexScenes();
+        Scenes.Add(newScene);
+        SaveCurrentProjectState();
     }
 
     [RelayCommand]
-    private void RemoveScene(SceneItem? scene)
+    private void RemoveScene(VideoSceneItem? scene)
     {
-        var target = scene ?? SelectedScene;
-        if (target != null && Scenes.Contains(target))
-        {
-            Scenes.Remove(target);
-            ReindexScenes();
-        }
-    }
-
-    [RelayCommand]
-    private void ClearScenes()
-    {
-        if (Scenes.Count == 0) return;
-        var result = MessageBox.Show("Bạn có chắc chắn muốn xóa toàn bộ phân cảnh?", "Xác nhận", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (result == MessageBoxResult.Yes)
-        {
-            Scenes.Clear();
-            SelectedScene = null;
-        }
-    }
-
-    [RelayCommand]
-    private void MoveUp(SceneItem? scene)
-    {
-        var target = scene ?? SelectedScene;
-        if (target == null) return;
-        var idx = Scenes.IndexOf(target);
-        if (idx > 0)
-        {
-            Scenes.Move(idx, idx - 1);
-            ReindexScenes();
-            SelectedScene = target;
-        }
-    }
-
-    [RelayCommand]
-    private void MoveDown(SceneItem? scene)
-    {
-        var target = scene ?? SelectedScene;
-        if (target == null) return;
-        var idx = Scenes.IndexOf(target);
-        if (idx < Scenes.Count - 1 && idx >= 0)
-        {
-            Scenes.Move(idx, idx + 1);
-            ReindexScenes();
-            SelectedScene = target;
-        }
-    }
-
-    private void ReindexScenes()
-    {
+        if (scene == null) return;
+        Scenes.Remove(scene);
         for (int i = 0; i < Scenes.Count; i++)
         {
-            Scenes[i].Index = i + 1;
+            Scenes[i].SceneNumber = i + 1;
         }
+        SaveCurrentProjectState();
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 4: TẠO GIỌNG ĐỌC (GOOGLE CLOUD TTS)
+    // ══════════════════════════════════════════════════════════════
+
     [RelayCommand]
-    private async Task SaveScriptJson()
+    private async Task GenerateVoiceAsync()
     {
-        if (Scenes.Count == 0)
+        if (!IsScriptConfirmed || Scenes.Count == 0)
         {
-            MessageBox.Show("Chưa có phân cảnh nào để lưu.", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowError("Vui lòng xác nhận kịch bản ở Bước 3 trước khi tạo giọng đọc!");
             return;
         }
 
-        var sfd = new SaveFileDialog
-        {
-            Title = "Lưu kịch bản ra file JSON",
-            Filter = "File Kịch Bản (*.json)|*.json",
-            FileName = "kich_ban_video.json"
-        };
-
-        if (sfd.ShowDialog() != true) return;
+        ClearError();
+        IsBusy = true;
+        Step4Status = StepStatus.Processing;
+        StatusMessage = "⏳ Bước 4: Đang tạo giọng đọc tiếng Việt bằng Google Cloud TTS...";
+        _cts = new CancellationTokenSource();
 
         try
         {
-            var workspace = new ScriptWorkspace
+            EnsureProjectFolder();
+            var audioDir = Path.Combine(ProjectDirectory, "audio");
+            Directory.CreateDirectory(audioDir);
+
+            for (int i = 0; i < Scenes.Count; i++)
             {
-                Metadata = new ScriptMetadata
-                {
-                    Ratio = AspectRatio,
-                    Voice = SelectedVoice,
-                    EnableMusic = EnableBgm,
-                    Music = BgmPath,
-                    MusicVolume = BgmVolume,
-                    EnableSubtitles = EnableSubtitles,
-                    SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
-                    SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold"
-                },
-                Scenes = Scenes.Select(s => new ScriptScene
-                {
-                    Text = s.Text ?? string.Empty,
-                    ImagePrompt = s.ImagePrompt ?? string.Empty
-                }).ToList()
-            };
+                _cts.Token.ThrowIfCancellationRequested();
+                var sc = Scenes[i];
+                StatusMessage = $"⏳ Bước 4: Đang tổng hợp giọng nói phân cảnh {i + 1}/{Scenes.Count}...";
+                ProgressPercentage = (double)(i + 1) / Scenes.Count * 100;
 
-            var json = JsonSerializer.Serialize(workspace, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(sfd.FileName, json);
-            AppendLog($"[Kịch bản] Đã lưu kịch bản vào: {sfd.FileName}");
-            MessageBox.Show("Đã lưu file kịch bản thành công!", "Thành công", MessageBoxButton.OK, MessageBoxImage.Information);
+                var outAudioPath = Path.Combine(audioDir, $"scene_{sc.SceneNumber:D3}.mp3");
+                await _ttsService.SynthesizeSpeechAsync(
+                    sc.NarrationText.Trim(),
+                    outAudioPath,
+                    voiceName: SelectedVoice,
+                    ct: _cts.Token);
+
+                sc.AudioPath = outAudioPath;
+                sc.IsAudioReady = true;
+
+                // Đo thời lượng audio
+                var dur = await _ffmpegService.GetAudioDurationAsync(outAudioPath, ct: _cts.Token);
+                sc.DurationSeconds = dur;
+            }
+
+            IsVoiceReady = true;
+            Step4Status = StepStatus.Completed;
+            StatusMessage = "✅ Đã tạo giọng đọc toàn bộ phân cảnh thành công! Bạn có thể bấm 'Nghe thử' ở từng cảnh.";
+            SaveCurrentProjectState();
+        }
+        catch (OperationCanceledException)
+        {
+            Step4Status = StepStatus.Waiting;
+            StatusMessage = "Đã hủy tạo giọng đọc.";
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Không thể lưu file kịch bản:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    [RelayCommand]
-    private async Task GenerateAudioForScene(SceneItem? scene)
-    {
-        var target = scene ?? SelectedScene;
-        if (target == null) return;
-
-        if (string.IsNullOrWhiteSpace(target.Text))
-        {
-            MessageBox.Show("Vui lòng nhập văn bản lời thoại (Text) trước khi sinh audio.", "Chưa có lời thoại", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        target.IsGeneratingAudio = true;
-        target.Status = "Đang sinh audio...";
-        AppendLog($"[Phân cảnh #{target.Index}] Đang gọi Google TTS ('{SelectedVoice}')...");
-
-        try
-        {
-            var tempDir = Path.Combine(OutputDirectory, "generated_assets");
-            Directory.CreateDirectory(tempDir);
-            var audioPath = Path.Combine(tempDir, $"voice_scene_{target.Index:D3}_{DateTime.Now:HHmmss}.mp3");
-
-            await _ttsService.SynthesizeSpeechAsync(target.Text, audioPath, SelectedVoice, speakingRate: SpeakingRate);
-            target.AudioPath = audioPath;
-
-            var duration = await _ffmpegService.GetAudioDurationAsync(audioPath);
-            target.DurationSeconds = duration;
-
-            target.Status = target.HasImage ? "Sẵn sàng" : "Thiếu ảnh";
-            AppendLog($"[Phân cảnh #{target.Index}] Tạo audio thành công ({duration:F2}s)!");
-        }
-        catch (Exception ex)
-        {
-            target.Status = "Lỗi sinh audio";
-            AppendLog($"[Lỗi TTS Cảnh #{target.Index}] {ex.Message}");
-            MessageBox.Show($"Lỗi khi tạo giọng đọc:\n{ex.Message}", "Lỗi TTS", MessageBoxButton.OK, MessageBoxImage.Error);
+            Step4Status = StepStatus.Failed;
+            ShowError($"Lỗi tạo giọng đọc TTS:\n{ex.Message}");
         }
         finally
         {
-            target.IsGeneratingAudio = false;
+            IsBusy = false;
+            _cts?.Dispose();
+            _cts = null;
         }
     }
 
     [RelayCommand]
-    private async Task GenerateImageForScene(SceneItem? scene)
+    private async Task PreviewSceneVoiceAsync(VideoSceneItem? scene)
     {
-        var target = scene ?? SelectedScene;
-        if (target == null) return;
-
-        if (string.IsNullOrWhiteSpace(target.ImagePrompt))
+        if (scene == null || string.IsNullOrEmpty(scene.AudioPath) || !File.Exists(scene.AudioPath))
         {
-            MessageBox.Show("Vui lòng nhập mô tả hình ảnh (Image Prompt) trước khi sinh ảnh.", "Chưa có prompt", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowError("Phân cảnh này chưa có file âm thanh để nghe thử!");
             return;
         }
 
-        target.IsGeneratingImage = true;
-        target.Status = "Đang vẽ ảnh...";
-        AppendLog($"[Phân cảnh #{target.Index}] Đang gửi yêu cầu tới Gemini Image...");
+        StopVoicePreview();
 
         try
         {
-            var tempDir = Path.Combine(OutputDirectory, "generated_assets");
-            Directory.CreateDirectory(tempDir);
-            var imagePath = Path.Combine(tempDir, $"image_scene_{target.Index:D3}_{DateTime.Now:HHmmss}.png");
-
-            await _imagenService.GenerateImageAsync(target.ImagePrompt, imagePath, AspectRatio, onLog: msg => AppendLog(msg));
-            target.ImagePath = imagePath;
-
-            target.Status = target.HasAudio ? "Sẵn sàng" : "Thiếu audio";
-            AppendLog($"[Phân cảnh #{target.Index}] Vẽ ảnh Gemini Image thành công!");
+            _previewPlayer = new MediaPlayer();
+            _previewPlayer.MediaEnded += (s, e) => IsPlayingVoicePreview = false;
+            _previewPlayer.MediaFailed += (s, e) => IsPlayingVoicePreview = false;
+            _previewPlayer.Open(new Uri(scene.AudioPath));
+            _previewPlayer.Play();
+            IsPlayingVoicePreview = true;
+            VoicePreviewText = $"Đang phát âm thanh cảnh #{scene.SceneNumber}";
         }
         catch (Exception ex)
         {
-            target.Status = "Lỗi sinh ảnh";
-            AppendLog($"[Lỗi Gemini Image Cảnh #{target.Index}] {ex.Message}");
-            MessageBox.Show($"Lỗi khi tạo hình ảnh:\n{ex.Message}", "Lỗi Gemini Image", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            target.IsGeneratingImage = false;
+            ShowError($"Không thể phát âm thanh: {ex.Message}");
         }
     }
 
     [RelayCommand]
-    private async Task BrowseImageForScene(SceneItem? scene)
+    private void StopVoicePreview()
     {
-        var target = scene ?? SelectedScene;
-        if (target == null) return;
-
-        var ofd = new OpenFileDialog
-        {
-            Title = "Chọn hình ảnh cho phân cảnh",
-            Filter = "Ảnh (*.jpg;*.jpeg;*.png;*.webp;*.bmp)|*.jpg;*.jpeg;*.png;*.webp;*.bmp|Tất cả tệp (*.*)|*.*"
-        };
-
-        if (ofd.ShowDialog() == true)
-        {
-            target.ImagePath = ofd.FileName;
-            target.Status = string.IsNullOrEmpty(target.AudioPath) ? "Thiếu audio" : "Sẵn sàng";
-        }
-    }
-
-    [RelayCommand]
-    private async Task BrowseAudioForScene(SceneItem? scene)
-    {
-        var target = scene ?? SelectedScene;
-        if (target == null) return;
-
-        var ofd = new OpenFileDialog
-        {
-            Title = "Chọn âm thanh cho phân cảnh",
-            Filter = "Âm thanh (*.mp3;*.wav;*.aac;*.m4a;*.ogg;*.flac)|*.mp3;*.wav;*.aac;*.m4a;*.ogg;*.flac|Tất cả tệp (*.*)|*.*"
-        };
-
-        if (ofd.ShowDialog() == true)
-        {
-            target.AudioPath = ofd.FileName;
-            target.Status = "Đang đọc độ dài...";
-            try
-            {
-                var duration = await _ffmpegService.GetAudioDurationAsync(ofd.FileName);
-                target.DurationSeconds = duration;
-                target.Status = string.IsNullOrEmpty(target.ImagePath) ? "Thiếu ảnh" : "Sẵn sàng";
-                AppendLog($"Phân cảnh #{target.Index}: File '{Path.GetFileName(ofd.FileName)}' có độ dài {duration:F2}s");
-            }
-            catch (Exception ex)
-            {
-                target.Status = "Lỗi audio";
-                AppendLog($"Lỗi đọc file âm thanh: {ex.Message}");
-            }
-        }
-    }
-
-    [RelayCommand]
-    private void BrowseBgm()
-    {
-        var ofd = new OpenFileDialog
-        {
-            Title = "Chọn nhạc nền (BGM)",
-            Filter = "Âm thanh (*.mp3;*.wav;*.aac;*.m4a;*.ogg;*.flac)|*.mp3;*.wav;*.aac;*.m4a;*.ogg;*.flac|Tất cả tệp (*.*)|*.*"
-        };
-
-        if (ofd.ShowDialog() == true)
-        {
-            BgmPath = ofd.FileName;
-            EnableBgm = true;
-
-            var existing = AvailableBgmTracks.FirstOrDefault(t => t.FilePath == ofd.FileName);
-            if (existing != null)
-            {
-                SelectedBgmTrack = existing;
-            }
-            else
-            {
-                var customTrack = new BgmTrack
-                {
-                    Id = Path.GetFileNameWithoutExtension(ofd.FileName).ToLowerInvariant(),
-                    Title = $"📁 {Path.GetFileNameWithoutExtension(ofd.FileName)}",
-                    Mood = "custom",
-                    FilePath = ofd.FileName,
-                    SourceTag = "Tệp ngoài",
-                    IsCustom = true
-                };
-                AvailableBgmTracks.Add(customTrack);
-                SelectedBgmTrack = customTrack;
-            }
-
-            AppendLog($"Đã chọn nhạc nền: {Path.GetFileName(ofd.FileName)}");
-        }
-    }
-
-    [RelayCommand]
-    private void TogglePreviewBgm()
-    {
-        if (IsPlayingBgm)
-        {
-            StopBgmPreview();
-            return;
-        }
-
-        if (string.IsNullOrEmpty(BgmPath) || !File.Exists(BgmPath))
-        {
-            MessageBox.Show("Vui lòng chọn một bản nhạc nền có sẵn hoặc chọn tệp từ máy tính để nghe thử.", "Chưa có nhạc nền", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
-        try
-        {
-            StopBgmPreview();
-            var fullPath = Path.GetFullPath(BgmPath);
-            _bgmPlayer = new MediaPlayer();
-            _bgmPlayer.MediaEnded += (s, e) => Application.Current.Dispatcher.Invoke(StopBgmPreview);
-            _bgmPlayer.MediaFailed += (s, e) => Application.Current.Dispatcher.Invoke(() =>
-            {
-                AppendLog($"[Lỗi phát BGM] Không thể phát '{Path.GetFileName(fullPath)}': {e.ErrorException?.Message}");
-                StopBgmPreview();
-            });
-            _bgmPlayer.Open(new Uri(fullPath));
-            _bgmPlayer.Volume = Math.Clamp(BgmVolume, 0.05, 1.0);
-            _bgmPlayer.Play();
-            IsPlayingBgm = true;
-            PlayingBgmTitle = SelectedBgmTrack?.Title ?? Path.GetFileName(fullPath);
-            AppendLog($"[BGM] Đang phát thử: {PlayingBgmTitle} (Âm lượng: {BgmVolumePercentageText})");
-        }
-        catch (Exception ex)
-        {
-            StopBgmPreview();
-            AppendLog($"[Lỗi phát BGM] {ex.Message}");
-            MessageBox.Show($"Không thể phát thử nhạc nền:\n{ex.Message}", "Lỗi phát nhạc", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-    }
-
-    private void StopBgmPreview()
-    {
-        try
-        {
-            _bgmPlayer?.Stop();
-            _bgmPlayer?.Close();
-        }
-        catch { }
-        finally
-        {
-            _bgmPlayer = null;
-            IsPlayingBgm = false;
-            PlayingBgmTitle = string.Empty;
-        }
-    }
-
-    [RelayCommand]
-    private void OpenBgmFolder()
-    {
-        _bgmService.OpenBgmDirectoryInExplorer();
-        ReloadBgmTracks();
-    }
-
-    [RelayCommand]
-    private void ReloadBgmTracks()
-    {
-        var currentPath = BgmPath;
-        AvailableBgmTracks.Clear();
-        foreach (var track in _bgmService.GetAvailableTracks())
-        {
-            AvailableBgmTracks.Add(track);
-        }
-
-        if (!string.IsNullOrEmpty(currentPath))
-        {
-            SelectedBgmTrack = AvailableBgmTracks.FirstOrDefault(t => t.FilePath == currentPath) 
-                ?? AvailableBgmTracks.FirstOrDefault(t => t.Id == "none");
-        }
-    }
-
-    [RelayCommand]
-    private void OpenFreeMusicSources()
-    {
-        var message = "Các nguồn tải nhạc nền MIỄN PHÍ 100% & KHÔNG BẢN QUYỀN (Content ID Safe):\n\n" +
-                      "1. YouTube Audio Library:\n" +
-                      "   https://studio.youtube.com/channel/UC/music\n" +
-                      "   (Kho chính thức của YouTube, an toàn tuyệt đối khi đăng video)\n\n" +
-                      "2. Pixabay Music:\n" +
-                      "   https://pixabay.com/music/\n" +
-                      "   (Hàng ngàn track cực hay cho video, tự do thương mại)\n\n" +
-                      "3. Chosic Free Music:\n" +
-                      "   https://www.chosic.com/free-music/\n" +
-                      "   (Lọc theo Mood/Thể loại, hỗ trợ lọc chuẩn CC0 & YouTube safe)\n\n" +
-                      "4. Tạo nhạc độc quyền bằng AI (Suno AI):\n" +
-                      "   https://suno.com/\n\n" +
-                      "Mẹo: Sau khi tải file MP3 về, bấm nút [📂 Thư mục] trong app và dán (paste) file vào đó để app tự nhận diện!";
-
-        var result = MessageBox.Show(
-            message + "\n\nBạn có muốn mở trang web Pixabay Music ngay bây giờ không?", 
-            "Kho Nhạc Nền Miễn Phí Không Bản Quyền", 
-            MessageBoxButton.YesNo, 
-            MessageBoxImage.Information);
-
-        if (result == MessageBoxResult.Yes)
+        if (_previewPlayer != null)
         {
             try
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "https://pixabay.com/music/",
-                    UseShellExecute = true
-                });
+                _previewPlayer.Stop();
+                _previewPlayer.Close();
             }
             catch { }
+            _previewPlayer = null;
         }
+        IsPlayingVoicePreview = false;
+        VoicePreviewText = string.Empty;
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 5: TẠO HÌNH ẢNH (VERTEX AI IMAGEN)
+    // ══════════════════════════════════════════════════════════════
 
     [RelayCommand]
-    private void BrowseOutputDir()
-    {
-        var ofd = new OpenFolderDialog
-        {
-            Title = "Chọn thư mục lưu video thành phẩm",
-            InitialDirectory = OutputDirectory
-        };
-
-        if (ofd.ShowDialog() == true)
-        {
-            OutputDirectory = ofd.FolderName;
-        }
-    }
-
-    private async Task EnsureAssetsForScenesAsync(List<SceneItem> targetScenes, string assetsDir, CancellationToken ct)
-    {
-        for (int i = 0; i < targetScenes.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-            var s = targetScenes[i];
-            var sNum = i + 1;
-
-            if (!s.HasAudio)
-            {
-                if (!string.IsNullOrWhiteSpace(s.Text))
-                {
-                    StatusMessage = $"Đang sinh giọng đọc cho cảnh {sNum}/{targetScenes.Count}...";
-                    AppendLog($"[Tự động] Cảnh #{sNum}: Đang gọi Google TTS tạo lời thoại...");
-                    s.IsGeneratingAudio = true;
-                    var audioOut = Path.Combine(assetsDir, $"voice_scene_{sNum:D3}_{DateTime.Now:HHmmss}.mp3");
-                    await _ttsService.SynthesizeSpeechAsync(s.Text, audioOut, SelectedVoice, speakingRate: SpeakingRate, ct: ct);
-                    s.AudioPath = audioOut;
-                    s.DurationSeconds = await _ffmpegService.GetAudioDurationAsync(audioOut, ct: ct);
-                    s.IsGeneratingAudio = false;
-                }
-                else
-                {
-                    throw new InvalidOperationException($"Phân cảnh #{sNum} chưa có file âm thanh và chưa có nội dung lời thoại!");
-                }
-            }
-
-            if (UseV2Pipeline)
-            {
-                // V2 Shot Planning: Nếu cảnh chưa có Shot nào, tự động chia Shot theo thời lượng audio và nhịp điệu
-                if (s.Shots.Count == 0)
-                {
-                    var v2Scene = s.ToV2Scene();
-                    var planned = _shotPlannerService.PlanShotsForScene(v2Scene);
-
-                    var activeLocation = CurrentSeries?.Locations?.FirstOrDefault(l => l.Id == s.LocationId || l.Name == s.LocationName);
-                    var activeChars = CurrentSeries?.Characters;
-                    var styleKey = CurrentSeries?.GlobalStyleKey ?? "dark-anime";
-
-                    _shotPlannerService.CompileShotPrompts(planned, activeChars, activeLocation, styleKey, AspectRatio);
-
-                    s.Shots.Clear();
-                    foreach (var shot in planned.Shots)
-                    {
-                        s.Shots.Add(shot);
-                    }
-                    s.NotifyShotsUpdated();
-                    AppendLog($"[V2 Shot Planner] Cảnh #{sNum}: Đã tự động chia thành {s.Shots.Count} shots với góc máy điện ảnh độc lập.");
-                }
-
-                // Sinh ảnh cho từng Shot nếu thiếu
-                for (int shotIdx = 0; shotIdx < s.Shots.Count; shotIdx++)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    var shot = s.Shots[shotIdx];
-                    if (!shot.HasImage)
-                    {
-                        if (string.IsNullOrWhiteSpace(shot.CompiledImagePrompt))
-                        {
-                            var activeLocation = CurrentSeries?.Locations?.FirstOrDefault(l => l.Id == s.LocationId || l.Name == s.LocationName);
-                            var activeChars = CurrentSeries?.Characters;
-                            var styleKey = CurrentSeries?.GlobalStyleKey ?? "dark-anime";
-                            var v2Scene = s.ToV2Scene();
-                            _shotPlannerService.CompileShotPrompts(v2Scene, activeChars, activeLocation, styleKey, AspectRatio);
-                            var matching = v2Scene.Shots.FirstOrDefault(x => x.ShotCode == shot.ShotCode);
-                            shot.CompiledImagePrompt = matching?.CompiledImagePrompt ?? s.ImagePrompt ?? string.Empty;
-                        }
-
-                        var prompt = !string.IsNullOrWhiteSpace(shot.CompiledImagePrompt)
-                            ? shot.CompiledImagePrompt
-                            : (!string.IsNullOrWhiteSpace(shot.VisualDescription) ? shot.VisualDescription : s.ImagePrompt);
-
-                        if (string.IsNullOrWhiteSpace(prompt))
-                        {
-                            throw new InvalidOperationException($"Cảnh #{sNum} - Shot {shot.ShotCode} chưa có mô tả (prompt) để vẽ!");
-                        }
-
-                        StatusMessage = $"Đang vẽ ảnh Shot {shot.ShotCode} (Cảnh {sNum}/{targetScenes.Count})...";
-                        AppendLog($"[V2 Pipeline] Cảnh #{sNum} - Shot {shot.ShotCode}: Đang gửi prompt tới Gemini Image...");
-                        shot.IsGenerating = true;
-                        var imgOut = Path.Combine(assetsDir, $"shot_s{sNum:D3}_{shot.ShotCode}_{DateTime.Now:HHmmss}.png");
-
-                        // ── Phase C: Tìm ảnh tham chiếu nhân vật/bối cảnh để duy trì tính nhất quán ──
-                        // Ưu tiên: ảnh tham chiếu nhân vật trực tiếp (ReferenceImagePath trong Character Bible)
-                        // Fallback: ảnh đã được sinh trong tập/cảnh trước của nhân vật đó
-                        string? referenceImagePath = null;
-                        var presentCharIds = shot.CharacterIds?.Count > 0
-                            ? shot.CharacterIds
-                            : s.CharacterIdsPresent;
-
-                        if (presentCharIds?.Count > 0 && CurrentSeries?.Characters != null)
-                        {
-                            foreach (var charId in presentCharIds)
-                            {
-                                var character = CurrentSeries.Characters.FirstOrDefault(c =>
-                                    c.Id == charId || c.Name == charId);
-                                if (character != null && !string.IsNullOrEmpty(character.ReferenceImagePath) &&
-                                    File.Exists(character.ReferenceImagePath))
-                                {
-                                    referenceImagePath = character.ReferenceImagePath;
-                                    AppendLog($"[V2 Continuity] Cảnh #{sNum} Shot {shot.ShotCode}: Dùng ảnh tham chiếu nhân vật '{character.Name}'.");
-                                    break;
-                                }
-                            }
-                        }
-
-                        // Fallback: Nếu không có nhân vật hoặc không có ảnh tham chiếu nhân vật, dùng ảnh tham chiếu địa điểm
-                        if (referenceImagePath == null && CurrentSeries?.Locations != null)
-                        {
-                            var locId = shot.LocationId ?? s.LocationId;
-                            var locName = shot.LocationName ?? s.LocationName;
-                            var location = CurrentSeries.Locations.FirstOrDefault(l =>
-                                (!string.IsNullOrEmpty(locId) && l.Id == locId) ||
-                                (!string.IsNullOrEmpty(locName) && l.Name == locName));
-                            if (location != null && !string.IsNullOrEmpty(location.ReferenceImagePath) &&
-                                File.Exists(location.ReferenceImagePath))
-                            {
-                                referenceImagePath = location.ReferenceImagePath;
-                                AppendLog($"[V2 Continuity] Cảnh #{sNum} Shot {shot.ShotCode}: Dùng ảnh tham chiếu địa điểm '{location.Name}'.");
-                            }
-                        }
-
-                        try
-                        {
-                            await _imagenService.GenerateShotImageAsync(
-                                shot, prompt, imgOut, AspectRatio,
-                                referenceImagePath: referenceImagePath,
-                                onLog: msg => AppendLog(msg), ct: ct);
-                            if (string.IsNullOrEmpty(s.ImagePath))
-                                s.ImagePath = shot.ImagePath;
-                        }
-                        catch (Exception ex)
-                        {
-                            shot.Status = "Failed";
-                            shot.ErrorMessage = ex.Message;
-                            s.Status = "Lỗi sinh ảnh";
-                            AppendLog($"[Lỗi tạo ảnh Shot {shot.ShotCode}] {ex.Message}. Vui lòng thử lại!");
-                            throw new InvalidOperationException($"Cảnh #{sNum} - Shot {shot.ShotCode} không thể tạo ảnh do lỗi: {ex.Message}");
-                        }
-                        finally
-                        {
-                            shot.IsGenerating = false;
-                        }
-
-                        // Delay pacing giữa các shot để đảm bảo an toàn hạn mức RPM (Rate Limit)
-                        await Task.Delay(3500, ct);
-
-                    }
-                }
-            }
-            else
-            {
-                // V1 Pipeline: 1 Scene = 1 Image
-                if (!s.HasImage)
-                {
-                    if (!string.IsNullOrWhiteSpace(s.ImagePrompt))
-                    {
-                        StatusMessage = $"Đang gọi Gemini Image vẽ ảnh cảnh {sNum}/{targetScenes.Count}...";
-                        AppendLog($"[Tự động] Cảnh #{sNum}: Đang gửi prompt tới Gemini Image...");
-                        s.IsGeneratingImage = true;
-                        var imgOut = Path.Combine(assetsDir, $"image_scene_{sNum:D3}_{DateTime.Now:HHmmss}.png");
-                        try
-                        {
-                            await _imagenService.GenerateImageAsync(s.ImagePrompt, imgOut, AspectRatio, onLog: msg => AppendLog(msg), ct: ct);
-                            s.ImagePath = imgOut;
-                        }
-                        catch (Exception ex)
-                        {
-                            s.Status = "Lỗi sinh ảnh";
-                            AppendLog($"[Lỗi tạo ảnh Cảnh #{sNum}] Không thể tạo ảnh mới: {ex.Message}. Vui lòng thử lại!");
-                            throw new InvalidOperationException($"Phân cảnh #{sNum} không thể tạo ảnh do lỗi: {ex.Message}. Hệ thống V2 không tự ý copy ảnh cũ để đảm bảo chất lượng video!");
-                        }
-                        finally
-                        {
-                            s.IsGeneratingImage = false;
-                        }
-
-                        // Nghỉ một chút giữa các phân cảnh để tránh vượt hạn mức Quota (RPM) của Vertex AI
-                        await Task.Delay(2500, ct);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"Phân cảnh #{sNum} chưa có file ảnh và chưa có mô tả (prompt) để vẽ!");
-                    }
-                }
-            }
-
-            // ── Phase E: Checkpoint sau khi hoàn thành mỗi cảnh ──────────────────────
-            // Ghi trạng thái hiện tại ra file JSON để có thể phục hồi nếu app đóng giữa chừng.
-            // Fire-and-forget (không await) để không block pipeline generation.
-            if (s.HasImage)
-            {
-                s.Status = $"Cảnh {sNum} hoàn thành";
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var checkpointDir = Path.Combine(assetsDir, "checkpoints");
-                        Directory.CreateDirectory(checkpointDir);
-                        var checkpointFile = Path.Combine(checkpointDir, "latest_checkpoint.json");
-                        var checkpointData = new
-                        {
-                            SavedAt = DateTime.Now,
-                            TotalScenes = targetScenes.Count,
-                            CompletedScenes = targetScenes.Count(x => x.HasImage),
-                            Scenes = targetScenes.Select(x => new
-                            {
-                                x.Index,
-                                x.Text,
-                                x.ImagePath,
-                                x.AudioPath,
-                                x.ImagePrompt,
-                                x.MotionEffect,
-                                x.DurationSeconds,
-                                x.Status,
-                                x.StoryBeat,
-                                x.PacingType,
-                                ShotPaths = x.Shots.Where(sh => sh.HasImage).Select(sh => sh.ImagePath).ToList()
-                            }).ToList()
-                        };
-                        var json = System.Text.Json.JsonSerializer.Serialize(checkpointData,
-                            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                        await File.WriteAllTextAsync(checkpointFile, json);
-                    }
-                    catch { /* Checkpoint thất bại không được crash pipeline chính */ }
-                });
-            }
-        }
-    }
-
-    [RelayCommand]
-    private void PlanShotsForScene(SceneItem? scene)
-    {
-        var target = scene ?? SelectedScene;
-        if (target == null) return;
-
-        if (target.DurationSeconds <= 0 && !string.IsNullOrWhiteSpace(target.Text))
-        {
-            target.DurationSeconds = Math.Max(3.0, (target.Text.Length / 18.0));
-        }
-
-        var v2Scene = target.ToV2Scene();
-        var planned = _shotPlannerService.PlanShotsForScene(v2Scene);
-        target.Shots.Clear();
-        foreach (var s in planned.Shots)
-        {
-            if (string.IsNullOrWhiteSpace(s.CompiledImagePrompt))
-                s.CompiledImagePrompt = target.ImagePrompt ?? string.Empty;
-            target.Shots.Add(s);
-        }
-        target.NotifyShotsUpdated();
-        AppendLog($"[V2 Shot Planner] Cảnh #{target.Index}: Đã chia thành {target.Shots.Count} shots.");
-    }
-
-    [RelayCommand]
-    private void PlanAllShots()
-    {
-        if (Scenes.Count == 0) return;
-        AppendLog($"[V2 Shot Planner] Đang tự động chia Shots cho toàn bộ {Scenes.Count} phân cảnh...");
-        foreach (var sc in Scenes)
-        {
-            PlanShotsForScene(sc);
-        }
-        AppendLog($"[V2 Shot Planner] Hoàn tất chia Shots cho tất cả phân cảnh!");
-    }
-
-    [RelayCommand]
-    private async Task GenerateShotImage(Shot? shot)
-    {
-        if (shot == null) return;
-
-        shot.IsGenerating = true;
-        shot.Status = "Generating";
-        AppendLog($"[V2 Shot {shot.ShotCode}] Đang gửi prompt tới Gemini Image...");
-
-        try
-        {
-            var tempDir = Path.Combine(OutputDirectory, "generated_assets");
-            Directory.CreateDirectory(tempDir);
-            var prompt = !string.IsNullOrWhiteSpace(shot.CompiledImagePrompt)
-                ? shot.CompiledImagePrompt
-                : (!string.IsNullOrWhiteSpace(shot.VisualDescription) ? shot.VisualDescription : "Cinematic scene");
-
-            var outPath = Path.Combine(tempDir, $"shot_{shot.ShotCode}_{DateTime.Now:yyyyMMdd_HHmmss}.png");
-            await _imagenService.GenerateShotImageAsync(shot, prompt, outPath, AspectRatio, onLog: msg => AppendLog(msg));
-
-            var parentScene = Scenes.FirstOrDefault(s => s.Shots.Contains(shot));
-            if (parentScene != null && (string.IsNullOrEmpty(parentScene.ImagePath) || !File.Exists(parentScene.ImagePath)))
-            {
-                parentScene.ImagePath = shot.ImagePath;
-            }
-
-            AppendLog($"[V2 Shot {shot.ShotCode}] Tạo ảnh thành công: {Path.GetFileName(shot.ImagePath)}");
-        }
-        catch (Exception ex)
-        {
-            shot.Status = "Failed";
-            shot.ErrorMessage = ex.Message;
-            AppendLog($"[Lỗi tạo ảnh Shot {shot.ShotCode}] {ex.Message}");
-            MessageBox.Show($"Lỗi sinh ảnh cho Shot {shot.ShotCode}:\n{ex.Message}", "Lỗi ảnh", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            shot.IsGenerating = false;
-        }
-    }
-
-    [RelayCommand]
-    private async Task StartRender()
+    private async Task GenerateImagesAsync()
     {
         if (Scenes.Count == 0)
         {
-            MessageBox.Show("Vui lòng thêm ít nhất 1 phân cảnh trước khi tạo video!", "Chưa có dữ liệu", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowError("Chưa có kịch bản để tạo hình ảnh!");
             return;
         }
 
-        IsRendering = true;
-        ProgressPercentage = 0;
-        StatusMessage = "Đang chuẩn bị tạo video...";
-        LastGeneratedVideoPath = null;
+        ClearError();
+        IsBusy = true;
+        Step5Status = StepStatus.Processing;
+        StatusMessage = "⏳ Bước 5: Đang sinh hình ảnh minh họa bằng AI...";
         _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
-
-        var tempAssetsDir = Path.Combine(OutputDirectory, "generated_assets");
-        Directory.CreateDirectory(tempAssetsDir);
 
         try
         {
-            await EnsureAssetsForScenesAsync(Scenes.ToList(), tempAssetsDir, ct);
+            EnsureProjectFolder();
+            var imagesDir = Path.Combine(ProjectDirectory, "images");
+            Directory.CreateDirectory(imagesDir);
 
-            EnsureBasicPublishInfo();
+            for (int i = 0; i < Scenes.Count; i++)
+            {
+                _cts.Token.ThrowIfCancellationRequested();
+                var sc = Scenes[i];
+
+                // Nếu ảnh đã có sẵn và hợp lệ thì bỏ qua không tạo lại để tiết kiệm chi phí
+                if (sc.IsImageReady && !string.IsNullOrEmpty(sc.ImagePath) && File.Exists(sc.ImagePath))
+                {
+                    continue;
+                }
+
+                StatusMessage = $"⏳ Bước 5: Đang sinh ảnh phân cảnh {i + 1}/{Scenes.Count} (Áp dụng rate-limiter 4 ảnh/phút)...";
+                ProgressPercentage = (double)(i + 1) / Scenes.Count * 100;
+
+                var outImgPath = Path.Combine(imagesDir, $"scene_{sc.SceneNumber:D3}.png");
+                await _imagenService.GenerateImageAsync(
+                    sc.VisualPrompt.Trim(),
+                    outImgPath,
+                    aspectRatio: ActualAspectRatio,
+                    onLog: msg => StatusMessage = msg,
+                    ct: _cts.Token);
+
+                sc.ImagePath = outImgPath;
+                sc.IsImageReady = true;
+                SaveCurrentProjectState();
+            }
+
+            IsImagesReady = true;
+            Step5Status = StepStatus.Completed;
+            StatusMessage = "✅ Đã tạo hình ảnh cho toàn bộ các phân cảnh thành công!";
+            SaveCurrentProjectState();
+        }
+        catch (OperationCanceledException)
+        {
+            Step5Status = StepStatus.Waiting;
+            StatusMessage = "Đã hủy tạo hình ảnh.";
+        }
+        catch (Exception ex)
+        {
+            Step5Status = StepStatus.Failed;
+            ShowError($"Lỗi sinh ảnh AI:\n{ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RegenerateSingleSceneImageAsync(VideoSceneItem? sc)
+    {
+        if (sc == null) return;
+
+        ClearError();
+        IsBusy = true;
+        StatusMessage = $"⏳ Đang tạo lại ảnh cho phân cảnh #{sc.SceneNumber}...";
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            EnsureProjectFolder();
+            var imagesDir = Path.Combine(ProjectDirectory, "images");
+            Directory.CreateDirectory(imagesDir);
+            var outImgPath = Path.Combine(imagesDir, $"scene_{sc.SceneNumber:D3}.png");
+
+            await _imagenService.GenerateImageAsync(
+                sc.VisualPrompt.Trim(),
+                outImgPath,
+                aspectRatio: ActualAspectRatio,
+                onLog: msg => StatusMessage = msg,
+                ct: _cts.Token);
+
+            sc.ImagePath = outImgPath;
+            sc.IsImageReady = true;
+            StatusMessage = $"✅ Đã tạo lại ảnh phân cảnh #{sc.SceneNumber} thành công!";
+            SaveCurrentProjectState();
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Lỗi tạo lại ảnh cảnh #{sc.SceneNumber}: {ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 6: TẠO PHỤ ĐỀ (GOOGLE STT + ASS KARAOKE)
+    // ══════════════════════════════════════════════════════════════
+
+    [RelayCommand]
+    private async Task GenerateSubtitlesAsync()
+    {
+        if (!IsVoiceReady)
+        {
+            ShowError("Vui lòng hoàn thành tạo giọng đọc ở Bước 4 trước khi tạo phụ đề!");
+            return;
+        }
+
+        ClearError();
+        IsBusy = true;
+        Step6Status = StepStatus.Processing;
+        StatusMessage = "⏳ Bước 6: Đang căn thời gian và tạo phụ đề...";
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            EnsureProjectFolder();
+            var subPath = Path.Combine(ProjectDirectory, "subtitles.ass");
+
+            // Tạo file phụ đề ASS
+            var (width, height) = ActualAspectRatio == "16:9" ? (1920, 1080) : (1080, 1920);
+            var sb = new StringBuilder();
+            sb.AppendLine("[Script Info]");
+            sb.AppendLine("Title: VideoAutoWpf Subtitles");
+            sb.AppendLine("ScriptType: v4.00+");
+            sb.AppendLine($"PlayResX: {width}");
+            sb.AppendLine($"PlayResY: {height}");
+            sb.AppendLine();
+            sb.AppendLine("[V4+ Styles]");
+            sb.AppendLine("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding");
+            sb.AppendLine($"Style: Default,Segoe UI,{Math.Max(36, height / 30)},&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,2,20,20,{(int)(height * 0.12)},1");
+            sb.AppendLine();
+            sb.AppendLine("[Events]");
+            sb.AppendLine("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
+
+            double currentSec = 0.0;
+            foreach (var sc in Scenes)
+            {
+                var dur = sc.DurationSeconds > 0 ? sc.DurationSeconds : 5.0;
+                var startFormatted = FormatAssTime(currentSec);
+                var endFormatted = FormatAssTime(currentSec + dur);
+
+                // Ghi thoại vào phụ đề
+                sb.AppendLine($"Dialogue: 0,{startFormatted},{endFormatted},Default,,0,0,0,,{sc.NarrationText.Trim()}");
+                currentSec += dur;
+            }
+
+            await File.WriteAllTextAsync(subPath, sb.ToString(), Encoding.UTF8, _cts.Token);
+
+            IsSubtitlesReady = true;
+            Step6Status = StepStatus.Completed;
+            StatusMessage = "✅ Đã tạo phụ đề thành công!";
+            SaveCurrentProjectState();
+        }
+        catch (OperationCanceledException)
+        {
+            Step6Status = StepStatus.Waiting;
+            StatusMessage = "Đã hủy tạo phụ đề.";
+        }
+        catch (Exception ex)
+        {
+            Step6Status = StepStatus.Failed;
+            ShowError($"Lỗi tạo phụ đề:\n{ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
+    private static string FormatAssTime(double seconds)
+    {
+        var ts = TimeSpan.FromSeconds(Math.Max(0, seconds));
+        int centiseconds = (int)(ts.Milliseconds / 10.0);
+        return $"{(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}.{centiseconds:D2}";
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 7: DỰNG VIDEO HOÀN CHỈNH (FFMPEG)
+    // ══════════════════════════════════════════════════════════════
+
+    [RelayCommand]
+    private async Task RenderVideoAsync()
+    {
+        if (!IsVoiceReady || !IsImagesReady)
+        {
+            ShowError("Vui lòng hoàn thành cả giọng đọc (Bước 4) và hình ảnh (Bước 5) trước khi dựng video!");
+            return;
+        }
+
+        ClearError();
+        IsBusy = true;
+        Step7Status = StepStatus.Processing;
+        StatusMessage = "⏳ Bước 7: Đang dựng video MP4 bằng FFmpeg...";
+        ProgressPercentage = 0;
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            EnsureProjectFolder();
+            var outVideoFile = Path.Combine(ProjectDirectory, "final.mp4");
+
+            // Chuyển đổi sang SceneItem truyền thống để gọi FFmpegService
+            var sceneItems = Scenes.Select(s => new SceneItem
+            {
+                Index = s.SceneNumber,
+                Text = s.NarrationText,
+                AudioPath = s.AudioPath,
+                ImagePath = s.ImagePath,
+                DurationSeconds = s.DurationSeconds,
+                MotionEffect = "zoom_in"
+            }).ToList();
 
             var config = new VideoConfig
             {
-                AspectRatio = AspectRatio,
-                MotionEffect = SelectedMotionEffect?.Id ?? "random",
-                EnableFadeTransition = EnableFadeTransition,
-                EnableVignette = EnableVignette,
+                AspectRatio = ActualAspectRatio,
+                OutputDirectory = ProjectDirectory,
+                OutputFileName = "final.mp4",
                 EnableBackgroundMusic = EnableBgm,
-                BackgroundMusicPath = BgmPath,
+                BackgroundMusicPath = SelectedBgmTrack?.FilePath,
                 BackgroundMusicVolume = BgmVolume,
                 EnableSubtitles = EnableSubtitles,
-                SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
-                SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
-                Voice = SelectedVoice,
-                SpeakingRate = SpeakingRate,
-                OutputDirectory = OutputDirectory,
-                OutputFileName = string.IsNullOrWhiteSpace(OutputFileName) ? $"video_{DateTime.Now:yyyyMMdd_HHmmss}.mp4" : OutputFileName,
-                PublishInfo = CurrentPublishInfo
+                EnableFadeTransition = true,
+                EnableKenBurns = true
             };
 
             var progress = new Progress<GenerationProgress>(p =>
             {
-                if (p.Percentage > 0)
-                    ProgressPercentage = p.Percentage;
-                if (!string.IsNullOrEmpty(p.StepTitle))
-                    StatusMessage = p.StepTitle;
-                if (!string.IsNullOrEmpty(p.LogMessage))
-                    AppendLog(p.LogMessage);
+                ProgressPercentage = p.Percentage;
+                StatusMessage = $"⏳ Bước 7: {p.StepTitle}... ({p.Percentage:F0}%)";
             });
 
-            string resultFile;
-            if (UseV2Pipeline)
+            var resultPath = await _ffmpegService.GenerateVideoAsync(sceneItems, config, progress, _cts.Token);
+
+            FinalVideoPath = resultPath;
+            if (File.Exists(resultPath))
             {
-                AppendLog("[Pipeline V2] Đang xây dựng Multi-Track Timeline và tạo phụ đề ASS...");
-                var v2Project = SceneItemAdapter.ToV2Project(
-                    Scenes, 
-                    config, 
-                    CurrentPublishInfo,
-                    null);
-
-                string? subtitleAssPath = null;
-                if (EnableSubtitles)
-                {
-                    var (width, height) = config.GetDimensions();
-                    var assPath = Path.Combine(tempAssetsDir, $"subtitles_{DateTime.Now:HHmmss}.ass");
-                    var v2Scenes = Scenes.Select(s => s.ToV2Scene()).ToList();
-                    await AssSubtitleService.GenerateAssFileAsync(
-                        v2Scenes,
-                        assPath,
-                        width: width,
-                        height: height,
-                        fontName: SelectedSubtitleFont?.Name ?? "Segoe UI Bold",
-                        subtitleStyle: SelectedSubtitleStyle?.Id ?? "cinematic",
-                        ct: ct);
-
-                    if (File.Exists(assPath))
-                    {
-                        subtitleAssPath = assPath;
-                        AppendLog($"[Pipeline V2] Đã tạo file phụ đề ASS karaoke: {Path.GetFileName(assPath)}");
-                    }
-                }
-
-                var timeline = TimelineBuilder.BuildTimeline(v2Project, subtitleAssPath: subtitleAssPath);
-                resultFile = await _ffmpegService.RenderTimelineAsync(timeline, config, progress, ct);
-            }
-            else
-            {
-                resultFile = await _ffmpegService.GenerateVideoAsync(Scenes.ToList(), config, progress, ct);
-            }
-            LastGeneratedVideoPath = resultFile;
-            StatusMessage = "Tạo video thành công!";
-            ProgressPercentage = 100;
-
-            // Lấy thư mục project (parent của Video/)
-            var projectFolder = Path.GetDirectoryName(Path.GetDirectoryName(resultFile)) ?? OutputDirectory;
-            var txtFile = Path.Combine(projectFolder, "DANG_BAI_METADATA.txt");
-            if (File.Exists(txtFile))
-            {
-                LastGeneratedTxtPath = txtFile;
+                var fi = new FileInfo(resultPath);
+                FinalVideoSizeMb = $"{fi.Length / (1024.0 * 1024.0):F1} MB";
+                var dur = await _ffmpegService.GetAudioDurationAsync(resultPath);
+                FinalVideoDurationText = $"{dur:F1} giây";
             }
 
-            // ── Tự Động Tải Lên Google Drive Nếu Được Bật ──
-            if (AutoUploadToDrive && File.Exists(resultFile))
-            {
-                try
-                {
-                    IsUploadingToDrive = true;
-                    DriveStatusText = "Đang tải video lên Google Drive...";
-                    AppendLog($"[Google Drive] ☁️ Bắt đầu tự động tải video lên Drive: {Path.GetFileName(resultFile)}");
-
-                    var driveProgress = new Progress<double>(pct =>
-                    {
-                        DriveUploadProgress = pct;
-                        DriveStatusText = $"Đang tải lên Drive: {pct:F0}%";
-                    });
-
-                    var driveRes = await _driveService.UploadVideoAsync(resultFile, null, driveProgress, ct);
-                    if (driveRes.Success)
-                    {
-                        LastDriveVideoLink = driveRes.WebViewLink;
-                        LastDriveFolderLink = driveRes.FolderLink;
-                        DriveStatusText = "✅ Đã tải lên Google Drive!";
-                        AppendLog($"[Google Drive] 🎉 Upload thành công! Link Drive:\n{driveRes.WebViewLink}");
-
-                        if (File.Exists(txtFile))
-                        {
-                            try
-                            {
-                                File.AppendAllText(txtFile, $"\n\n🔗 GOOGLE DRIVE LINK:\n{driveRes.WebViewLink}\n");
-                            }
-                            catch { }
-                        }
-                    }
-                    else
-                    {
-                        DriveStatusText = "❌ Tải lên Drive thất bại";
-                        AppendLog($"[Google Drive Lỗi] {driveRes.ErrorMessage}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    DriveStatusText = "❌ Lỗi tải lên Drive: " + ex.Message;
-                    AppendLog($"[Google Drive Lỗi] {ex.Message}");
-                }
-                finally
-                {
-                    IsUploadingToDrive = false;
-                }
-            }
-
-            var dialogResult = MessageBox.Show(
-                $"🎉 Video đã được tạo thành công!\n\n" +
-                $"📁 Thư mục project:\n{projectFolder}\n\n" +
-                $"🎬 Video:\n{resultFile}\n\n" +
-                $"📝 File đăng bài (.txt):\n{txtFile}\n\n" +
-                $"👉 Bạn có muốn mở ngay 'Bộ Đăng Bài Mạng Xã Hội' để sao chép Tiêu đề, Caption và Hashtags không?",
-                "Tạo Video Thành Công!",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Information);
-
-            if (dialogResult == MessageBoxResult.Yes)
-            {
-                OpenSocialPublishWindow();
-            }
+            Step7Status = StepStatus.Completed;
+            Step8Status = StepStatus.Completed;
+            StatusMessage = "🎉 Chúc mừng! Đã hoàn thành sản xuất video thành công!";
+            SaveCurrentProjectState();
         }
         catch (OperationCanceledException)
         {
-            StatusMessage = "Đã hủy render bởi người dùng.";
-            AppendLog("[Hệ thống] Quá trình tạo video đã bị dừng.");
+            Step7Status = StepStatus.Waiting;
+            StatusMessage = "Đã hủy dựng video bởi người dùng.";
         }
         catch (Exception ex)
         {
-            StatusMessage = "Có lỗi xảy ra!";
-            AppendLog($"[Lỗi nghiêm trọng] {ex.Message}");
-            MessageBox.Show($"Lỗi trong quá trình tạo video:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+            Step7Status = StepStatus.Failed;
+            ShowError($"Lỗi khi dựng video FFmpeg:\n{ex.Message}");
         }
         finally
         {
-            foreach (var sc in Scenes)
-            {
-                sc.IsGeneratingAudio = false;
-                sc.IsGeneratingImage = false;
-            }
-            IsRendering = false;
+            IsBusy = false;
             _cts?.Dispose();
             _cts = null;
         }
     }
 
-    [RelayCommand]
-    private void CancelRender()
-    {
-        if (_cts != null && !_cts.IsCancellationRequested)
-        {
-            _cts.Cancel();
-            StatusMessage = "Đang gửi yêu cầu dừng...";
-            AppendLog("[Hệ thống] Đang hủy tiến trình...");
-        }
-    }
-
-    [RelayCommand]
-    private async Task StartBatchRenderSeriesAsync()
-    {
-        if (CurrentSeries == null || CurrentSeries.Episodes.Count == 0)
-        {
-            MessageBox.Show("Không có tập phim nào trong Series để render!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        // Đảm bảo tập hiện tại đã được đồng bộ các cảnh
-        if (SelectedEpisode != null)
-        {
-            SelectedEpisode.Scenes = new ObservableCollection<SceneItem>(Scenes);
-            SelectedEpisode.PublishInfo = CurrentPublishInfo;
-        }
-
-        var episodesToRender = CurrentSeries.Episodes.ToList();
-        if (episodesToRender.All(e => e.Scenes.Count == 0))
-        {
-            MessageBox.Show("Tất cả các tập trong Series đều chưa có kịch bản/phân cảnh!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        var confirm = MessageBox.Show(
-            $"Bạn sắp bắt đầu BATCH RENDER toàn bộ chuỗi {CurrentSeries.Episodes.Count} tập phim!\n\n" +
-            $"Tên Series: {CurrentSeries.SeriesTitle}\n" +
-            $"Thư mục xuất: {OutputDirectory}\n\n" +
-            $"Quá trình này sẽ tự động sinh giọng đọc Cloud TTS, vẽ ảnh AI Imagen 3 và render video từng tập.\n" +
-            $"Bạn có muốn tiếp tục không?",
-            "Xác nhận Batch Render Series",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-
-        if (confirm != MessageBoxResult.Yes) return;
-
-        IsRendering = true;
-        IsBatchRenderingSeries = true;
-        BatchRenderProgress = 0;
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
-
-        var safeSeries = MakeSafeFileName(CurrentSeries.SeriesTitle);
-        var seriesOutputDir = Path.Combine(OutputDirectory, $"Series_{safeSeries}");
-        Directory.CreateDirectory(seriesOutputDir);
-
-        int totalEpisodes = episodesToRender.Count;
-        int completedCount = 0;
-
-        try
-        {
-            for (int i = 0; i < totalEpisodes; i++)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                var ep = episodesToRender[i];
-                var epNum = ep.EpisodeNumber;
-                var safeTitle = MakeSafeFileName(ep.EpisodeTitle);
-
-                SelectEpisode(ep);
-
-                BatchRenderStatusText = $"[Tập {epNum}/{totalEpisodes}] Đang xử lý: {ep.EpisodeTitle}...";
-                BatchRenderProgress = (double)i / totalEpisodes * 100;
-                ep.Status = "Đang render";
-
-                if (ep.Scenes.Count == 0)
-                {
-                    AppendLog($"[Batch Series] Bỏ qua Tập {epNum} vì chưa có phân cảnh nào.");
-                    ep.Status = "Chưa dựng";
-                    continue;
-                }
-
-                var epTempAssets = Path.Combine(seriesOutputDir, $"temp_assets_ep{epNum:D2}");
-                Directory.CreateDirectory(epTempAssets);
-
-                AppendLog($"[Batch Series] === BẮT ĐẦU XỬ LÝ TẬP {epNum}: {ep.EpisodeTitle} ({ep.Scenes.Count} cảnh) ===");
-
-                // 1. Sinh âm thanh & hình ảnh AI cho tập này
-                await EnsureAssetsForScenesAsync(ep.Scenes.ToList(), epTempAssets, ct);
-
-                // 2. Cấu hình xuất video cho tập này
-                var epConfig = new VideoConfig
-                {
-                    AspectRatio = AspectRatio,
-                    MotionEffect = SelectedMotionEffect?.Id ?? "random",
-                    EnableFadeTransition = EnableFadeTransition,
-                    EnableVignette = EnableVignette,
-                    EnableBackgroundMusic = EnableBgm,
-                    BackgroundMusicPath = BgmPath,
-                    BackgroundMusicVolume = BgmVolume,
-                    EnableSubtitles = EnableSubtitles,
-                    SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
-                    SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
-                    Voice = SelectedVoice,
-                    OutputDirectory = seriesOutputDir,
-                    OutputFileName = $"Tap_{epNum:D2}_{safeTitle}.mp4",
-                    PublishInfo = ep.PublishInfo ?? CurrentPublishInfo
-                };
-
-                var progress = new Progress<GenerationProgress>(p =>
-                {
-                    if (p.Percentage > 0)
-                        ProgressPercentage = p.Percentage;
-                    if (!string.IsNullOrEmpty(p.StepTitle))
-                        StatusMessage = $"[Tập {epNum}/{totalEpisodes}] {p.StepTitle}";
-                    if (!string.IsNullOrEmpty(p.LogMessage))
-                        AppendLog($"[Tập {epNum}] {p.LogMessage}");
-                });
-
-                // 3. Render video qua FFmpeg (V2 Timeline hoặc V1 Concat)
-                string resultFile;
-                if (UseV2Pipeline)
-                {
-                    AppendLog($"[Batch Series Tập {epNum}] Đang xây dựng Multi-Track Timeline và tạo phụ đề ASS...");
-                    var v2Project = SceneItemAdapter.ToV2Project(
-                        ep.Scenes,
-                        epConfig,
-                        ep.PublishInfo ?? CurrentPublishInfo,
-                        null);
-
-                    string? subtitleAssPath = null;
-                    if (EnableSubtitles)
-                    {
-                        var (width, height) = epConfig.GetDimensions();
-                        var assPath = Path.Combine(epTempAssets, $"subtitles_ep{epNum:D2}_{DateTime.Now:HHmmss}.ass");
-                        var v2Scenes = ep.Scenes.Select(s => s.ToV2Scene()).ToList();
-                        await AssSubtitleService.GenerateAssFileAsync(
-                            v2Scenes,
-                            assPath,
-                            width: width,
-                            height: height,
-                            fontName: SelectedSubtitleFont?.Name ?? "Segoe UI Bold",
-                            subtitleStyle: SelectedSubtitleStyle?.Id ?? "cinematic",
-                            ct: ct);
-
-                        if (File.Exists(assPath))
-                        {
-                            subtitleAssPath = assPath;
-                            AppendLog($"[Batch Series Tập {epNum}] Đã tạo file phụ đề ASS karaoke: {Path.GetFileName(assPath)}");
-                        }
-                    }
-
-                    var timeline = TimelineBuilder.BuildTimeline(v2Project, subtitleAssPath: subtitleAssPath);
-                    resultFile = await _ffmpegService.RenderTimelineAsync(timeline, epConfig, progress, ct);
-                }
-                else
-                {
-                    resultFile = await _ffmpegService.GenerateVideoAsync(ep.Scenes.ToList(), epConfig, progress, ct);
-                }
-                ep.OutputVideoPath = resultFile;
-                ep.LastRenderedDate = DateTime.Now;
-                ep.Status = "Hoàn thành";
-                completedCount++;
-
-                // 4. Tự động tải lên Google Drive nếu được bật
-                if (AutoUploadToDrive && File.Exists(resultFile))
-                {
-                    try
-                    {
-                        ep.IsUploadingDrive = true;
-                        BatchRenderStatusText = $"[Tập {epNum}/{totalEpisodes}] ☁️ Đang tải lên Google Drive...";
-                        AppendLog($"[Google Drive] Bắt đầu tải Tập {epNum} lên Google Drive...");
-
-                        var driveProgress = new Progress<double>(pct =>
-                        {
-                            ep.Status = $"Đang up Drive {pct:F0}%";
-                        });
-
-                        var driveResult = await _driveService.UploadVideoAsync(resultFile, CurrentSeries.SeriesTitle, driveProgress, ct);
-                        if (driveResult.Success)
-                        {
-                            ep.DriveVideoLink = driveResult.WebViewLink;
-                            ep.DriveFolderLink = driveResult.FolderLink;
-                            LastDriveVideoLink = driveResult.WebViewLink;
-                            LastDriveFolderLink = driveResult.FolderLink;
-                            AppendLog($"[Google Drive] ✅ Đã tải lên Drive Tập {epNum}: {driveResult.WebViewLink}");
-                        }
-                        else
-                        {
-                            AppendLog($"[Google Drive Lỗi Tập {epNum}] {driveResult.ErrorMessage}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        AppendLog($"[Google Drive Lỗi Tập {epNum}] {ex.Message}");
-                    }
-                    finally
-                    {
-                        ep.IsUploadingDrive = false;
-                        ep.Status = "Hoàn thành";
-                    }
-                }
-
-                // Dọn dẹp folder tạm nếu có
-                try
-                {
-                    if (Directory.Exists(epTempAssets))
-                        Directory.Delete(epTempAssets, true);
-                }
-                catch { }
-
-                AppendLog($"[Batch Series] ✅ Hoàn thành xuất video Tập {epNum}: {resultFile}");
-
-                // Lưu lại trạng thái dự án series vào file series_project.json
-                var seriesProjectFile = Path.Combine(seriesOutputDir, "series_project.json");
-                await CurrentSeries.SaveToFileAsync(seriesProjectFile);
-
-                BatchRenderProgress = (double)(i + 1) / totalEpisodes * 100;
-            }
-
-            BatchRenderProgress = 100;
-            BatchRenderStatusText = $"🎉 Hoàn thành render {completedCount}/{totalEpisodes} tập của Series!";
-            StatusMessage = "Xuất toàn bộ Series thành công!";
-
-            MessageBox.Show(
-                $"🎉 Đã hoàn tất Batch Render toàn bộ chuỗi video!\n\n" +
-                $"Số tập hoàn thành: {completedCount}/{totalEpisodes}\n" +
-                $"Thư mục Series:\n{seriesOutputDir}\n\n" +
-                $"Mỗi tập đã được lưu đầy đủ vào từng thư mục riêng (Images, Audio, Video, DANG_BAI_METADATA.txt)!",
-                "Thành Công Rực Rỡ",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-        }
-        catch (OperationCanceledException)
-        {
-            BatchRenderStatusText = "Đã dừng render Series.";
-            StatusMessage = "Đã hủy render bởi người dùng.";
-            AppendLog("[Batch Series] Người dùng đã dừng quá trình render series.");
-        }
-        catch (Exception ex)
-        {
-            BatchRenderStatusText = "❌ Có lỗi xảy ra trong quá trình Batch Render.";
-            StatusMessage = "Lỗi khi render series!";
-            AppendLog($"[Lỗi Batch Series] {ex.Message}");
-            MessageBox.Show($"Lỗi trong quá trình render series:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            foreach (var sc in Scenes)
-            {
-                sc.IsGeneratingAudio = false;
-                sc.IsGeneratingImage = false;
-            }
-            IsRendering = false;
-            IsBatchRenderingSeries = false;
-            _cts?.Dispose();
-            _cts = null;
-        }
-    }
+    // ══════════════════════════════════════════════════════════════
+    //  BƯỚC 8: MỞ VIDEO & QUẢN LÝ TỆP
+    // ══════════════════════════════════════════════════════════════
 
     [RelayCommand]
     private void OpenVideo()
     {
-        if (File.Exists(LastGeneratedVideoPath))
+        if (File.Exists(FinalVideoPath))
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = LastGeneratedVideoPath,
+                FileName = FinalVideoPath,
                 UseShellExecute = true
             });
-        }
-    }
-
-    [RelayCommand]
-    private void OpenLastDriveLink()
-    {
-        if (!string.IsNullOrEmpty(LastDriveVideoLink))
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = LastDriveVideoLink,
-                UseShellExecute = true
-            });
-        }
-    }
-
-    [RelayCommand]
-    private void OpenLastDriveFolderLink()
-    {
-        var targetLink = LastDriveFolderLink ?? LastDriveVideoLink;
-        if (!string.IsNullOrEmpty(targetLink))
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = targetLink,
-                UseShellExecute = true
-            });
-        }
-    }
-
-    [RelayCommand]
-    private void SaveDriveFolderId()
-    {
-        GoogleDriveService.SaveTargetFolderId(DriveFolderId);
-        MessageBox.Show("Đã lưu ID Thư mục Google Drive thành công!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
-    }
-
-    [RelayCommand]
-    private async Task TestDriveConnectionAsync()
-    {
-        DriveStatusText = "Đang kiểm tra kết nối Google Drive...";
-        var (success, msg) = await _driveService.TestConnectionAsync(DriveFolderId);
-        DriveStatusText = msg;
-        MessageBox.Show(msg, success ? "Kết Nối Thành Công" : "Lỗi Kết Nối Drive", MessageBoxButton.OK, success ? MessageBoxImage.Information : MessageBoxImage.Warning);
-    }
-
-    [RelayCommand]
-    private void CopyDriveServiceAccountEmail()
-    {
-        if (!string.IsNullOrEmpty(DriveServiceAccountEmail))
-        {
-            Clipboard.SetText(DriveServiceAccountEmail);
-            MessageBox.Show($"Đã sao chép email Service Account:\n\n{DriveServiceAccountEmail}\n\nHãy vào Google Drive cá nhân của bạn, chọn thư mục muốn lưu video -> Bấm 'Chia sẻ' (Share) -> Thêm email này làm 'Người chỉnh sửa' (Editor)!", "Đã sao chép email", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         else
         {
-            MessageBox.Show("Không tìm thấy email Service Account trong google_credentials.json!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowError("Chưa có file video hoàn chỉnh nào để mở!");
         }
     }
 
     [RelayCommand]
-    private async Task ManualUploadCurrentVideoToDriveAsync()
+    private void OpenProjectFolder()
     {
-        if (string.IsNullOrEmpty(LastGeneratedVideoPath) || !File.Exists(LastGeneratedVideoPath))
-        {
-            MessageBox.Show("Chưa có video thành phẩm nào được tạo để tải lên!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        try
-        {
-            IsUploadingToDrive = true;
-            DriveStatusText = "Đang tải video lên Google Drive...";
-            AppendLog($"[Google Drive] Tải video lên Drive thủ công: {Path.GetFileName(LastGeneratedVideoPath)}");
-
-            var progress = new Progress<double>(p =>
-            {
-                DriveUploadProgress = p;
-                DriveStatusText = $"Đang tải lên Drive: {p:F0}%";
-            });
-
-            var res = await _driveService.UploadVideoAsync(LastGeneratedVideoPath, null, progress);
-            if (res.Success)
-            {
-                LastDriveVideoLink = res.WebViewLink;
-                LastDriveFolderLink = res.FolderLink;
-                DriveStatusText = "✅ Đã tải lên Google Drive thành công!";
-                AppendLog($"[Google Drive] 🎉 Upload hoàn tất: {res.WebViewLink}");
-                MessageBox.Show($"🎉 Video đã được tải lên Google Drive thành công!\n\nLink xem trực tiếp:\n{res.WebViewLink}", "Google Drive", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            else
-            {
-                DriveStatusText = "❌ Tải lên Drive thất bại";
-                AppendLog($"[Google Drive Lỗi] {res.ErrorMessage}");
-                MessageBox.Show($"Tải lên Google Drive thất bại:\n{res.ErrorMessage}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-        catch (Exception ex)
-        {
-            DriveStatusText = "❌ Lỗi: " + ex.Message;
-            MessageBox.Show($"Lỗi: {ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            IsUploadingToDrive = false;
-        }
-    }
-
-    [RelayCommand]
-    private void OpenOutputDir()
-    {
-        // Ưu tiên mở thư mục project (parent của Video/) nếu có video đã tạo
-        var targetDir = OutputDirectory;
-        if (!string.IsNullOrEmpty(LastGeneratedVideoPath) && File.Exists(LastGeneratedVideoPath))
-        {
-            var projectDir = Path.GetDirectoryName(Path.GetDirectoryName(LastGeneratedVideoPath));
-            if (!string.IsNullOrEmpty(projectDir) && Directory.Exists(projectDir))
-                targetDir = projectDir;
-        }
-
-        if (Directory.Exists(targetDir))
+        if (Directory.Exists(ProjectDirectory))
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = targetDir,
+                FileName = ProjectDirectory,
                 UseShellExecute = true
             });
         }
-    }
-
-    [RelayCommand]
-    private void ClearLog()
-    {
-        lock (_logLock)
+        else
         {
-            _logBuffer.Clear();
+            ShowError("Thư mục dự án chưa tồn tại!");
         }
-        LogText = string.Empty;
     }
 
     [RelayCommand]
-    private void OpenSocialPublishWindow()
+    private void NewProject()
     {
-        EnsureBasicPublishInfo();
-        var mainWin = Application.Current.MainWindow;
-        var win = new SocialPublishWindow(this)
+        Topic = string.Empty;
+        OutlineTitle = string.Empty;
+        OutlineSummary = string.Empty;
+        OutlineSections.Clear();
+        IsOutlineConfirmed = false;
+
+        ScriptTitle = string.Empty;
+        Scenes.Clear();
+        IsScriptConfirmed = false;
+
+        IsVoiceReady = false;
+        IsImagesReady = false;
+        IsSubtitlesReady = false;
+        FinalVideoPath = string.Empty;
+
+        Step1Status = StepStatus.Waiting;
+        Step2Status = StepStatus.Waiting;
+        Step3Status = StepStatus.Waiting;
+        Step4Status = StepStatus.Waiting;
+        Step5Status = StepStatus.Waiting;
+        Step6Status = StepStatus.Waiting;
+        Step7Status = StepStatus.Waiting;
+        Step8Status = StepStatus.Waiting;
+
+        InitializeDefaultProject();
+        StatusMessage = "Đã khởi tạo dự án mới.";
+    }
+
+    [RelayCommand]
+    private void LoadExistingProject()
+    {
+        var dialog = new OpenFolderDialog
         {
-            WindowState = WindowState.Maximized
+            Title = "Chọn thư mục dự án cần mở lại"
         };
 
-        try
+        if (dialog.ShowDialog() == true && Directory.Exists(dialog.FolderName))
         {
-            mainWin?.Hide();
-            win.ShowDialog();
-        }
-        finally
-        {
-            if (mainWin != null)
+            var data = VideoProjectData.Load(dialog.FolderName);
+            if (data != null)
             {
-                Application.Current.MainWindow = mainWin;
-                mainWin.Show();
-                mainWin.WindowState = WindowState.Maximized;
-                mainWin.Activate();
-                mainWin.Focus();
-            }
-        }
-    }
-
-    [RelayCommand]
-    private void CopyFullCaption()
-    {
-        EnsureBasicPublishInfo();
-        SetClipboardText(CurrentPublishInfo.FullCaption);
-        TriggerCopyFeedback("✅ Đã sao chép toàn bộ bài đăng vào Clipboard!");
-        AppendLog("[Clipboard] Đã sao chép toàn bộ bài đăng (Tiêu đề + Mô tả + Hashtags).");
-    }
-
-    [RelayCommand]
-    private void CopyPublishTitle()
-    {
-        EnsureBasicPublishInfo();
-        SetClipboardText(CurrentPublishInfo.Title);
-        TriggerCopyFeedback("✅ Đã sao chép Tiêu đề!");
-        AppendLog($"[Clipboard] Đã sao chép Tiêu đề: \"{CurrentPublishInfo.Title}\"");
-    }
-
-    [RelayCommand]
-    private void CopyPublishDescription()
-    {
-        EnsureBasicPublishInfo();
-        SetClipboardText(CurrentPublishInfo.Description);
-        TriggerCopyFeedback("✅ Đã sao chép Mô tả!");
-        AppendLog("[Clipboard] Đã sao chép Mô tả video.");
-    }
-
-    [RelayCommand]
-    private void CopyPublishHashtags()
-    {
-        EnsureBasicPublishInfo();
-        SetClipboardText(CurrentPublishInfo.Hashtags);
-        TriggerCopyFeedback("✅ Đã sao chép Hashtags!");
-        AppendLog($"[Clipboard] Đã sao chép Hashtags: {CurrentPublishInfo.Hashtags}");
-    }
-
-    [RelayCommand]
-    private void CopyDriveLink()
-    {
-        if (!string.IsNullOrEmpty(LastDriveVideoLink))
-        {
-            SetClipboardText(LastDriveVideoLink);
-            TriggerCopyFeedback("✅ Đã sao chép Link Google Drive!");
-            AppendLog($"[Clipboard] Đã sao chép Link Drive: {LastDriveVideoLink}");
-        }
-    }
-
-    [RelayCommand]
-    private void OpenPublishTxtFile()
-    {
-        var targetFile = LastGeneratedTxtPath;
-        if (string.IsNullOrEmpty(targetFile) || !File.Exists(targetFile))
-        {
-            if (!string.IsNullOrEmpty(LastGeneratedVideoPath))
-            {
-                var projectFolder = Path.GetDirectoryName(Path.GetDirectoryName(LastGeneratedVideoPath));
-                if (!string.IsNullOrEmpty(projectFolder))
-                {
-                    var potentialFile = Path.Combine(projectFolder, "DANG_BAI_METADATA.txt");
-                    if (File.Exists(potentialFile))
-                        targetFile = potentialFile;
-                }
-            }
-        }
-
-        if (string.IsNullOrEmpty(targetFile) || !File.Exists(targetFile))
-        {
-            EnsureBasicPublishInfo();
-            var tempDir = Path.Combine(Path.GetTempPath(), "VideoAutoWpf");
-            Directory.CreateDirectory(tempDir);
-            var tempTxt = Path.Combine(tempDir, "DANG_BAI_METADATA.txt");
-            File.WriteAllText(tempTxt, CurrentPublishInfo.GenerateFormattedTxt(
-                videoFileName: OutputFileName,
-                aspectRatio: AspectRatio,
-                voice: SelectedVoice,
-                sceneCount: Scenes.Count,
-                bgmName: SelectedBgmTrack?.Title
-            ), new UTF8Encoding(true));
-            targetFile = tempTxt;
-        }
-
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = targetFile,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Không thể mở file:\n{ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-    }
-
-    [RelayCommand]
-    private async Task RegenerateSocialMetadataAsync()
-    {
-        if (Scenes.Count == 0)
-        {
-            MessageBox.Show("Chưa có phân cảnh nào trong dự án để tạo metadata!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        IsGeneratingPublishInfo = true;
-        StatusMessage = "⏳ AI đang sáng tạo Tiêu đề, Mô tả và Hashtags bùng nổ...";
-        AppendLog("[Gemini AI] Đang tạo bộ Tiêu đề, Mô tả và Hashtags chuẩn SEO cho video...");
-
-        try
-        {
-            var scenesContent = string.Join("\n", Scenes.Select(s => $"Cảnh {s.Index}: {s.Text}"));
-            var summary = $"Video gồm {Scenes.Count} cảnh, định dạng {AspectRatio}";
-
-            var result = await _geminiService.GeneratePublishInfoAsync(summary, scenesContent);
-            if (result != null)
-            {
-                CurrentPublishInfo = result;
-                OnPropertyChanged(nameof(CurrentPublishInfo));
-                OnPropertyChanged(nameof(HasPublishInfo));
-
-                if (!string.IsNullOrWhiteSpace(result.Title))
-                {
-                    var safeTitle = result.Title;
-                    foreach (var c in Path.GetInvalidFileNameChars())
-                        safeTitle = safeTitle.Replace(c, '_');
-                    safeTitle = safeTitle.Replace(' ', '_').Trim('_');
-                    if (safeTitle.Length > 45) safeTitle = safeTitle.Substring(0, 45);
-                    OutputFileName = $"{safeTitle}.mp4";
-                }
-
-                StatusMessage = "✅ Đã tạo mới bộ Tiêu đề & Hashtags thành công!";
-                AppendLog($"[Gemini AI] Đã tạo tiêu đề mới: \"{result.Title}\" với bộ hashtags chuẩn xu hướng.");
-                TriggerCopyFeedback("✅ AI đã tạo mới Tiêu đề & Hashtags!");
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = "Có lỗi khi AI tạo metadata.";
-            AppendLog($"[Lỗi Gemini] {ex.Message}");
-            MessageBox.Show($"Không thể tạo metadata bằng AI:\n{ex.Message}", "Lỗi AI", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        finally
-        {
-            IsGeneratingPublishInfo = false;
-        }
-    }
-
-    public void EnsureBasicPublishInfo()
-    {
-        if (CurrentPublishInfo == null) CurrentPublishInfo = new VideoPublishInfo();
-
-        if (string.IsNullOrWhiteSpace(CurrentPublishInfo.Title))
-        {
-            if (Scenes.Count > 0 && !string.IsNullOrWhiteSpace(Scenes[0].Text))
-            {
-                var firstLine = Scenes[0].Text!.Trim();
-                CurrentPublishInfo.Title = firstLine.Length > 50 ? firstLine.Substring(0, 50) + "..." : firstLine;
+                LoadFromProjectData(data);
             }
             else
             {
-                CurrentPublishInfo.Title = Path.GetFileNameWithoutExtension(OutputFileName).Replace('_', ' ');
+                ShowError("Thư mục này không chứa file project.json hợp lệ!");
             }
-        }
-
-        if (string.IsNullOrWhiteSpace(CurrentPublishInfo.Description))
-        {
-            var texts = Scenes.Where(s => !string.IsNullOrWhiteSpace(s.Text)).Take(3).Select(s => s.Text);
-            CurrentPublishInfo.Description = string.Join(" ", texts);
-        }
-
-        if (string.IsNullOrWhiteSpace(CurrentPublishInfo.Hashtags))
-        {
-            CurrentPublishInfo.Hashtags = "#kienthuc #bian #khampha #shorts #xuhuong #viral #fyp #tiktok #reels";
-        }
-
-        OnPropertyChanged(nameof(CurrentPublishInfo));
-        OnPropertyChanged(nameof(HasPublishInfo));
-    }
-
-    private static void SetClipboardText(string text)
-    {
-        if (string.IsNullOrEmpty(text)) return;
-        try
-        {
-            Clipboard.SetText(text);
-        }
-        catch
-        {
-            try
-            {
-                Clipboard.SetDataObject(text, true);
-            }
-            catch { }
         }
     }
 
-    private async void TriggerCopyFeedback(string msg)
+    [RelayCommand]
+    private void CancelCurrentTask()
     {
-        CopyFeedbackMessage = msg;
+        if (_cts != null && !_cts.IsCancellationRequested)
+        {
+            _cts.Cancel();
+            StatusMessage = "Đang dừng tác vụ...";
+        }
+    }
+
+    [RelayCommand]
+    private void SaveApiKey()
+    {
+        if (!string.IsNullOrWhiteSpace(GeminiApiKey))
+        {
+            GeminiScriptService.SaveApiKey(GeminiApiKey.Trim());
+            _geminiService.ApiKey = GeminiApiKey.Trim();
+            MessageBox.Show("Đã lưu Gemini API Key thành công!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  TIỆN ÍCH HỖ TRỢ
+    // ══════════════════════════════════════════════════════════════
+
+    private void EnsureProjectFolder()
+    {
+        if (string.IsNullOrWhiteSpace(ProjectDirectory))
+        {
+            InitializeDefaultProject();
+        }
+        Directory.CreateDirectory(ProjectDirectory);
+    }
+
+    private void ShowError(string msg)
+    {
+        ErrorMessage = msg;
+        HasError = true;
+        StatusMessage = $"❌ {msg.Split('\n').FirstOrDefault()}";
+        AppendLog($"[Lỗi] {msg}");
+    }
+
+    private void ClearError()
+    {
+        ErrorMessage = string.Empty;
+        HasError = false;
+    }
+
+    private void AppendLog(string message)
+    {
         try
         {
-            await Task.Delay(2500);
-            if (CopyFeedbackMessage == msg)
-                CopyFeedbackMessage = string.Empty;
+            if (string.IsNullOrWhiteSpace(ProjectDirectory)) return;
+            var logsDir = Path.Combine(ProjectDirectory, "logs");
+            Directory.CreateDirectory(logsDir);
+            File.AppendAllText(Path.Combine(logsDir, "process.log"), $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\n");
         }
         catch { }
     }
-
-    public async Task HandleDroppedFilesAsync(string[] files)
-    {
-        if (files == null || files.Length == 0) return;
-
-        if (files.Length == 1 && Path.GetExtension(files[0]).Equals(".json", StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                var json = await File.ReadAllTextAsync(files[0]);
-                var workspace = JsonSerializer.Deserialize<ScriptWorkspace>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (workspace?.Scenes != null && workspace.Scenes.Count > 0)
-                {
-                    ApplyWorkspace(workspace);
-                    return;
-                }
-            }
-            catch { }
-        }
-
-        var imageExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".webp", ".bmp" };
-        var audioExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".mp3", ".wav", ".aac", ".m4a", ".ogg", ".flac" };
-
-        var allFiles = new List<string>();
-        foreach (var path in files)
-        {
-            if (Directory.Exists(path))
-            {
-                allFiles.AddRange(Directory.GetFiles(path, "*.*", SearchOption.TopDirectoryOnly));
-            }
-            else if (File.Exists(path))
-            {
-                allFiles.Add(path);
-            }
-        }
-
-        var imageFiles = allFiles.Where(f => imageExts.Contains(Path.GetExtension(f))).OrderBy(f => f).ToList();
-        var audioFiles = allFiles.Where(f => audioExts.Contains(Path.GetExtension(f))).OrderBy(f => f).ToList();
-
-        if (imageFiles.Count == 0 && audioFiles.Count == 0) return;
-
-        var maxCount = Math.Max(imageFiles.Count, audioFiles.Count);
-        AppendLog($"[Kéo thả] Đang xử lý {imageFiles.Count} ảnh và {audioFiles.Count} audio...");
-
-        for (int i = 0; i < maxCount; i++)
-        {
-            var scene = new SceneItem
-            {
-                Index = Scenes.Count + 1,
-                Status = "Đang nạp..."
-            };
-
-            if (i < imageFiles.Count)
-                scene.ImagePath = imageFiles[i];
-
-            if (i < audioFiles.Count)
-            {
-                scene.AudioPath = audioFiles[i];
-                var duration = await _ffmpegService.GetAudioDurationAsync(audioFiles[i]);
-                scene.DurationSeconds = duration;
-            }
-
-            scene.Status = (scene.HasImage && scene.HasAudio) ? "Sẵn sàng" : "Chưa đủ file";
-            Scenes.Add(scene);
-        }
-
-        ReindexScenes();
-        AppendLog($"[Kéo thả] Đã thêm thành công {maxCount} phân cảnh mới!");
-    }
-
-    // ══════════════════════════════════════════════════════════════
-    // YOUTUBE ANALYTICS — PHÂN TÍCH KÊNH & VIDEO YOUTUBE
-    // ══════════════════════════════════════════════════════════════
-
-    [RelayCommand]
-    private void OpenYouTubeAnalytics()
-    {
-        var mainWin = Application.Current.MainWindow;
-        var vm = new YouTubeAnalyticsViewModel(_youtubeService, _geminiService);
-        var win = new Views.YouTubeAnalyticsWindow(vm)
-        {
-            WindowState = WindowState.Maximized,
-            Owner = mainWin
-        };
-
-        CreateVideoFromAnalyticsRequest? pendingRequest = null;
-        try
-        {
-            win.ShowDialog();
-            pendingRequest = vm.PendingVideoRequest;
-        }
-        catch (Exception ex)
-        {
-            ShowException("Lỗi mở YouTube Analytics", ex);
-        }
-        finally
-        {
-            if (mainWin != null)
-            {
-                Application.Current.MainWindow = mainWin;
-                mainWin.Activate();
-                mainWin.Focus();
-            }
-        }
-
-        if (pendingRequest != null)
-        {
-            try
-            {
-                if (pendingRequest.TargetMode == VideoCreationTargetMode.Series)
-                {
-                    OpenSeriesCreatorWithRequest(pendingRequest);
-                }
-                else
-                {
-                    OpenScriptGeneratorWithRequest(pendingRequest);
-                }
-            }
-            catch (Exception ex)
-            {
-                ShowException("Lỗi khởi tạo kịch bản từ YouTube", ex);
-            }
-        }
-    }
-
-    private void OpenSeriesCreatorWithRequest(CreateVideoFromAnalyticsRequest request)
-    {
-        var mainWin = Application.Current.MainWindow;
-        try
-        {
-            var win = new SeriesCreatorWindow(_geminiService, _youtubeService, request)
-            {
-                WindowState = WindowState.Maximized,
-                Owner = mainWin
-            };
-
-            if (win.ShowDialog() == true && win.ResultSeriesProject != null)
-            {
-                LoadSeriesProject(win.ResultSeriesProject);
-            }
-        }
-        catch (Exception ex)
-        {
-            ShowException("Lỗi mở Trình Tạo Series từ YouTube", ex);
-        }
-        finally
-        {
-            if (mainWin != null)
-            {
-                Application.Current.MainWindow = mainWin;
-                mainWin.Activate();
-                mainWin.Focus();
-            }
-        }
-    }
-
-    private void OpenScriptGeneratorWithRequest(CreateVideoFromAnalyticsRequest request)
-    {
-        var mainWin = Application.Current.MainWindow;
-        try
-        {
-            var win = new ScriptGeneratorWindow(_geminiService, _ttsService, _bgmService, request)
-            {
-                WindowState = WindowState.Maximized,
-                Owner = mainWin
-            };
-
-            if (win.ShowDialog() == true && win.ResultWorkspace != null)
-            {
-                ApplyWorkspace(win.ResultWorkspace);
-            }
-        }
-        catch (Exception ex)
-        {
-            ShowException("Lỗi mở Trình Soạn Kịch Bản từ YouTube", ex);
-        }
-        finally
-        {
-            if (mainWin != null)
-            {
-                Application.Current.MainWindow = mainWin;
-                mainWin.Activate();
-                mainWin.Focus();
-            }
-        }
-    }
-
-    // ════════════════════════════════════════════════════════════════════
-    // AUTO RUN, TELEGRAM APPROVAL & SAFE SHUTDOWN INTEGRATION
-    // ════════════════════════════════════════════════════════════════════
-
-    private async void InitializeAutomationAsync()
-    {
-        try
-        {
-            var loadedConfig = await _automationDb.LoadConfigAsync();
-            AutomationConfig = loadedConfig;
-            _jobScheduler.UpdateConfig(loadedConfig);
-
-            if (loadedConfig.AutoRunEnabled)
-            {
-                await _jobScheduler.StartAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"[Khởi tạo Automation Lỗi] {ex.Message}");
-        }
-    }
-
-    private async Task<string> ExecuteRenderPipelineForJobAsync(AutomationJob job, IProgress<GenerationProgress> progress, CancellationToken ct)
-    {
-        var tempAssetsDir = Path.Combine(OutputDirectory, "generated_assets");
-        Directory.CreateDirectory(tempAssetsDir);
-
-        // Lấy danh sách scenes: từ Scenes hiện có hoặc parse từ payload
-        var targetScenes = Scenes.ToList();
-        if (targetScenes.Count == 0 && !string.IsNullOrWhiteSpace(job.PayloadJson) && job.PayloadJson != "{}")
-        {
-            var payloadScenes = job.GetPayload<List<SceneItem>>();
-            if (payloadScenes != null && payloadScenes.Count > 0)
-                targetScenes = payloadScenes;
-        }
-
-        if (targetScenes.Count == 0)
-        {
-            throw new InvalidOperationException($"Công việc '{job.Title}' không có phân cảnh nào để tạo video.");
-        }
-
-        await EnsureAssetsForScenesAsync(targetScenes, tempAssetsDir, ct);
-        EnsureBasicPublishInfo();
-
-        var config = new VideoConfig
-        {
-            AspectRatio = AspectRatio,
-            MotionEffect = SelectedMotionEffect?.Id ?? "random",
-            EnableFadeTransition = EnableFadeTransition,
-            EnableVignette = EnableVignette,
-            EnableBackgroundMusic = EnableBgm,
-            BackgroundMusicPath = BgmPath,
-            BackgroundMusicVolume = BgmVolume,
-            EnableSubtitles = EnableSubtitles,
-            SubtitleStyle = SelectedSubtitleStyle?.Id ?? "cinematic",
-            SubtitleFont = SelectedSubtitleFont?.Id ?? "Segoe UI Bold",
-            Voice = SelectedVoice,
-            SpeakingRate = SpeakingRate,
-            OutputDirectory = OutputDirectory,
-            OutputFileName = string.IsNullOrWhiteSpace(job.VideoId) ? $"video_{DateTime.Now:yyyyMMdd_HHmmss}.mp4" : $"{job.VideoId}_{DateTime.Now:yyyyMMdd_HHmmss}.mp4",
-            PublishInfo = CurrentPublishInfo
-        };
-
-        string resultFile;
-        if (UseV2Pipeline)
-        {
-            var v2Project = SceneItemAdapter.ToV2Project(targetScenes, config, CurrentPublishInfo, null);
-            string? subtitleAssPath = null;
-            if (EnableSubtitles)
-            {
-                var (width, height) = config.GetDimensions();
-                var assPath = Path.Combine(tempAssetsDir, $"subtitles_{DateTime.Now:HHmmss}.ass");
-                var v2Scenes = targetScenes.Select(s => s.ToV2Scene()).ToList();
-                await AssSubtitleService.GenerateAssFileAsync(
-                    v2Scenes,
-                    assPath,
-                    width: width,
-                    height: height,
-                    fontName: SelectedSubtitleFont?.Name ?? "Segoe UI Bold",
-                    subtitleStyle: SelectedSubtitleStyle?.Id ?? "cinematic",
-                    ct: ct);
-
-                if (File.Exists(assPath)) subtitleAssPath = assPath;
-            }
-
-            var timeline = TimelineBuilder.BuildTimeline(v2Project, subtitleAssPath: subtitleAssPath);
-            resultFile = await _ffmpegService.RenderTimelineAsync(timeline, config, progress, ct);
-        }
-        else
-        {
-            resultFile = await _ffmpegService.GenerateVideoAsync(targetScenes, config, progress, ct);
-        }
-
-        return resultFile;
-    }
-
-    [RelayCommand]
-    private async Task EnqueueCurrentProjectToAutoRunAsync()
-    {
-        if (Scenes.Count == 0)
-        {
-            MessageBox.Show("Vui lòng thêm ít nhất 1 phân cảnh trước khi đưa vào hàng đợi tự động!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        var title = !string.IsNullOrWhiteSpace(CurrentPublishInfo?.Title) ? CurrentPublishInfo.Title : (string.IsNullOrWhiteSpace(OutputFileName) ? $"Video_{DateTime.Now:MMdd_HHmm}" : OutputFileName);
-        var videoId = "vid_" + Guid.NewGuid().ToString("N")[..8];
-        var channelId = "default";
-
-        var job = await _jobScheduler.EnqueueRenderJobAsync(
-            title: title,
-            channelId: channelId,
-            videoId: videoId,
-            payloadData: Scenes.ToList(),
-            caption: CurrentPublishInfo?.Description,
-            hashtags: CurrentPublishInfo?.Hashtags);
-
-        MessageBox.Show($"Đã đưa video '{title}' vào hàng đợi tự động thành công!\nID: {job.Id}\nHệ thống sẽ tự động tạo video, gửi duyệt Telegram và đăng bài theo lịch.", "Đã Lên Kế Hoạch", MessageBoxButton.OK, MessageBoxImage.Information);
-    }
-
-    [RelayCommand]
-    private async Task SaveAutomationConfigAsync()
-    {
-        try
-        {
-            await _automationDb.SaveConfigAsync(AutomationConfig);
-            _jobScheduler.UpdateConfig(AutomationConfig);
-            MessageBox.Show("Đã lưu cấu hình Tự Động Hóa & Phê Duyệt Telegram thành công!", "Thông báo", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Lỗi lưu cấu hình: {ex.Message}", "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    [RelayCommand]
-    private async Task ToggleAutoRunAsync()
-    {
-        AutomationConfig.AutoRunEnabled = !AutomationConfig.AutoRunEnabled;
-        await _automationDb.SaveConfigAsync(AutomationConfig);
-        _jobScheduler.UpdateConfig(AutomationConfig);
-        if (AutomationConfig.AutoRunEnabled)
-        {
-            await _jobScheduler.StartAsync();
-            AppendLog("[Auto Run] 🟢 Đã BẬT chế độ tự động vận hành.");
-        }
-        else
-        {
-            _jobScheduler.Stop();
-            AppendLog("[Auto Run] 🔴 Đã TẮT chế độ tự động vận hành.");
-        }
-    }
-
-    [RelayCommand]
-    private void AbortShutdownCountdown()
-    {
-        _shutdownCoordinator.AbortShutdown("Người dùng đã bấm hủy trên giao diện máy tính.");
-    }
-
-    [RelayCommand]
-    private async Task RequestManualShutdownAsync()
-    {
-        var confirm = MessageBox.Show(
-            "Bạn có chắc chắn muốn yêu cầu tắt máy an toàn ngay bây giờ?\nHệ thống sẽ kiểm tra 12 điều kiện công việc trước khi tắt.",
-            "Xác Nhận Tắt Máy An Toàn",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-
-        if (confirm != MessageBoxResult.Yes) return;
-
-        var eval = await _shutdownCoordinator.EvaluateShutdownSafetyAsync();
-        if (!eval.CanShutdown)
-        {
-            var msg = "⚠️ Hiện tại CHƯA ĐỦ ĐIỀU KIỆN tắt máy an toàn vì các lý do sau:\n\n" +
-                      string.Join("\n", eval.BlockingReasons.Select(r => $"• {r}")) +
-                      "\n\nVui lòng giải quyết các công việc trên hoặc chuyển sang tắt thủ công nếu cần.";
-            MessageBox.Show(msg, "Chưa Đủ Điều Kiện Tắt Máy", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        _ = _shutdownCoordinator.StartShutdownCountdownAsync();
-    }
-
-    [RelayCommand]
-    private void OpenAutomationDashboard()
-    {
-        var win = new AutomationDashboardWindow(this)
-        {
-            Owner = Application.Current.MainWindow
-        };
-        win.Show();
-    }
 }
-
